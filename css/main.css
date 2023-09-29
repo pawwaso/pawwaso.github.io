@@ -1,6 +1,6 @@
 body {
 
-  /*  background-image: url(../img/welcome_0_orig.jpg); */
+  /*  background-image: url(../img/welcome_15_orig.jpg); */
 
     background-position: center center;
 
@@ -18,7 +18,7 @@ body {
 @media only screen and (max-width: 767px) {
     body {
 
-        background-image: url(../img786/welcome_0_786.jpg);
+        background-image: url(../img786/welcome_15_786.jpg);
     }
 }
 */

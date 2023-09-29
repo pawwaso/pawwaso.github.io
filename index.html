@@ -1,16 +1,34 @@
 <!DOCTYPE html>
 <html lang="en">
 <head>
+    <script type="text/javascript">
+        let totalCount = 14;
+
+        function backChange(x) {
+            let fold = 'img';
+            let suff = 'orig';
+            if (x.matches) {
+                fold = 'img786';
+                suff = '786';
+            }
+            let num = Math.ceil(Math.random() * totalCount);
+            document.body.background = fold + '/welcome_' + num + '_' + suff + '.jpg';
+        }
+    </script>
     <meta charset="UTF-8">
     <title>Welcome</title>
-    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <meta name="viewport" content="width=device-width, initial-scale=1"/>
     <meta name="author" content="PW">
     <meta name="description" content="Welcome.">
-    <link rel="icon" href="img/welcome_fav.ico" type="image/x-icon" />
+    <link rel="icon" href="imgfav/welcome_fav.ico" type="image/x-icon"/>
     <link href="https://fonts.googleapis.com/css?family=Kotta+One|Cantarell:400,700" rel="stylesheet" type="text/css">
     <link rel="stylesheet" href="css/main.css">
     <link rel="stylesheet" href="css/pres.css">
 </head>
 <body>
 </body>
+<script type="text/javascript">
+    var x = window.matchMedia("(max-width: 860px)")
+    backChange(x);
+</script>
 </html>

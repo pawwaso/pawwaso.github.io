@@ -1,0 +1,864 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no" />
+  <title>ISTQB AI Testing Quiz</title>
+  <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.2/dist/css/bootstrap.min.css" rel="stylesheet">
+    <style>
+    body { 
+      background-color: #f8f9fa; 
+      padding-bottom: env(safe-area-inset-bottom);
+    }
+    
+    .question-block {
+      padding: 1rem;
+      border-radius: 0.5rem;
+      background-color: #fff;
+      box-shadow: 0 2px 4px rgba(0,0,0,0.1);
+      margin-bottom: 1rem;
+    }
+    
+    .summary { 
+      margin-top: 2rem; 
+    }
+    
+    #glossary-view .term-card {
+      background-color: #fff;
+      border: 1px solid #ccc;
+      border-radius: 10px;
+      padding: 1rem;
+      margin-bottom: 1rem;
+    }
+
+    .structured-block {
+      white-space: pre-wrap;
+      font-family: 'Courier New', Courier, monospace;
+      font-size: 0.95rem;
+      background-color: #f8f9fa;
+      border-left: 4px solid #dee2e6;
+      padding: 0.5rem 1rem;
+      margin: 1rem 0;
+    }
+    
+    /* Mobile optimizations */
+    @media (max-width: 768px) {
+      .container {
+        padding-left: 10px;
+        padding-right: 10px;
+      }
+      
+      h1 {
+        font-size: 1.5rem;
+      }
+      
+      .btn {
+        margin-bottom: 0.5rem;
+        width: 100%;
+      }
+      
+      .btn-group {
+        display: flex;
+        flex-direction: column;
+        gap: 0.5rem;
+      }
+      
+      .form-check {
+        margin-bottom: 1rem;
+        padding: 0.75rem;
+        border: 1px solid #dee2e6;
+        border-radius: 0.375rem;
+      }
+      
+      .form-check-input {
+        margin-top: 0.25rem;
+      }
+      
+      .form-check-label {
+        margin-left: 0.5rem;
+        display: block;
+        line-height: 1.4;
+      }
+      
+      #timer {
+        position: sticky;
+        top: 0;
+        background: rgba(248, 249, 250, 0.95);
+        padding: 0.5rem;
+        z-index: 1000;
+        border-bottom: 1px solid #dee2e6;
+      }
+      
+      #navigation-buttons {
+        position: sticky;
+        bottom: 0;
+        background: rgba(248, 249, 250, 0.95);
+        padding: 1rem;
+        border-top: 1px solid #dee2e6;
+        margin: 0 -10px;
+        z-index: 1000;
+      }
+      
+      #navigation-buttons .btn {
+        margin-bottom: 0;
+      }
+      
+      .question-block {
+        padding: 0.75rem;
+        margin-bottom: 0.75rem;
+      }
+    }
+  </style>
+</head>
+<body>
+  <div class="container py-4">
+    <h1 class="mb-4">ISTQB CT-AI Study App</h1>
+    <div id="timer" class="mb-3 text-end fw-bold text-primary"></div>
+    <div id="error-message" class="alert alert-danger d-none"></div>
+    
+    <div class="mb-3 btn-group d-flex flex-wrap gap-2">
+      <button class="btn btn-primary" id="btn20" disabled>Start 20 Questions</button>
+      <button class="btn btn-secondary" id="btn40" disabled>Start 40 Questions</button>
+      <button class="btn btn-info" id="reviewBtn" onclick="startReviewMode()">📖 Review All</button>
+      <button class="btn btn-success" id="glossaryBtn" onclick="showGlossary()">📚 Glossary</button>
+      <button class="btn btn-danger" id="clearBtn" onclick="clearSession()">🧹 Clear</button>
+    </div>
+
+    <!-- Jump to Question Box - Initially Hidden -->
+    <div id="jump-box" class="d-none">
+      <div class="input-group">
+        <span class="input-group-text">Jump to Question ID:</span>
+        <input type="number" class="form-control" id="jump-input" min="1">
+        <button class="btn btn-primary" onclick="jumpToQuestion()">Go</button>
+      </div>
+    </div>
+    
+    <div id="quiz-container"></div>
+    
+    <div id="navigation-buttons" class="mt-4 d-none">
+      <div class="d-flex gap-2">
+        <button class="btn btn-outline-secondary flex-grow-1" id="backBtn">Back</button>
+        <button class="btn btn-outline-secondary flex-grow-1" id="nextBtn">Next</button>
+        <button class="btn btn-success flex-grow-1 d-none" id="submitBtn">Submit</button>
+      </div>
+    </div>
+    
+    <div class="summary mt-5" id="result-summary"></div>
+    
+    <div class="mt-5 d-none" id="glossary-view">
+      <h3>Glossary</h3>
+      <input class="form-control mb-3" placeholder="Search term..." oninput="filterGlossary(this.value)">
+      <div id="glossary-terms"></div>
+    </div>
+  </div>
+
+  <!-- Remove embedded JSON blocks -->
+  <script src="questions.js"></script>
+  <script src="glossary.js"></script>
+  <script>
+    let questions = [];
+    let glossary = [];
+    let currentSession = [];
+    let currentIndex = 0;
+    let state = {
+      answerCounts: {},
+      userAnswers: {},
+      attemptHistory: {},
+      sessionStartTime: null
+    };
+    let currentSessionAnswers = {};
+    let isReviewMode = false;
+    let timerInterval = null;
+
+    function loadData() {
+      try {
+        // Load questions and glossary from window-scoped JS files
+        if (window.questions && Array.isArray(window.questions) && window.questions.length > 0) {
+          console.log('Loading questions:', window.questions.length);
+          
+          // Sort questions by ID
+          questions = window.questions.sort((a, b) => {
+            const idA = parseInt(a.question_number || a.id) || 0;
+            const idB = parseInt(b.question_number || b.id) || 0;
+            return idA - idB;
+          });
+          
+          // Validate question format
+          const invalidQuestions = questions.filter(q => 
+            !q.question || 
+            (!q.options && !q.answers) || 
+            !q.correct_answer
+          );
+          
+          if (invalidQuestions.length > 0) {
+            console.error('Found invalid questions:', invalidQuestions);
+            throw new Error('Some questions are missing required fields');
+          }
+          
+        } else {
+          console.error("Questions not loaded or empty!");
+          document.getElementById("error-message").classList.remove("d-none");
+          document.getElementById("error-message").textContent = "Error: Questions not loaded or empty. Please check the console for details.";
+          return;
+        }
+        
+        if (window.glossary && Array.isArray(window.glossary) && window.glossary.length > 0) {
+          console.log('Loading glossary:', window.glossary.length);
+          glossary = window.glossary;
+        } else {
+          console.warn("Glossary not loaded or empty, glossary features will be disabled");
+          document.getElementById("glossaryBtn").disabled = true;
+        }
+        
+        // Only restore session info from localStorage
+        const savedState = localStorage.getItem('ctai_exam_state');
+        if (savedState) {
+          try {
+            state = JSON.parse(savedState);
+            console.log('Loaded saved state');
+          } catch (e) {
+            console.warn("Could not parse saved state, starting fresh", e);
+            state = {
+              answerCounts: {},
+              userAnswers: {},
+              attemptHistory: {},
+              sessionStartTime: null
+            };
+          }
+        }
+        
+        // Enable buttons only if questions are loaded and valid
+        if (questions && questions.length > 0) {
+          console.log('Enabling buttons');
+          document.getElementById("btn20").disabled = false;
+          document.getElementById("btn40").disabled = false;
+          document.getElementById("reviewBtn").disabled = false;
+        } else {
+          document.getElementById("btn20").disabled = true;
+          document.getElementById("btn40").disabled = true;
+          document.getElementById("reviewBtn").disabled = true;
+        }
+
+        // Add keyboard event listener for jump box
+        const jumpInput = document.getElementById('jump-input');
+        if (jumpInput) {
+          jumpInput.addEventListener('keypress', function(e) {
+            if (e.key === 'Enter') {
+              e.preventDefault();
+              jumpToQuestion();
+            }
+          });
+        }
+
+        // Add keyboard navigation
+        document.addEventListener('keydown', handleKeyboardNavigation);
+      } catch (error) {
+        console.error('Error in loadData:', error);
+        document.getElementById("error-message").classList.remove("d-none");
+        document.getElementById("error-message").textContent = `Error loading data: ${error.message}`;
+        
+        // Disable all buttons on error
+        document.getElementById("btn20").disabled = true;
+        document.getElementById("btn40").disabled = true;
+        document.getElementById("reviewBtn").disabled = true;
+        document.getElementById("glossaryBtn").disabled = true;
+      }
+    }
+
+    function handleKeyboardNavigation(event) {
+      // Only handle navigation when viewing questions
+      if (document.getElementById('quiz-container').innerHTML === '') return;
+      
+      if (event.key === 'ArrowLeft') {
+        prevQuestion();
+      } else if (event.key === 'ArrowRight') {
+        nextQuestion();
+      }
+    }
+
+    function jumpToQuestion() {
+      const input = document.getElementById('jump-input');
+      const targetId = parseInt(input.value);
+      
+      if (!targetId || isNaN(targetId)) {
+        alert('Please enter a valid question ID');
+        return;
+      }
+      
+      const questionIndex = currentSession.findIndex(q => 
+        parseInt(q.question_number || q.id) === targetId
+      );
+      
+      if (questionIndex === -1) {
+        alert('Question ID not found');
+        return;
+      }
+      
+      currentIndex = questionIndex;
+      renderSingleQuestion();
+    }
+
+    function showGlossary() {
+      document.getElementById('quiz-container').innerHTML = '';
+      document.getElementById('result-summary').innerHTML = '';
+      document.getElementById('navigation-buttons').classList.add('d-none');
+      document.getElementById('jump-box').classList.add('d-none');
+      document.getElementById('glossary-view').classList.remove('d-none');
+      renderGlossary(glossary);
+    }
+
+    function renderGlossary(terms) {
+      const container = document.getElementById("glossary-terms");
+      container.innerHTML = terms.map(t => `
+        <div class="term-card">
+          <h5>${t.term}</h5>
+          <p><strong>Definition:</strong> ${t.definition}</p>
+          ${t.example ? `<p><strong>Example:</strong> ${t.example}</p>` : ''}
+        </div>
+      `).join('');
+    }
+
+    function filterGlossary(keyword) {
+      keyword = keyword.toLowerCase();
+      const filtered = glossary.filter(t => t.term.toLowerCase().includes(keyword));
+      renderGlossary(filtered);
+    }
+
+    function startSession(count, isRandom = false) {
+      console.log('Starting session with count:', count, 'isRandom:', isRandom);
+      console.log('Questions loaded:', questions.length);
+      
+      isReviewMode = false;
+      // Hide jump box in quiz mode
+      document.getElementById('jump-box').classList.add('d-none');
+      
+      // Clear all previous session data
+      currentSessionAnswers = {};
+      // Clear previous answers from state for a fresh start
+      state.userAnswers = {};
+      state.sessionStartTime = Date.now();
+      
+      // Make a copy of questions to avoid modifying the original
+      let questionPool = [...questions];
+      console.log('Question pool size:', questionPool.length);
+      
+      if (isRandom) {
+        shuffle(questionPool);
+        currentSession = questionPool.slice(0, count);
+      } else {
+        // Use weighted sampling
+        const selected = new Map();
+        const weights = questionPool.map(q => {
+          const qId = q.question_number || q.id || 'N/A';
+          // Higher weight for questions never answered or answered incorrectly
+          const timesAnswered = state.answerCounts[qId] || 0;
+          const timesIncorrect = state.attemptHistory[qId]?.filter(attempt => !attempt.is_correct)?.length || 0;
+          return (1 + timesIncorrect) / (timesAnswered + 1);
+        });
+        
+        let totalWeight = weights.reduce((a, b) => a + b, 0);
+        while (selected.size < count && questionPool.length > 0) {
+          const rand = Math.random() * totalWeight;
+          let sum = 0;
+          let selectedIndex = -1;
+          
+          for (let i = 0; i < weights.length; i++) {
+            sum += weights[i];
+            if (sum >= rand) {
+              selectedIndex = i;
+              break;
+            }
+          }
+          
+          if (selectedIndex >= 0) {
+            const q = questionPool[selectedIndex];
+            const qId = q.question_number || q.id || 'N/A';
+            selected.set(qId, q);
+            
+            // Remove the selected question and its weight from the pools
+            totalWeight -= weights[selectedIndex];
+            questionPool.splice(selectedIndex, 1);
+            weights.splice(selectedIndex, 1);
+          }
+        }
+        
+        currentSession = Array.from(selected.values());
+      }
+      
+      console.log('Selected session size:', currentSession.length);
+      currentIndex = 0;
+      
+      // Clear the results summary
+      document.getElementById('result-summary').innerHTML = '';
+      
+      // Start timer
+      startTimer();
+      
+      // Show the first question
+      renderSingleQuestion();
+      document.getElementById("navigation-buttons").classList.remove("d-none");
+    }
+
+    function weightedSample(count) {
+      console.warn('Deprecated weightedSample called');
+      return [];
+    }
+
+    function shuffle(array) {
+      for (let i = array.length - 1; i > 0; i--) {
+        const j = Math.floor(Math.random() * (i + 1));
+        [array[i], array[j]] = [array[j], array[i]];
+      }
+    }
+
+    function startReviewMode() {
+      isReviewMode = true;
+      currentSession = [...questions];
+      currentIndex = 0;
+      // Show jump box in review mode
+      document.getElementById('jump-box').classList.remove('d-none');
+      renderSingleQuestion();
+      document.getElementById("navigation-buttons").classList.remove("d-none");
+      document.getElementById("submitBtn").classList.add("d-none");
+      // Stop timer and hide
+      stopTimer();
+      document.getElementById('timer').innerHTML = '';
+      // Clear result summary in review mode
+      document.getElementById('result-summary').innerHTML = '';
+    }
+
+      function escapeHtml(str) {
+      return str.replace(/[&<>"']/g, function(m) {
+        return ({
+          '&': '&amp;',
+          '<': '&lt;',
+          '>': '&gt;',
+          '"': '&quot;',
+          "'": '&#39;'
+        })[m];
+      });
+   }
+
+    // Format text to handle newlines
+    function formatText(text) {
+      if (!text) return '';
+
+      // Convert string literal '\n' to real newline
+      text = text.toString().replace(/\\n/g, '\n');
+
+      // Detect if the text block looks like a table or test data
+      const isStructuredBlock = text.includes('|') || text.includes('Input T1') || text.includes('-----------');
+
+      if (isStructuredBlock) {
+        // Preserve whitespace and use monospace font
+        return `<div class="structured-block">${escapeHtml(text)}</div>`;
+      }
+
+      // Else fallback: replace real newlines with <br>
+      return text.replace(/\n/g, '<br>');
+    }
+
+    function renderSingleQuestion() {
+      const q = currentSession[currentIndex];
+      const container = document.getElementById('quiz-container');
+      document.getElementById("glossary-view").classList.add("d-none");
+      container.innerHTML = '';
+      const div = document.createElement('div');
+      div.className = 'question-block';
+      
+      // Get question ID consistently
+      const questionId = q.question_number || q.id || 'N/A';
+      
+      // Handle answer options consistently
+      let options = [];
+      let correctAnswer = q.correct_answer;
+
+      // Safely handle options/answers conversion
+      if (q.options && Array.isArray(q.options)) {
+        options = q.options.map((opt, idx) => ({
+          key: String.fromCharCode(97 + idx), // 'a', 'b', ...
+          value: opt
+        }));
+      } else if (q.answers && typeof q.answers === 'object') {
+        options = Object.entries(q.answers).map(([key, value]) => ({
+          key: key.toLowerCase(),
+          value: `${key}) ${value}`
+        }));
+      } else if (typeof q.options === 'object') {
+        options = Object.entries(q.options).map(([key, value]) => ({
+          key: key.toLowerCase(),
+          value: `${key}) ${value}`
+        }));
+      }
+
+      // Determine if multiple choice
+      const isMulti = Array.isArray(correctAnswer);
+      const correctAnswers = isMulti ? 
+        correctAnswer.map(a => a.toLowerCase()) : 
+        [correctAnswer.toString().toLowerCase()];
+
+      // Get previously selected answer for this question
+      const previousAnswer = currentSessionAnswers[questionId];
+      
+      // Generate answers HTML
+      const answersHtml = options.map(opt => {
+        const isCorrect = correctAnswers.includes(opt.key.toLowerCase());
+        const isSelected = previousAnswer && (
+          isMulti ? 
+            (Array.isArray(previousAnswer.answer) && previousAnswer.answer.includes(opt.key.toLowerCase())) : 
+            previousAnswer.answer === opt.key.toLowerCase()
+        );
+        
+        if (!isReviewMode) {
+          let checked = '';
+          if (previousAnswer) {
+            if (isMulti && Array.isArray(previousAnswer.answer)) {
+              if (previousAnswer.answer.includes(opt.key.toLowerCase())) {
+                checked = 'checked';
+              }
+            } else if (!isMulti && previousAnswer.answer === opt.key.toLowerCase()) {
+              checked = 'checked';
+            }
+          }
+          
+          return `
+            <div class="form-check">
+              <input class="form-check-input" 
+                     type="${isMulti ? 'checkbox' : 'radio'}" 
+                     name="q${questionId}${isMulti ? '[]' : ''}" 
+                     value="${opt.key}" 
+                     id="q${questionId}_${opt.key}"
+                     ${checked}>
+              <label class="form-check-label" for="q${questionId}_${opt.key}">
+                ${formatText(opt.value)}
+              </label>
+            </div>
+          `;
+        } else {
+          // Review mode with bullet points, checkmarks, and X marks
+          const marker = isCorrect ? '✓' : (isSelected ? '✗' : '•');
+          const textClass = isCorrect ? 'text-success' : (isSelected ? 'text-danger' : '');
+          
+          return `
+            <div class="review-answer ${textClass}">
+              <span class="answer-marker">${marker}</span>
+              ${formatText(opt.value)}
+            </div>
+          `;
+        }
+      }).join('');
+
+      // Generate metadata HTML
+      const metadataHtml = q.k_level ? `
+        <div class="metadata">
+          ${q.k_level ? `<span>K-Level: ${q.k_level}</span>` : ''}
+          ${q.points ? `<span>Points: ${q.points}</span>` : ''}
+        </div>
+      ` : '';
+
+      // Update the question block template
+      div.innerHTML = `
+        <h5>Question ${currentIndex + 1} of ${currentSession.length} (ID: ${questionId})</h5>
+        ${q.k_level ? `<div class="metadata">K-Level: ${q.k_level}</div>` : ''}
+        <p>${formatText(q.question)}</p>
+        ${answersHtml}
+        ${isReviewMode && q.justification ? `
+          <hr>
+          <h6>Justifications:</h6>
+          ${typeof q.justification === 'object' 
+            ? Object.entries(q.justification).map(([k, j]) => {
+                const isCorrect = correctAnswers.includes(k.toLowerCase());
+                return `<p class="${isCorrect ? 'text-success fw-bold' : ''}">
+                  <strong>${k.toUpperCase()}</strong>: ${formatText(j)}
+                </p>`;
+              }).join('')
+            : `<p>${formatText(q.justification)}</p>`
+          }
+        ` : ''}
+      `;
+      
+      container.appendChild(div);
+      
+      // Update navigation buttons
+      document.getElementById("backBtn").classList.toggle("d-none", currentIndex === 0);
+      document.getElementById("nextBtn").classList.toggle("d-none", currentIndex === currentSession.length - 1);
+      if (!isReviewMode) {
+        document.getElementById("submitBtn").classList.toggle("d-none", currentIndex !== currentSession.length - 1);
+      }
+    }
+
+    function saveCurrentAnswer() {
+      const q = currentSession[currentIndex];
+      const questionId = q.question_number || q.id || 'N/A';
+      const isMulti = Array.isArray(q.correct_answer);
+      
+      // Build selector based on question format
+      const selector = isMulti ? 
+        `input[name="q${questionId}[]"]:checked` : 
+        `input[name="q${questionId}"]:checked`;
+      
+      const selectedInputs = document.querySelectorAll(selector);
+      if (!selectedInputs || selectedInputs.length === 0) return false;
+      
+      // Get selected answers
+      let answer;
+      if (isMulti) {
+        answer = Array.from(selectedInputs).map(i => i.value).sort();
+      } else {
+        answer = selectedInputs[0].value;
+      }
+      
+      // Compare with correct answer
+      const correctAnswer = isMulti ? 
+        q.correct_answer.map(a => a.toLowerCase()).sort() : 
+        q.correct_answer.toLowerCase();
+      
+      const isCorrect = isMulti ? 
+        JSON.stringify(answer) === JSON.stringify(correctAnswer) :
+        answer === correctAnswer;
+      
+      // Store in current session state
+      currentSessionAnswers[questionId] = { 
+        answer, 
+        is_correct: isCorrect 
+      };
+      
+      return true;
+    }
+
+    function nextQuestion() {
+      if (!isReviewMode) {
+        // Always save the current answer before proceeding
+        if (!saveCurrentAnswer()) {
+          alert('Please select an answer to proceed.');
+          return;
+        }
+      }
+      if (currentIndex < currentSession.length - 1) {
+        currentIndex++;
+        renderSingleQuestion();
+      }
+    }
+
+    function prevQuestion() {
+      if (!isReviewMode) {
+        // Always save the current answer before proceeding
+        saveCurrentAnswer();
+      }
+      if (currentIndex > 0) {
+        currentIndex--;
+        renderSingleQuestion();
+      }
+    }
+
+    function submitAnswers() {
+      if (!saveCurrentAnswer()) {
+        alert("Please select an answer to finish.");
+        return;
+      }
+      
+      // Stop timer
+      stopTimer();
+      
+      const summaryDiv = document.getElementById('result-summary');
+      let correct = 0;
+      let incorrect = 0;
+      const incorrectQuestions = [];
+      
+      // Update state with results
+      currentSession.forEach(q => {
+        const qId = q.question_number || q.id || 'N/A';
+        const userAns = currentSessionAnswers[qId];
+        if (!userAns) return;
+        
+        // Update answer counts
+        state.answerCounts[qId] = (state.answerCounts[qId] || 0) + 1;
+        
+        // Update attempt history
+        if (!state.attemptHistory[qId]) {
+          state.attemptHistory[qId] = [];
+        }
+        state.attemptHistory[qId].push({
+          timestamp: Date.now(),
+          answer: userAns.answer,
+          is_correct: userAns.is_correct
+        });
+        
+        if (userAns.is_correct) {
+          correct++;
+        } else {
+          incorrect++;
+          incorrectQuestions.push(q);
+        }
+      });
+      
+      // Save state to localStorage
+      localStorage.setItem('ctai_exam_state', JSON.stringify(state));
+      
+      // Calculate time taken
+      const timeTaken = state.sessionStartTime ? Math.floor((Date.now() - state.sessionStartTime) / 1000) : 0;
+      const minutes = Math.floor(timeTaken / 60);
+      const seconds = timeTaken % 60;
+      
+      // Display summary
+      summaryDiv.innerHTML = `
+        <div class="alert alert-info">
+          <h4>Result Summary</h4>
+          <p><strong>✅ Correct:</strong> ${correct}</p>
+          <p><strong>❌ Incorrect:</strong> ${incorrect}</p>
+          <p><strong>⏱️ Time Taken:</strong> ${minutes}m ${seconds}s</p>
+          <p><strong>📊 Score:</strong> ${((correct / currentSession.length) * 100).toFixed(2)}%</p>
+        </div>
+      `;
+      
+      // Show incorrect questions review if any
+      if (incorrectQuestions.length > 0) {
+        summaryDiv.innerHTML += `<div class="mt-4"><h5>Review of Incorrect Questions</h5>`;
+        
+        incorrectQuestions.forEach((q, idx) => {
+          const qId = q.question_number || q.id || 'N/A';
+          const userAns = currentSessionAnswers[qId];
+          const correctAnswer = q.correct_answer;
+          const isMulti = Array.isArray(correctAnswer);
+          const correctAnswers = isMulti ? correctAnswer.map(a => a.toLowerCase()) : [correctAnswer.toLowerCase()];
+          const sessionQuestionNumber = currentSession.findIndex(sq => 
+            (sq.question_number || sq.id) === (q.question_number || q.id)
+          ) + 1;
+          
+          // Generate question header and metadata
+          let questionBlock = `
+            <div class="question-block mt-3 p-3 border rounded">
+              <strong>Q${qId} (Session Q${sessionQuestionNumber})</strong>
+              <div class="metadata mb-2 text-muted">
+                ${q.k_level ? `<span class="me-3">K-Level: ${q.k_level}</span>` : ''}
+                ${q.points ? `<span>Points: ${q.points}</span>` : ''}
+              </div>
+              <p>${formatText(q.question)}</p>
+          `;
+          
+          // Generate answers block
+          let options = [];
+          if (q.options && Array.isArray(q.options)) {
+            options = q.options.map((opt, idx) => ({
+              key: String.fromCharCode(97 + idx),
+              value: opt
+            }));
+          } else if (q.answers && typeof q.answers === 'object') {
+            options = Object.entries(q.answers).map(([key, value]) => ({
+              key: key.toLowerCase(),
+              value: `${key}) ${value}`
+            }));
+          } else if (typeof q.options === 'object') {
+            options = Object.entries(q.options).map(([key, value]) => ({
+              key: key.toLowerCase(),
+              value: `${key}) ${value}`
+            }));
+          }
+          
+          // Add answers with correct/incorrect indicators
+          questionBlock += '<div class="answers mt-2">';
+          options.forEach(opt => {
+            const isCorrect = correctAnswers.includes(opt.key.toLowerCase());
+            const isUserSelected = userAns && (
+              isMulti ? 
+                (Array.isArray(userAns.answer) && userAns.answer.includes(opt.key.toLowerCase())) : 
+                userAns.answer === opt.key.toLowerCase()
+            );
+            
+            questionBlock += `
+              <div class="answer-option mb-2 ${isCorrect ? 'text-success' : ''} ${isUserSelected && !isCorrect ? 'text-danger' : ''}">
+                <span class="me-2">${isCorrect ? '✓' : (isUserSelected ? '✗' : '•')}</span>
+                ${formatText(opt.value)}
+              </div>
+            `;
+          });
+          questionBlock += '</div>';
+          
+          // Add justifications
+          if (q.justification) {
+            questionBlock += '<hr><h6>Justifications:</h6>';
+            if (typeof q.justification === 'object') {
+              Object.entries(q.justification).forEach(([k, j]) => {
+                const isCorrect = correctAnswers.includes(k.toLowerCase());
+                questionBlock += `
+                  <p class="${isCorrect ? 'text-success fw-bold' : ''}">
+                    <strong>${k.toUpperCase()}</strong>: ${formatText(j)}
+                  </p>
+                `;
+              });
+            } else {
+              questionBlock += `<p>${formatText(q.justification)}</p>`;
+            }
+          }
+          
+          questionBlock += '</div>';
+          summaryDiv.innerHTML += questionBlock;
+        });
+      }
+      
+      // Hide navigation buttons and jump box after submission
+      document.getElementById("navigation-buttons").classList.add("d-none");
+      document.getElementById("jump-box").classList.add("d-none");
+    }
+
+    function copySessionInfo(info) {
+      const textArea = document.createElement('textarea');
+      textArea.value = JSON.stringify(info, null, 2);
+      document.body.appendChild(textArea);
+      textArea.select();
+      document.execCommand('copy');
+      document.body.removeChild(textArea);
+      alert('Session info copied to clipboard! You can now paste it to the AI assistant for help.');
+    }
+
+    function clearSession() {
+      localStorage.removeItem('ctai_exam_state');
+      location.reload();
+    }
+
+    // Timer functions
+    function startTimer() {
+      stopTimer();
+      const timerDiv = document.getElementById('timer');
+      function updateTimer() {
+        if (!state.sessionStartTime) return;
+        const elapsed = Math.floor((Date.now() - state.sessionStartTime) / 1000);
+        const minutes = Math.floor(elapsed / 60);
+        const seconds = elapsed % 60;
+        timerDiv.innerHTML = `<span>⏱️ ${minutes}m ${seconds}s</span>`;
+      }
+      updateTimer();
+      timerInterval = setInterval(updateTimer, 1000);
+    }
+    function stopTimer() {
+      if (timerInterval) clearInterval(timerInterval);
+      timerInterval = null;
+    }
+
+    // Expose all main functions to the global window object
+    window.startSession = startSession;
+    window.startReviewMode = startReviewMode;
+    window.showGlossary = showGlossary;
+    window.clearSession = clearSession;
+    window.nextQuestion = nextQuestion;
+    window.prevQuestion = prevQuestion;
+    window.submitAnswers = submitAnswers;
+    window.filterGlossary = filterGlossary;
+    window.copySessionInfo = copySessionInfo;
+    window.jumpToQuestion = jumpToQuestion;
+
+    // Make sure functions are available before adding event listener
+    document.addEventListener('DOMContentLoaded', function() {
+      // Call loadData when the page loads
+      loadData();
+      
+      // Add click event listeners to buttons
+      document.getElementById('btn20').addEventListener('click', () => startSession(20));
+      document.getElementById('btn40').addEventListener('click', () => startSession(40, true));
+      document.getElementById('backBtn').addEventListener('click', prevQuestion);
+      document.getElementById('nextBtn').addEventListener('click', nextQuestion);
+      document.getElementById('submitBtn').addEventListener('click', submitAnswers);
+    });
+  </script>
+</body>
+</html> 

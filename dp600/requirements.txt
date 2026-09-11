@@ -1,0 +1,97 @@
+✅ App Requirements – dp600 Study App
+1. 🧠 Quiz Session Features
+ Start 20-question session (weighted random) prioritizing unseen questions
+
+ Start 40-question session (fully random)
+
+ Questions are displayed one at a time
+
+ Navigation: Next, Back, and Submit buttons
+
+ Cannot proceed without selecting at least one answer
+
+ Submit button visible only on the last question
+
+ Back button hidden on first question
+
+2. ✅ Answer Handling
+ Support single and multiple correct answers
+
+ Track answers per question: selected, correctness
+
+ Accept multiple choice if correct_answer is an array
+
+ Calculate score only if all correct answers are selected
+
+ Save:
+
+userAnswers → selected answer(s)
+
+is_correct → whether the answer(s) are correct
+
+answerCounts → number of times each question is answered
+
+attemptHistory → history of attempted answers
+
+3. 📊 Result Evaluation
+ Display summary:
+
+✅ Number of correct
+
+❌ Number of incorrect
+
+📊 Score in %
+
+⏱️ Time taken (minutes + seconds)
+
+ Show justification for all options (not just correct one)
+
+ Style correct answers and justifications in green bold
+
+4. 💾 State Persistence
+ Use localStorage to:
+
+Store question bank and glossary
+
+Track session state (answered questions, scores)
+
+ Automatically load state on page load
+
+ Automatically update state on submit
+
+ Button to clear all state and restart quiz
+
+5. 📖 Review Mode
+ Button to Review All Questions
+
+ View one question at a time (like quiz mode)
+
+ Pre-select and highlight correct answers only
+
+ Show full justification for each answer
+
+ Disable submission in review mode
+
+6. 📚 Glossary Mode
+ Button to enter Glossary
+
+ Load glossary terms from embedded JSON block
+
+ Display term, definition, and example
+
+ Search bar to filter terms by name
+
+ Glossary is stored in localStorage on first run
+
+7. 📎 Technical Requirements
+ Works offline via file://
+
+ No external server required
+
+ All data loaded from embedded <script type="application/json">
+
+ Uses Bootstrap 5 for layout/styling
+
+ No use of React/JSX — pure JS and HTML
+
+ Handles malformed question data (missing answers/justification)

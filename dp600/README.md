@@ -1,0 +1,1 @@
+# ISTQB-Certified-Tester-AI-Testing-Study-App

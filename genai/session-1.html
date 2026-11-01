@@ -1,0 +1,1528 @@
+<!doctype html>
+<html lang="de-CH">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>GenAI im Test · Teil 1 – Von Tokens zu guten Prompts</title>
+<style>
+/* ==========================================================================
+   Course slides theme — calm slate-blue + warm orange accent
+   (style inspired by a Swiss health-insurer site: airy, rounded, friendly)
+   Paste this whole file inside <style> of the self-contained HTML page.
+   ========================================================================== */
+
+:root {
+  /* --- colour tokens --- */
+  --c-primary:      #4d6e82;   /* slate blue: headings, buttons, active states   */
+  --c-primary-dk:   #3c5869;   /* hover / pressed                                */
+  --c-text:         #5a7789;   /* body text (darkened from #849dab for contrast) */
+  --c-muted:        #849dab;   /* captions, labels, inactive nav                 */
+  --c-line:         #dae1e6;   /* hairlines, borders                             */
+  --c-surface:      #ffffff;   /* page / cards                                   */
+  --c-surface-alt:  #eef2f5;   /* tinted bands, soft buttons, inputs             */
+  --c-surface-2:    #f7f8fa;   /* very light panels                              */
+  --c-accent:       #ff8a00;   /* orange: icon discs, dots, highlights — NOT text */
+  --c-accent-text:  #c26700;   /* orange when it must be text (large only)       */
+  --c-ink-deep:     #0d2736;   /* overlays: rgba(13,39,54,.5)                     */
+  --c-ok:           #3f8f6b;
+  --c-warn:         #c26700;
+  --c-err:          #b8483e;
+
+  /* --- type --- */
+  --font: "Avenir Next", Avenir, "Nunito Sans", "Segoe UI", "Helvetica Neue", Arial, sans-serif;
+  --font-mono: "SF Mono", Menlo, Consolas, "Liberation Mono", monospace;
+  --fs-display: clamp(28px, 3.2vw, 40px);  /* section titles: weight 300 */
+  --fs-h2: clamp(22px, 2.2vw, 28px);       /* weight 700 */
+  --fs-h3: 20px;                           /* weight 700 */
+  --fs-body: 18px;                         /* weight 500, line-height 1.5 */
+  --fs-small: 15px;
+  --fs-eyebrow: 13px;                      /* weight 700, muted */
+
+  /* --- shape & depth --- */
+  --r-sm: 5px;          /* inputs, cards, panels */
+  --r-pill: 100px;      /* every button */
+  --shadow-1: 0 2px 4px rgba(77,110,130,.10);
+  --shadow-2: 0 2px 14px rgba(11,54,79,.22);
+  --ease: cubic-bezier(.4,0,.2,1);
+  --t-fast: .25s;
+  --t-slide: .55s;
+
+  --maxw: 1180px;
+  --gutter: clamp(16px, 4vw, 48px);
+}
+
+* { box-sizing: border-box; }
+html, body { height: 100%; }
+body {
+  margin: 0;
+  font: 500 var(--fs-body)/1.5 var(--font);
+  color: var(--c-text);
+  background: var(--c-surface);
+  -webkit-font-smoothing: antialiased;
+}
+
+/* ---------- typography ---------- */
+.display { font-size: var(--fs-display); font-weight: 300; color: var(--c-primary); line-height: 1.15; margin: 0 0 .4em; }
+h2 { font-size: var(--fs-h2); font-weight: 700; color: var(--c-primary); line-height: 1.25; margin: 0 0 .5em; }
+h3 { font-size: var(--fs-h3); font-weight: 700; color: var(--c-primary); line-height: 1.35; margin: 0 0 .4em; }
+p  { margin: 0 0 1em; max-width: 68ch; }
+.lead { font-size: 20px; color: var(--c-muted); }
+.eyebrow { display:block; font-size: var(--fs-eyebrow); font-weight: 700; color: var(--c-muted); margin-bottom: .25em; }
+a { color: var(--c-primary); font-weight: 700; text-decoration: underline; text-underline-offset: 2px; }
+a:hover { color: var(--c-primary-dk); }
+code, pre { font-family: var(--font-mono); font-size: .88em; }
+code { background: var(--c-surface-alt); color: var(--c-primary); padding: .1em .4em; border-radius: var(--r-sm); }
+pre { background: var(--c-surface-2); border: 1px solid var(--c-line); border-radius: var(--r-sm); padding: 1em 1.2em; overflow-x: auto; line-height: 1.55; }
+.divider { border: 0; border-top: 1px solid var(--c-line); margin: 1.5em 0; }
+
+/* ---------- buttons (always pills) ---------- */
+.btn {
+  display: inline-flex; align-items: center; gap: .5em;
+  font: 700 15px/1 var(--font); padding: 18px 26px; border: 0; border-radius: var(--r-pill);
+  background: var(--c-primary); color: #fff; cursor: pointer; text-decoration: none;
+  transition: background var(--t-fast) ease-in-out, transform var(--t-fast) ease-in-out;
+}
+.btn:hover { background: var(--c-primary-dk); color:#fff; }
+.btn:active { transform: translateY(1px); }
+.btn--soft { background: var(--c-surface-alt); color: var(--c-primary); }
+.btn--soft:hover { background: var(--c-line); color: var(--c-primary-dk); }
+.btn:focus-visible, .nav-arrow:focus-visible, .dot:focus-visible { outline: 3px solid var(--c-accent); outline-offset: 3px; }
+
+/* ---------- layout helpers ---------- */
+.band { background: var(--c-surface-alt); }
+.wrap { max-width: var(--maxw); margin: 0 auto; padding-inline: var(--gutter); }
+.center { text-align: center; } .center p { margin-inline: auto; }
+.grid-3 { display: grid; gap: 32px; grid-template-columns: repeat(auto-fit, minmax(240px, 1fr)); }
+.grid-2 { display: grid; gap: 32px; grid-template-columns: repeat(auto-fit, minmax(300px, 1fr)); align-items: center; }
+
+/* feature: orange icon disc + bold title + muted text, centred */
+.feature { text-align: center; }
+.icon-disc {
+  width: 80px; height: 80px; border-radius: 50%; background: var(--c-accent); color: #fff;
+  display: grid; place-items: center; margin: 0 auto 16px; font-size: 34px;
+}
+.icon-disc svg { width: 40px; height: 40px; fill: none; stroke: #fff; stroke-width: 2.2; stroke-linecap: round; stroke-linejoin: round; }
+
+/* split panel: visual left, tinted text panel right */
+.split { display: grid; grid-template-columns: 1fr 1fr; background: var(--c-surface-alt); border-radius: var(--r-sm); overflow: hidden; }
+.split > .panel { padding: clamp(24px, 5vw, 70px); align-self: center; }
+@media (max-width: 760px) { .split { grid-template-columns: 1fr; } }
+
+/* circle callout (the hero "bubble") */
+.bubble {
+  width: min(320px, 100%); aspect-ratio: 1; border-radius: 50%;
+  background: rgba(255,255,255,.92); box-shadow: var(--shadow-2);
+  display: grid; place-content: center; text-align: center; padding: clamp(24px, 8%, 48px);
+}
+
+/* cards */
+.card { background: var(--c-surface); border: 1px solid var(--c-line); border-radius: var(--r-sm); padding: 24px; box-shadow: var(--shadow-1); }
+.card--tint { background: var(--c-surface-alt); border-color: transparent; box-shadow: none; }
+
+/* tables */
+.table { width: 100%; border-collapse: collapse; font-size: 16px; }
+.table th { text-align: left; color: var(--c-primary); font-weight: 700; border-bottom: 2px solid var(--c-line); padding: 10px 12px; }
+.table td { border-bottom: 1px solid var(--c-line); padding: 10px 12px; }
+.table-scroll { overflow-x: auto; }
+
+/* callouts */
+.note { border-left: 4px solid var(--c-accent); background: var(--c-surface-2); padding: 14px 18px; border-radius: 0 var(--r-sm) var(--r-sm) 0; }
+
+/* ==========================================================================
+   SLIDE DECK SHELL
+   ========================================================================== */
+.topbar {
+  position: fixed; inset: 0 0 auto 0; z-index: 10; height: 64px;
+  padding-top: env(safe-area-inset-top, 0px);
+  display: flex; align-items: center; justify-content: space-between; gap: 16px;
+  padding-inline: var(--gutter); background: #fff; box-shadow: var(--shadow-1);
+}
+.brand { font-weight: 800; color: var(--c-primary); font-size: 20px; letter-spacing: .01em; display:flex; align-items:center; gap:2px; }
+.brand .dot-accent { width: 8px; height: 8px; border-radius: 50%; background: var(--c-accent); display:inline-block; transform: translateY(-9px); }
+.topbar .chapter { font-size: 15px; font-weight: 700; color: var(--c-muted); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.progress { position: absolute; left: 0; bottom: 0; height: 3px; background: var(--c-accent); width: 0; transition: width var(--t-slide) var(--ease); }
+
+.deck { position: fixed; inset: 64px 0 0 0; overflow: hidden; }
+.slide {
+  position: absolute; inset: 0; overflow-y: auto;
+  padding: 48px var(--gutter) 120px;
+  opacity: 0; visibility: hidden; transform: translateX(40px);
+  transition: opacity var(--t-slide) var(--ease), transform var(--t-slide) var(--ease), visibility 0s linear var(--t-slide);
+}
+.slide.is-active { opacity: 1; visibility: visible; transform: none; transition-delay: 0s; }
+.slide.is-before { transform: translateX(-40px); }
+.slide > .inner { max-width: var(--maxw); margin: 0 auto; }
+.slide.band { background: var(--c-surface-alt); }
+
+/* staged reveal inside the active slide: add class="reveal" (+ style="--i:2") */
+.reveal { opacity: 0; transform: translateY(14px); }
+.slide.is-active .reveal { animation: rise .6s var(--ease) forwards; animation-delay: calc(.15s + var(--i, 0) * .12s); }
+@keyframes rise { to { opacity: 1; transform: none; } }
+
+/* bottom navigation */
+.navbar {
+  position: fixed; left: 50%; bottom: calc(20px + env(safe-area-inset-bottom, 0px)); transform: translateX(-50%); z-index: 10;
+  display: flex; align-items: center; gap: 14px; padding: 8px; background: rgba(255,255,255,.95);
+  border-radius: var(--r-pill); box-shadow: var(--shadow-2);
+}
+.nav-arrow {
+  width: 52px; height: 52px; border-radius: 50%; border: 0; cursor: pointer;
+  background: var(--c-primary); color: #fff; display: grid; place-items: center;
+  transition: background var(--t-fast) ease-in-out, opacity var(--t-fast);
+}
+.nav-arrow:hover { background: var(--c-primary-dk); }
+.nav-arrow:disabled { background: var(--c-surface-alt); color: var(--c-muted); cursor: default; }
+.nav-arrow svg { width: 22px; height: 22px; stroke: currentColor; stroke-width: 2.5; fill: none; stroke-linecap: round; stroke-linejoin: round; }
+.dots { display: flex; gap: 8px; align-items: center; max-width: 50vw; overflow-x: auto; padding: 4px; }
+.dot { width: 12px; height: 12px; border-radius: 50%; border: 2px solid var(--c-muted); background: transparent; padding: 0; cursor: pointer; flex: none; transition: all var(--t-fast); }
+.dot.is-active { background: var(--c-accent); border-color: var(--c-accent); transform: scale(1.15); }
+.counter { font-size: 14px; font-weight: 700; color: var(--c-muted); min-width: 52px; text-align: center; }
+
+/* ==========================================================================
+   FLOW ANIMATION PRIMITIVES (SVG)
+   ========================================================================== */
+.flow { width: 100%; height: auto; display: block; }
+.flow .node rect, .flow .node circle { fill: var(--c-surface); stroke: var(--c-primary); stroke-width: 2; }
+.flow .node.alt rect { fill: var(--c-surface-alt); stroke: var(--c-line); }
+.flow .node text { fill: var(--c-primary); font: 700 15px var(--font); text-anchor: middle; dominant-baseline: middle; }
+.flow .node .sub { fill: var(--c-muted); font-weight: 500; font-size: 12px; }
+.flow .edge { fill: none; stroke: var(--c-muted); stroke-width: 2; }
+.flow .edge.live { stroke: var(--c-primary); stroke-dasharray: 6 6; animation: march 1s linear infinite; }
+@keyframes march { to { stroke-dashoffset: -12; } }
+.flow .packet { fill: var(--c-accent); }
+.flow .label { fill: var(--c-muted); font: 700 12px var(--font); text-anchor: middle; }
+/* highlight a node in the current step */
+.flow .node.hot rect, .flow .node.hot circle { stroke: var(--c-accent); stroke-width: 3; filter: drop-shadow(0 2px 6px rgba(255,138,0,.35)); }
+.flow .node rect, .flow .node circle { transition: stroke var(--t-fast), stroke-width var(--t-fast); }
+
+/* step list that pairs with a flow diagram */
+.steps { list-style: none; padding: 0; margin: 0; counter-reset: s; }
+.steps li { counter-increment: s; position: relative; padding: 10px 12px 10px 52px; border-radius: var(--r-sm); color: var(--c-muted); transition: background var(--t-fast), color var(--t-fast); }
+.steps li::before { content: counter(s); position: absolute; left: 10px; top: 9px; width: 30px; height: 30px; border-radius: 50%; display: grid; place-items: center; background: var(--c-surface-alt); color: var(--c-primary); font-weight: 700; font-size: 14px; }
+.steps li.is-on { background: var(--c-surface-alt); color: var(--c-primary); }
+.steps li.is-on::before { background: var(--c-accent); color: #fff; }
+.flow-controls { display: flex; gap: 10px; flex-wrap: wrap; margin-top: 16px; }
+
+@media (prefers-reduced-motion: reduce) {
+  *, *::before, *::after { animation-duration: .001s !important; animation-iteration-count: 1 !important; transition-duration: .001s !important; }
+}
+@media (max-width: 600px) {
+  :root { --fs-body: 16px; }
+  .topbar .chapter { display: none; }
+  .nav-arrow { width: 46px; height: 46px; }
+}
+
+</style>
+<style>
+/* ---------- page-specific ---------- */
+.slide { padding-top: 28px; padding-bottom: 108px; }
+.deck { overflow: clip; }
+.slide > .inner { min-height: 100%; display: flex; flex-direction: column; }
+.slide > .inner::before, .slide > .inner::after { content: ""; flex: 1 1 0; }   /* safe vertical centering */
+@media (max-height: 820px) {
+  :root { --fs-body: 16px; --fs-display: 30px; --fs-h2: 22px; }
+  .slide { padding-top: 16px; padding-bottom: 96px; }
+  svg.flow { max-height: 30vh; }
+  .mtypes { gap: 28px; } .mtype dl { font-size: 14px; } .mtype dt { margin-top: 4px; }
+  .mquiz .q { padding: 5px 0; } .fb { font-size: 13px; }
+  .mtype dt:first-of-type, .mtype dd:first-of-type { display: none; } .mtype .card { padding: 16px 20px; }
+  .ladder { height: 200px; } .caps .cap { padding: 12px; } .cap .icon-disc { width: 40px; height: 40px; }
+  .take li { padding: 6px 0; } .road .disc { width: 64px; height: 64px; }
+  .hero .bubble { width: min(320px, 100%); }
+}
+.topbar .right { display: flex; align-items: center; gap: 14px; min-width: 0; }
+.part-tag { font-size: 13px; font-weight: 700; color: var(--c-primary); background: var(--c-surface-alt); border-radius: var(--r-pill); padding: 6px 12px; white-space: nowrap; }
+.icon-btn { width: 36px; height: 36px; border-radius: 50%; border: 0; background: var(--c-surface-alt); color: var(--c-primary); display: grid; place-items: center; cursor: pointer; flex: none; }
+.icon-btn:hover { background: var(--c-line); }
+.icon-btn svg { width: 18px; height: 18px; stroke: currentColor; fill: none; stroke-width: 2.2; stroke-linecap: round; stroke-linejoin: round; }
+.muted { color: var(--c-muted); }
+.small { font-size: 15px; }
+.tag { display: inline-block; font-size: 12px; font-weight: 700; padding: 3px 10px; border-radius: var(--r-pill); background: var(--c-surface-alt); color: var(--c-primary); }
+.tag--acc { background: var(--c-accent); color: #fff; }
+.key { font-weight: 700; color: var(--c-primary); }
+.stack > * + * { margin-top: 14px; }
+.row { display: flex; gap: 10px; flex-wrap: wrap; align-items: center; }
+.btn--sm { padding: 11px 18px; font-size: 14px; }
+.btn.is-on { background: var(--c-primary); color: #fff; }
+.mt { margin-top: 20px; } .mt-s { margin-top: 10px; }
+.big-quote { font-size: clamp(20px, 2vw, 26px); font-weight: 300; color: var(--c-primary); line-height: 1.35; }
+.hint { font-size: 13px; color: var(--c-muted); }
+.hint::before { content: "ⓘ "; }
+.band .btn--soft, .band .card .btn--soft { background: #fff; }
+.band .card .btn--soft { background: var(--c-surface-alt); }
+.split.next { grid-template-columns: 120px 1fr; }
+
+/* footer */
+.foot { position: fixed; left: var(--gutter); bottom: calc(36px + env(safe-area-inset-bottom, 0px)); z-index: 9; font-size: 13px; font-weight: 700; color: var(--c-muted); white-space: nowrap; transition: opacity .3s; }
+.foot.off { opacity: 0; pointer-events: none; }
+@media (max-width: 1060px) { .foot { display: none; } }
+
+/* speaker notes (press N) */
+.notes { display: none; }
+.notes-panel { position: fixed; left: 16px; right: 16px; bottom: calc(96px + env(safe-area-inset-bottom, 0px)); z-index: 20; max-width: 760px; margin: 0 auto;
+  background: var(--c-ink-deep); color: #e8eef2; border-radius: 8px; padding: 14px 18px; font-size: 15px; line-height: 1.5; box-shadow: var(--shadow-2); }
+.notes-panel strong { color: #fff; }
+.notes-panel .hint { color: #9fb3bf; }
+
+/* title slide */
+.hero { background: var(--c-primary); overflow: hidden; }
+.hero::before, .hero::after { content: ""; position: absolute; border-radius: 50%; background: rgba(255,255,255,.06); }
+.hero::before { width: 520px; height: 520px; right: -120px; top: -160px; }
+.hero::after { width: 300px; height: 300px; left: 38%; bottom: -150px; background: rgba(255,138,0,.18); }
+.hero .grid-2 { position: relative; z-index: 1; }
+.hero .bubble { width: min(400px, 100%); }
+.hero-side { color: #fff; }
+.hero-side .eyebrow { color: rgba(255,255,255,.75); }
+.hero-side h1 { color: #fff; font-weight: 300; font-size: clamp(28px, 3vw, 40px); line-height: 1.15; margin: 0 0 14px; }
+.hero-side p { color: rgba(255,255,255,.85); }
+.hero-keys { font-size: 14px; color: rgba(255,255,255,.75); }
+.hero-keys kbd { background: rgba(255,255,255,.15); border-radius: 4px; padding: 1px 7px; font-family: inherit; font-weight: 700; color: #fff; }
+
+/* roadmap */
+.road { display: grid; grid-template-columns: repeat(3, 1fr); gap: 24px; position: relative; }
+.road::before { content: ""; position: absolute; left: 16%; right: 16%; top: 40px; border-top: 3px dashed var(--c-line); }
+.road .stop { text-align: center; position: relative; }
+.road .disc { width: 80px; height: 80px; border-radius: 50%; margin: 0 auto 14px; display: grid; place-items: center; font-size: 30px; font-weight: 800; background: #fff; color: var(--c-primary); border: 3px solid var(--c-line); }
+.road .stop.now .disc { background: var(--c-accent); color: #fff; border-color: var(--c-accent); box-shadow: 0 0 0 8px rgba(255,138,0,.15); }
+.road .stop p { font-size: 15px; margin-inline: auto; }
+@media (max-width: 700px) { .road { grid-template-columns: 1fr; } .road::before { display: none; } }
+.agenda { display: grid; grid-template-columns: repeat(auto-fit, minmax(170px, 1fr)); gap: 12px; }
+.agenda .card { padding: 14px 16px; }
+.agenda .t { font-size: 13px; font-weight: 700; color: var(--c-accent-text); }
+
+/* AI ladder */
+.ladder { display: grid; grid-template-columns: repeat(4, 1fr); gap: 12px; align-items: end; height: 250px; }
+.rung { border: 0; cursor: pointer; border-radius: 8px 8px 0 0; background: var(--c-surface-alt); color: var(--c-primary); font: 700 15px/1.25 var(--font);
+  padding: 12px 10px; display: flex; flex-direction: column; justify-content: flex-start; align-items: center; text-align: center;
+  transition: background .3s, color .3s, transform .3s, height .6s var(--ease); height: 0; overflow: hidden; }
+.slide.is-active .rung { height: var(--h); }
+.rung .yr { font-size: 12px; font-weight: 500; color: var(--c-muted); margin-top: 4px; }
+.rung:hover { background: var(--c-line); }
+.rung.is-on { background: var(--c-primary); color: #fff; transform: translateY(-6px); }
+.rung.is-on .yr { color: rgba(255,255,255,.75); }
+.rung.gen.is-on { background: var(--c-accent); }
+.ladder-base { border-top: 3px solid var(--c-line); margin-top: 0; }
+.ladder-detail { display: grid; grid-template-columns: repeat(3, 1fr); gap: 14px; }
+.ladder-detail .card { padding: 14px 16px; min-height: 92px; }
+.ladder-detail .lbl { display: block; font-size: 12px; font-weight: 700; color: var(--c-muted); margin-bottom: 4px; }
+.ladder-detail .val { color: var(--c-primary); font-weight: 700; }
+@media (max-width: 700px) { .ladder { height: 200px; } .rung { font-size: 12px; } .ladder-detail { grid-template-columns: 1fr; } }
+.fade-swap { animation: fadeSwap .4s var(--ease); }
+@keyframes fadeSwap { from { opacity: 0; transform: translateY(6px); } to { opacity: 1; transform: none; } }
+
+/* LLM pipeline mini */
+.pipe { display: flex; align-items: stretch; gap: 0; flex-wrap: wrap; justify-content: center; }
+.pipe .st { flex: 1 1 150px; text-align: center; padding: 16px 10px; background: var(--c-surface-alt); border-radius: var(--r-sm); position: relative; margin: 6px 14px; opacity: .35; transition: opacity .4s, background .4s, box-shadow .4s; }
+.pipe .st.on { opacity: 1; background: #fff; box-shadow: var(--shadow-2); }
+.pipe .st:not(:last-child)::after { content: "→"; position: absolute; right: -24px; top: 50%; transform: translateY(-50%); color: var(--c-muted); font-weight: 700; }
+.pipe .st b { display: block; color: var(--c-primary); }
+.pipe .st span { font-size: 14px; color: var(--c-muted); }
+.pipe .ico { font-size: 26px; display: block; margin-bottom: 4px; }
+
+/* tokenizer */
+.tok-input { width: 100%; font: 500 17px/1.5 var(--font); color: var(--c-primary); border: 2px solid var(--c-line); border-radius: var(--r-sm); padding: 12px 14px; background: var(--c-surface-2); resize: vertical; min-height: 70px; }
+.tok-input:focus { outline: none; border-color: var(--c-primary); }
+.chips { display: flex; flex-wrap: wrap; gap: 5px; min-height: 60px; align-content: flex-start; }
+.chip { font: 600 15px/1 var(--font-mono); padding: 7px 7px; border-radius: 4px; color: var(--c-ink-deep); opacity: 0; animation: chipIn .35s var(--ease) forwards; animation-delay: calc(var(--d) * 22ms); }
+.chip.c0 { background: rgba(77,110,130,.16); } .chip.c1 { background: rgba(255,138,0,.22); } .chip.c2 { background: rgba(63,143,107,.2); } .chip.c3 { background: rgba(122,94,168,.18); }
+.chip.sp::before { content: "·"; color: var(--c-muted); margin-right: 1px; }
+@keyframes chipIn { from { opacity: 0; transform: translateY(6px) scale(.9); } to { opacity: 1; transform: none; } }
+.stats { display: flex; gap: 22px; flex-wrap: wrap; }
+.stat b { display: block; font-size: 30px; font-weight: 300; color: var(--c-primary); line-height: 1.1; }
+.stat span { font-size: 13px; font-weight: 700; color: var(--c-muted); }
+.stat.acc b { color: var(--c-accent-text); font-weight: 700; }
+
+/* embeddings */
+.emb { width: 100%; height: auto; display: block; background: var(--c-surface-2); border-radius: var(--r-sm); border: 1px solid var(--c-line); }
+.emb .cl { fill: rgba(77,110,130,.07); stroke: var(--c-line); stroke-dasharray: 4 4; opacity: 0; transition: opacity .8s .9s; }
+.emb .cl-lbl { fill: var(--c-muted); font: 700 12px var(--font); text-anchor: middle; opacity: 0; transition: opacity .8s 1.1s; }
+.slide.is-active .emb .cl, .slide.is-active .emb .cl-lbl { opacity: 1; }
+.emb .pt { cursor: pointer; transition: transform 1s var(--ease), opacity .3s; }
+.emb .pt circle { fill: var(--c-primary); }
+.emb .pt text { fill: var(--c-primary); font: 700 14px var(--font); }
+.emb .pt.sel circle { fill: var(--c-accent); r: 9; }
+.emb .pt.dim { opacity: .3; }
+.emb .nb { stroke: var(--c-accent); stroke-width: 2; stroke-dasharray: 5 5; animation: march 1s linear infinite; }
+.emb .axis { stroke: var(--c-line); }
+
+/* next-token */
+.gen-text { font-size: clamp(18px, 1.8vw, 22px); color: var(--c-primary); line-height: 1.5; min-height: 70px; padding: 14px 16px; background: var(--c-surface-2); border-radius: var(--r-sm); border: 1px solid var(--c-line); }
+.gen-text .new { background: rgba(255,138,0,.25); border-radius: 3px; padding: 0 3px; animation: chipIn .35s var(--ease); }
+.gen-text .cursor { display: inline-block; width: 2px; height: 1.1em; background: var(--c-accent); vertical-align: -3px; animation: blink 1s steps(1) infinite; margin-left: 2px; }
+@keyframes blink { 50% { opacity: 0; } }
+.cands { list-style: none; padding: 0; margin: 0; }
+.cand { display: grid; grid-template-columns: minmax(110px, 190px) 1fr 52px; align-items: center; gap: 10px; padding: 5px 0; font-size: 16px; }
+.cand .w { font-weight: 700; color: var(--c-primary); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.cand .bar { height: 14px; background: var(--c-surface-alt); border-radius: 7px; overflow: hidden; }
+.cand .bar i { display: block; height: 100%; background: var(--c-primary); border-radius: 7px; transition: width .4s var(--ease); }
+.cand .p { text-align: right; font-weight: 700; color: var(--c-muted); font-size: 14px; }
+.cand.pick .bar i { background: var(--c-accent); }
+.cand.pick .w { color: var(--c-accent-text); }
+.slider { display: flex; align-items: center; gap: 12px; font-size: 15px; font-weight: 700; color: var(--c-primary); }
+.slider input { flex: 1; accent-color: var(--c-accent); }
+.history { list-style: none; padding: 0; margin: 0; font-size: 15px; }
+.history li { padding: 6px 10px; border-left: 3px solid var(--c-line); margin-bottom: 6px; color: var(--c-text); animation: chipIn .35s var(--ease); }
+.history li:first-child { border-color: var(--c-accent); }
+
+/* context window */
+.blocks { display: grid; grid-template-columns: repeat(20, 1fr); gap: 4px; }
+.blk { aspect-ratio: 1; border-radius: 3px; background: var(--c-surface-alt); transition: background .25s, opacity .25s, transform .25s; }
+.blk.in { background: var(--c-primary); }
+.blk.out { background: var(--c-line); opacity: .55; }
+.blk.newest { background: var(--c-accent); transform: scale(1.15); }
+.blk.k0 { background: #4d6e82; } .blk.k1 { background: #ff8a00; } .blk.k2 { background: #3f8f6b; } .blk.k3 { background: #7a5ea8; } .blk.k4 { background: #2f8c9a; } .blk.k5 { background: #b8483e; }
+.legend { display: flex; gap: 16px; flex-wrap: wrap; font-size: 14px; font-weight: 700; color: var(--c-muted); }
+.legend i { display: inline-block; width: 12px; height: 12px; border-radius: 3px; margin-right: 6px; vertical-align: -1px; }
+.meter { height: 12px; border-radius: 6px; background: var(--c-surface-alt); overflow: hidden; }
+.meter i { display: block; height: 100%; background: linear-gradient(90deg, var(--c-primary), var(--c-accent)); transition: width .4s var(--ease); }
+
+/* model types */
+.mtypes { display: grid; grid-template-columns: repeat(3, 1fr); gap: 34px; }
+.mtype { position: relative; }
+.mtype:not(:last-child)::after { content: ""; position: absolute; right: -26px; top: 40px; width: 18px; height: 18px; border-top: 3px solid var(--c-accent); border-right: 3px solid var(--c-accent); transform: rotate(45deg); }
+.mtype .card { height: 100%; }
+.mtype dl { margin: 10px 0 0; font-size: 15px; }
+.mtype dt { font-size: 12px; font-weight: 700; color: var(--c-muted); margin-top: 8px; }
+.mtype dd { margin: 0; }
+@media (max-width: 800px) { .mtypes { grid-template-columns: 1fr; } .mtype::after { display: none; } }
+.mquiz .q { display: grid; grid-template-columns: 1fr auto; gap: 10px; align-items: center; padding: 10px 0; border-bottom: 1px solid var(--c-line); }
+.mquiz .opts { display: flex; gap: 6px; flex-wrap: wrap; }
+.opt { font: 700 13px var(--font); padding: 8px 12px; border-radius: var(--r-pill); border: 2px solid var(--c-line); background: #fff; color: var(--c-primary); cursor: pointer; }
+.opt:hover { border-color: var(--c-primary); }
+.opt.ok { background: var(--c-ok); border-color: var(--c-ok); color: #fff; }
+.opt.no { background: #fbeceb; border-color: var(--c-err); color: var(--c-err); animation: shake .35s; }
+@keyframes shake { 25% { transform: translateX(-4px); } 75% { transform: translateX(4px); } }
+.fb { display: block; font-size: 14px; color: var(--c-ok); }
+@media (max-width: 700px) { .mquiz .q { grid-template-columns: 1fr; } }
+
+/* multimodal mock */
+.mock { border: 1px solid var(--c-line); border-radius: 8px; overflow: hidden; background: #fff; box-shadow: var(--shadow-1); }
+.mock .bar { background: var(--c-surface-alt); padding: 7px 10px; display: flex; gap: 5px; align-items: center; }
+.mock .bar i { width: 9px; height: 9px; border-radius: 50%; background: var(--c-line); }
+.mock .bar span { font-size: 11px; color: var(--c-muted); margin-left: 8px; }
+.mock .body { padding: 16px 22px 18px; }
+.mock .fld { font-size: 12px; font-weight: 700; color: var(--c-muted); margin-bottom: 3px; }
+.mock .inp { height: 30px; border: 1.5px solid var(--c-line); border-radius: 5px; margin-bottom: 10px; background: var(--c-surface-2); }
+.mock .mbtn { display: inline-block; background: var(--c-primary); color: #fff; font-size: 13px; font-weight: 700; padding: 8px 18px; border-radius: var(--r-pill); }
+.mock .gap { display: inline-block; margin-left: 12px; font-size: 12px; color: transparent; border: 2px dashed transparent; border-radius: 4px; padding: 2px 6px; transition: all .4s; }
+.mock.flag .gap { border-color: var(--c-err); color: var(--c-err); }
+.story { background: var(--c-surface-2); border-left: 4px solid var(--c-primary); border-radius: 0 var(--r-sm) var(--r-sm) 0; padding: 12px 16px; font-size: 15px; }
+.step-show { opacity: 0; transform: translateY(8px); transition: opacity .5s var(--ease), transform .5s var(--ease); }
+.step-show.shown { opacity: 1; transform: none; }
+.finding { border: 2px solid var(--c-accent); border-radius: var(--r-sm); padding: 12px 16px; background: #fff7ee; font-size: 15px; }
+.finding b { color: var(--c-accent-text); }
+
+/* capabilities */
+.caps { display: grid; grid-template-columns: repeat(auto-fit, minmax(200px, 1fr)); gap: 14px; }
+.cap { padding: 16px; }
+.cap .icon-disc { width: 52px; height: 52px; margin: 0 0 10px; }
+.cap .icon-disc svg { width: 26px; height: 26px; }
+.cap h3 { font-size: 17px; margin-bottom: 4px; }
+.cap p { font-size: 14px; margin: 0; }
+
+/* chatbot vs app */
+.vs { display: grid; grid-template-columns: 1fr auto 1fr; gap: 20px; align-items: stretch; }
+.vs .mid { display: grid; place-items: center; font-weight: 800; color: var(--c-muted); }
+.vs ul { padding-left: 20px; margin: 8px 0 0; font-size: 16px; }
+.vs li { margin: 4px 0; }
+.mini-flow { display: flex; align-items: center; gap: 8px; font-size: 13px; font-weight: 700; color: var(--c-primary); margin-top: 6px; flex-wrap: wrap; }
+.mini-flow span { background: var(--c-surface-alt); border-radius: var(--r-pill); padding: 5px 12px; }
+.mini-flow em { font-style: normal; color: var(--c-accent); animation: pulse 1.4s ease-in-out infinite; }
+@keyframes pulse { 50% { opacity: .3; } }
+@media (max-width: 800px) { .vs { grid-template-columns: 1fr; } }
+
+/* prompt anatomy */
+:root { --k-role: #4d6e82; --k-ctx: #2f8c9a; --k-ins: #ff8a00; --k-in: #3f8f6b; --k-con: #b8483e; --k-out: #7a5ea8; }
+.prompt-box { background: #fff; border: 1px solid var(--c-line); border-radius: var(--r-sm); padding: 14px; font-size: 16px; box-shadow: var(--shadow-1); }
+.pl { display: grid; grid-template-columns: 148px 1fr; gap: 12px; align-items: start; padding: 8px 10px; border-left: 4px solid var(--k); border-radius: 0 4px 4px 0; margin-bottom: 6px; background: color-mix(in srgb, var(--k) 7%, white); }
+.pl .lab { font-size: 12px; font-weight: 800; color: var(--k); text-transform: uppercase; letter-spacing: .04em; padding-top: 3px; }
+.pl .txt { color: var(--c-ink-deep); }
+.pl.hidden { display: none; }
+.pl.enter { animation: rise .5s var(--ease); }
+.grid-anat { grid-template-columns: 1.5fr 1fr; }
+@media (max-width: 800px) { .grid-anat { grid-template-columns: 1fr; } }
+.legend6 { list-style: none; padding: 0; margin: 0; }
+.legend6 li { display: grid; grid-template-columns: 14px 1fr; gap: 10px; padding: 7px 10px; border-radius: var(--r-sm); font-size: 15px; opacity: .45; transition: opacity .3s, background .3s; }
+.legend6 li i { width: 14px; height: 14px; border-radius: 3px; background: var(--k); margin-top: 4px; }
+.legend6 li b { color: var(--c-primary); }
+.legend6 li.on { opacity: 1; background: var(--c-surface-alt); }
+@media (max-width: 600px) { .pl { grid-template-columns: 1fr; gap: 2px; } }
+
+/* quiz */
+.qchips { display: flex; flex-wrap: wrap; gap: 8px; }
+.qchip { font: 800 12px var(--font); text-transform: uppercase; letter-spacing: .04em; padding: 9px 14px; border-radius: var(--r-pill); border: 2px solid var(--k); color: var(--k); background: #fff; cursor: pointer; }
+.qchip.sel { background: var(--k); color: #fff; box-shadow: 0 0 0 4px color-mix(in srgb, var(--k) 25%, transparent); }
+.qchip.used { opacity: .35; }
+.qseg { display: grid; grid-template-columns: 148px 1fr; gap: 12px; padding: 10px 12px; border: 2px dashed var(--c-line); border-radius: var(--r-sm); margin-bottom: 8px; cursor: pointer; transition: all .25s; background: #fff; }
+.qseg:hover { border-color: var(--c-muted); }
+.qseg .lab { font-size: 12px; font-weight: 800; color: var(--c-muted); text-transform: uppercase; letter-spacing: .04em; padding-top: 3px; }
+.qseg.done { border-style: solid; border-color: var(--k); background: color-mix(in srgb, var(--k) 7%, white); cursor: default; }
+.qseg.done .lab { color: var(--k); }
+.qseg.wrong { border-color: var(--c-err); animation: shake .35s; }
+.score { font-size: 15px; font-weight: 700; color: var(--c-primary); }
+@media (max-width: 600px) { .qseg { grid-template-columns: 1fr; } }
+
+/* few-shot */
+.seg { align-self: flex-start; display: inline-flex; background: var(--c-surface-alt); border-radius: var(--r-pill); padding: 4px; gap: 4px; flex-wrap: wrap; }
+.seg button { border: 0; background: transparent; font: 700 14px var(--font); color: var(--c-primary); padding: 10px 18px; border-radius: var(--r-pill); cursor: pointer; }
+.seg button.on { background: var(--c-primary); color: #fff; }
+.ex { border: 1px dashed var(--c-muted); border-radius: var(--r-sm); padding: 8px 12px; font: 500 14px/1.5 var(--font-mono); color: var(--c-ink-deep); background: var(--c-surface-2); margin-top: 8px; animation: rise .45s var(--ease); }
+.ex .tag { margin-bottom: 4px; }
+.answers .ans { color: var(--c-ink-deep); font: 500 14px/1.5 var(--font-mono); padding: 8px 12px; border-radius: var(--r-sm); background: #fff; border: 1px solid var(--c-line); margin-bottom: 6px; animation: rise .45s var(--ease); white-space: pre-wrap; }
+.answers .ans.off { border-color: #e9c4c0; background: #fdf6f5; }
+
+/* chat */
+.chat { display: flex; flex-direction: column; gap: 10px; max-height: calc(100vh - 250px); min-height: 260px; overflow-y: auto; scroll-behavior: smooth; }
+.sys { margin-top: 8px; flex: none; } .msg { flex: none; }
+.sys { border: 2px solid var(--c-primary); border-radius: var(--r-sm); padding: 10px 14px; font-size: 15px; background: #fff; position: relative; }
+.sys .tag { position: absolute; top: -11px; left: 12px; background: var(--c-primary); color: #fff; }
+.sys.ping { animation: ping .9s var(--ease); }
+@keyframes ping { 0% { box-shadow: 0 0 0 0 rgba(255,138,0,.6); } 100% { box-shadow: 0 0 0 14px rgba(255,138,0,0); } }
+.msg { max-width: 82%; padding: 9px 14px; border-radius: 14px; font-size: 15px; animation: rise .45s var(--ease); }
+.msg.u { align-self: flex-end; background: var(--c-primary); color: #fff; border-bottom-right-radius: 4px; }
+.msg.a { align-self: flex-start; background: var(--c-surface-alt); color: var(--c-ink-deep); border-bottom-left-radius: 4px; }
+.msg .who { display: block; font-size: 11px; font-weight: 800; opacity: .75; margin-bottom: 2px; text-transform: uppercase; letter-spacing: .04em; }
+
+/* takeaways */
+.take { list-style: none; padding: 0; margin: 0; counter-reset: t; }
+.take li { counter-increment: t; display: grid; grid-template-columns: 44px 1fr; gap: 14px; align-items: center; padding: 10px 0; border-bottom: 1px solid var(--c-line); }
+.take li::before { content: counter(t); width: 44px; height: 44px; border-radius: 50%; background: var(--c-accent); color: #fff; font-weight: 800; display: grid; place-items: center; font-size: 18px; }
+.take b { color: var(--c-primary); }
+
+/* glossary */
+.gloss { display: grid; grid-template-columns: repeat(auto-fit, minmax(300px, 1fr)); gap: 4px 28px; font-size: 15px; }
+.gloss div { padding: 7px 0; border-bottom: 1px solid var(--c-line); }
+.gloss b { color: var(--c-primary); }
+</style>
+</head>
+<body>
+
+<header class="topbar">
+  <div class="brand">GenAI im Test<span class="dot-accent" aria-hidden="true"></span></div>
+  <div class="right">
+    <div class="chapter" id="chapter"></div>
+    <span class="part-tag">Teil 1 / 3</span>
+    <button class="icon-btn" id="btnNotes" title="Sprechernotizen (N)" aria-label="Sprechernotizen ein/aus"><svg viewBox="0 0 24 24"><path d="M5 4h14v12H9l-4 4z"/><path d="M9 9h6M9 12h4"/></svg></button>
+    <button class="icon-btn" id="btnFull" title="Vollbild (F)" aria-label="Vollbild"><svg viewBox="0 0 24 24"><path d="M4 9V4h5M20 9V4h-5M4 15v5h5M20 15v5h-5"/></svg></button>
+  </div>
+  <div class="progress" id="progress"></div>
+</header>
+
+<main class="deck" id="deck">
+
+<!-- ============ 1 · Titel ============ -->
+<section class="slide hero" data-title="Start">
+  <div class="inner">
+    <div class="grid-2">
+      <div style="display:grid;place-items:center">
+        <div class="bubble reveal" style="--i:0">
+          <span class="eyebrow">Teil 1 von 3</span>
+          <h2 style="font-size:clamp(24px,2.6vw,32px);margin:.2em 0 .3em">Von Tokens zu guten Prompts</h2>
+          <span class="muted small">Wie generative KI funktioniert und wie man mit ihr spricht</span>
+        </div>
+      </div>
+      <div class="hero-side">
+        <span class="eyebrow reveal" style="--i:1">Interne Weiterbildung · Concordia · Präsentiert von Joanna</span>
+        <h1 class="reveal" style="--i:2">Testen mit generativer KI</h1>
+        <p class="reveal" style="--i:3">Erkenntnisse aus dem Kurs <strong>ISTQB® Certified Tester – Testing with Generative AI (CT-GenAI)</strong>, in drei Sessions à 20&nbsp;Minuten.</p>
+        <p class="hero-keys reveal" style="--i:4">Navigation: <kbd>←</kbd> <kbd>→</kbd> · Notizen <kbd>N</kbd> · Vollbild <kbd>F</kbd></p>
+        <div class="reveal" style="--i:5"><button class="btn" data-go="next" style="background:var(--c-accent)">Los geht’s</button></div>
+      </div>
+    </div>
+  </div>
+  <aside class="notes"><strong>Begrüssung (1 Min.)</strong> Ich habe den ISTQB-Kurs CT-GenAI besucht und teile die wichtigsten Inhalte in drei kurzen Sessions. Heute: die Grundlagen, also was ein LLM eigentlich tut und wie man gute Prompts schreibt.</aside>
+</section>
+
+<!-- ============ 2 · Die Reihe ============ -->
+<section class="slide" data-title="Die Reihe">
+  <div class="inner">
+    <div class="center"><span class="eyebrow reveal">Überblick</span><h2 class="display reveal" style="--i:1">Drei Sessions, ein roter Faden</h2></div>
+    <div class="road mt">
+      <div class="stop now reveal" style="--i:2"><div class="disc">1</div><h3>Grundlagen & Prompts</h3><p>Wie ein LLM funktioniert, Modelltypen, strukturierte Prompts und Prompt-Techniken</p><span class="tag tag--acc">heute</span></div>
+      <div class="stop reveal" style="--i:3"><div class="disc">2</div><h3>GenAI im Testprozess</h3><p>Von der Testanalyse bis zum Reporting, Ergebnisse bewerten, Halluzinationen erkennen</p><span class="tag">in einer Woche</span></div>
+      <div class="stop reveal" style="--i:4"><div class="disc">3</div><h3>Sicher im Team einsetzen</h3><p>Datenschutz & Sicherheit, RAG & Agenten, Einführung in der Organisation</p><span class="tag">in zwei Wochen</span></div>
+    </div>
+    <div class="agenda mt reveal" style="--i:5">
+      <div class="card card--tint"><span class="t">ca. 3 Min.</span><br><b class="key">KI-Spektrum</b></div>
+      <div class="card card--tint"><span class="t">ca. 6 Min.</span><br><b class="key">So arbeitet ein LLM</b></div>
+      <div class="card card--tint"><span class="t">ca. 3 Min.</span><br><b class="key">Modelltypen & Einsatz</b></div>
+      <div class="card card--tint"><span class="t">ca. 6 Min.</span><br><b class="key">Prompt Engineering</b></div>
+    </div>
+  </div>
+  <aside class="notes"><strong>Fahrplan (1 Min.)</strong> Die drei Sessions bauen aufeinander auf, jede ist aber auch einzeln verständlich. Heute geht es um das Fundament, das wir in Session 2 im Testalltag anwenden.</aside>
+</section>
+
+<!-- ============ 3 · KI-Spektrum ============ -->
+<section class="slide" data-title="Das KI-Spektrum">
+  <div class="inner">
+    <span class="eyebrow">Kapitel 1.1 · KI-Spektrum</span>
+    <h2>Nicht jede KI ist generative KI</h2>
+    <p class="muted small" style="margin-bottom:14px">Klicke auf eine Stufe. Jede Stufe hat andere Stärken, einen anderen Aufwand und andere Grenzen.</p>
+    <div class="ladder" id="ladder">
+      <button class="rung" style="--h:34%" data-i="0">Symbolische KI<span class="yr">Regeln</span></button>
+      <button class="rung" style="--h:54%" data-i="1">Klassisches Machine Learning<span class="yr">Daten + Features</span></button>
+      <button class="rung" style="--h:74%" data-i="2">Deep Learning<span class="yr">Neuronale Netze</span></button>
+      <button class="rung gen" style="--h:96%" data-i="3">Generative KI<span class="yr">Neue Inhalte</span></button>
+    </div>
+    <div class="ladder-base"></div>
+    <div class="ladder-detail mt" id="ladderDetail">
+      <div class="card"><span class="lbl">So funktioniert’s</span><span class="val" data-k="mech"></span></div>
+      <div class="card"><span class="lbl">Beispiel im Test</span><span class="val" data-k="ex"></span></div>
+      <div class="card"><span class="lbl">Grenze</span><span class="val" data-k="lim"></span></div>
+    </div>
+  </div>
+  <aside class="notes"><strong>KI-Spektrum (3 Min.)</strong> Symbolische KI: Wissen als Regeln, starr. Klassisches ML: lernt aus Daten, Features muss man selbst wählen. Deep Learning: neuronale Netze lernen Features selbst, dafür schwer erklärbar. GenAI baut auf Deep Learning auf und erzeugt neue Inhalte. <strong>Vorteil:</strong> vortrainiert, sofort einsetzbar ohne eigenes Training. <strong>Falle:</strong> nicht alle KI-Ergebnisse sind gleich gut erklärbar, und plausibel heisst nicht korrekt.</aside>
+</section>
+
+<!-- ============ 4 · Wie ein LLM arbeitet (Überblick) ============ -->
+<section class="slide band" data-title="So arbeitet ein LLM">
+  <div class="inner">
+    <span class="eyebrow">Kapitel 1.1.2 · Grundlagen</span>
+    <h2>Was passiert zwischen Prompt und Antwort?</h2>
+    <p>Ein <b class="key">Large Language Model (LLM)</b> ist ein auf riesigen Textmengen vortrainiertes Modell (<em>Generative Pre-trained Transformer</em>). Kleinere, fokussierte Varianten heissen <b class="key">Small Language Models (SLM)</b>.</p>
+    <div class="pipe mt" id="pipe">
+      <div class="st"><span class="ico">✂️</span><b>Tokenisierung</b><span>Text wird in Teile zerlegt</span></div>
+      <div class="st"><span class="ico">🧭</span><b>Embeddings</b><span>Tokens werden zu Zahlenvektoren</span></div>
+      <div class="st"><span class="ico">🔗</span><b>Transformer</b><span>Beziehungen zwischen Tokens</span></div>
+      <div class="st"><span class="ico">🎲</span><b>Nächstes Token</b><span>wird vorhergesagt, Token für Token</span></div>
+    </div>
+    <p class="big-quote center mt reveal" style="--i:6">«Das Modell erzeugt <b>statistisch plausiblen</b> Text.<br>Plausibel ist aber nicht automatisch <b>korrekt</b>.»</p>
+  </div>
+  <aside class="notes"><strong>Überblick (1 Min.)</strong> Die vier Schritte schauen wir auf den nächsten Folien einzeln und interaktiv an. Kernsatz merken: plausibel ≠ korrekt. Das ist die Brücke zu Session 2 (Halluzinationen).</aside>
+</section>
+
+<!-- ============ 5 · Tokenisierung ============ -->
+<section class="slide" data-title="Tokenisierung">
+  <div class="inner">
+    <span class="eyebrow">Schritt 1 · Tokenisierung</span>
+    <h2>Das Modell liest keine Wörter, sondern Tokens</h2>
+    <div class="grid-2" style="align-items:start">
+      <div class="stack">
+        <div class="row">
+          <button class="btn btn--soft btn--sm" data-tok="de">User Story (DE)</button>
+          <button class="btn btn--soft btn--sm" data-tok="en">User Story (EN)</button>
+          <button class="btn btn--soft btn--sm" data-tok="log">Log-Zeile</button>
+        </div>
+        <textarea class="tok-input" id="tokIn" rows="2" aria-label="Text zum Tokenisieren" spellcheck="false"></textarea>
+        <div class="chips" id="tokOut" aria-live="polite"></div>
+        <p class="hint">Vereinfachte Näherung zur Veranschaulichung. Echte Tokenizer (z.&nbsp;B. Byte-Pair-Encoding) zerlegen etwas anders, das Prinzip ist dasselbe.</p>
+      </div>
+      <div class="stack">
+        <div class="stats card">
+          <div class="stat acc"><b id="tokN">0</b><span>Tokens</span></div>
+          <div class="stat"><b id="tokW">0</b><span>Wörter</span></div>
+          <div class="stat"><b id="tokC">0</b><span>Zeichen</span></div>
+          <div class="stat"><b id="tokR">0</b><span>Tokens / Wort</span></div>
+        </div>
+        <ul style="margin:0;padding-left:20px">
+          <li>Tokens sind <b class="key">Zeichen, Wortteile oder ganze Wörter</b>.</li>
+          <li>Häufige englische Wörter sind oft <b class="key">1 Token</b>. Lange deutsche Wörter zerfallen in mehrere.</li>
+          <li>Tokens bestimmen <b class="key">Kosten, Tempo</b> und wie viel ins <b class="key">Kontextfenster</b> passt.</li>
+        </ul>
+      </div>
+    </div>
+  </div>
+  <aside class="notes"><strong>Tokenisierung (1,5 Min.)</strong> Live zeigen: DE- vs. EN-Version derselben Story vergleichen, die deutsche braucht mehr Tokens. Dann die Log-Zeile: Zeitstempel, Klassennamen und Zahlen erzeugen viele Tokens. Man kann auch eigenen Text eintippen. Im Kurs wurde dazu ein echter Tokenizer verwendet (Übung HO-1.1.2).</aside>
+</section>
+
+<!-- ============ 6 · Embeddings ============ -->
+<section class="slide" data-title="Embeddings">
+  <div class="inner">
+    <span class="eyebrow">Schritt 2 · Embeddings</span>
+    <h2>Ähnliche Bedeutung, ähnliche Position</h2>
+    <div class="grid-2" style="align-items:center">
+      <svg class="emb" id="emb" viewBox="0 0 600 380" role="img" aria-label="Wörter als Punkte im Vektorraum, ähnliche Begriffe liegen nah beieinander">
+        <line class="axis" x1="30" y1="350" x2="580" y2="350"/><line class="axis" x1="30" y1="20" x2="30" y2="350"/>
+        <ellipse class="cl" cx="150" cy="140" rx="115" ry="85"/><text class="cl-lbl" x="150" y="45">Login & Zugang</text>
+        <ellipse class="cl" cx="470" cy="130" rx="110" ry="85"/><text class="cl-lbl" x="470" y="35">Abweichungen</text>
+        <ellipse class="cl" cx="320" cy="290" rx="125" ry="58"/><text class="cl-lbl" x="320" y="225">Versicherung</text>
+        <g id="embPts"></g>
+      </svg>
+      <div class="stack">
+        <p><b class="key">Embeddings</b> wandeln jedes Token in einen <b class="key">Zahlenvektor</b> um. Tokens mit ähnlicher Bedeutung liegen im Vektorraum nahe beieinander.</p>
+        <p>So erkennt das Modell, dass «Kennwort» und «Passwort» fast dasselbe meinen, und behält Zusammenhänge im Text.</p>
+        <div class="note small"><strong>Häufige Verwechslung:</strong> Tokenisierung (zerlegen) ist <em>nicht</em> dasselbe wie Embedding (in Bedeutung umrechnen).</div>
+        <p class="hint">Klicke auf ein Wort, um seine nächsten Nachbarn zu sehen. Echte Embeddings haben Hunderte bis Tausende Dimensionen, hier sind es 2.</p>
+      </div>
+    </div>
+  </div>
+  <aside class="notes"><strong>Embeddings (1 Min.)</strong> Auf «Passwort» klicken: Nachbarn sind Kennwort, Login, Anmeldung. Auf «Bug» klicken: Defekt, Fehler. Das ist auch die Basis für semantische Suche und RAG (Thema in Session 3).</aside>
+</section>
+
+<!-- ============ 7 · Nächstes Token ============ -->
+<section class="slide" data-title="Nächstes Token">
+  <div class="inner">
+    <span class="eyebrow">Schritt 3 + 4 · Transformer & Inferenz</span>
+    <h2>Token für Token: Warum dieselbe Frage verschiedene Antworten gibt</h2>
+    <div class="grid-2" style="align-items:start">
+      <div class="stack">
+        <div class="gen-text" id="genText"></div>
+        <ul class="cands" id="cands" aria-live="polite"></ul>
+        <div class="slider"><span>Temperatur</span><input type="range" id="temp" min="0" max="1.5" step="0.1" value="0.8" aria-label="Temperatur"><span id="tempV">0.8</span></div>
+        <div class="row">
+          <button class="btn btn--sm" id="genStep">Nächstes Token</button>
+          <button class="btn btn--soft btn--sm" id="genAuto">▶ Satz generieren</button>
+          <button class="btn btn--soft btn--sm" id="genReset">Neu starten</button>
+        </div>
+      </div>
+      <div class="stack">
+        <p>Der <b class="key">Transformer</b> lernt, wie Tokens zueinander in Beziehung stehen. Bei der Inferenz berechnet er <b class="key">Wahrscheinlichkeiten für das nächste Token</b> und wählt eines davon aus.</p>
+        <p>Weil gewürfelt wird, ist das Verhalten <b class="key">nicht-deterministisch</b>: Gleicher Prompt, andere Antwort. Die <b class="key">Temperatur</b> steuert, wie stark gewürfelt wird (0 = immer das wahrscheinlichste).</p>
+        <div><span class="eyebrow">Bisher generiert</span><ul class="history" id="genHist"><li class="muted">Noch nichts. Klicke auf «Satz generieren».</li></ul></div>
+      </div>
+    </div>
+  </div>
+  <aside class="notes"><strong>Nächstes Token (2 Min.)</strong> Zwei- bis dreimal «Satz generieren» klicken: Es entstehen unterschiedliche Sätze. Dann die Temperatur auf 0 setzen und nochmals generieren: Es kommt immer derselbe Satz. Für Tests heisst das, dass Ergebnisse schwanken können. Deshalb prüfen und bei Bedarf mehrfach laufen lassen (mehr dazu in Session 2).</aside>
+</section>
+
+<!-- ============ 8 · Kontextfenster ============ -->
+<section class="slide" data-title="Kontextfenster">
+  <div class="inner">
+    <span class="eyebrow">Kontextfenster</span>
+    <h2>Das Modell «sieht» nur, was ins Fenster passt</h2>
+    <div class="grid-2" style="align-items:start">
+      <div class="stack">
+        <div class="card">
+          <div class="row" style="justify-content:space-between;margin-bottom:10px"><b class="key">Langes Testlog · 100 Tokens</b><span class="small muted" id="ctxInfo"></span></div>
+          <div class="blocks" id="blocks"></div>
+          <div class="legend mt-s" id="ctxLegend"><span><i style="background:var(--c-primary)"></i>im Fenster</span><span><i style="background:var(--c-line)"></i>herausgefallen</span><span><i style="background:var(--c-accent)"></i>neuestes Token</span></div>
+        </div>
+        <div class="slider"><span>Fenstergrösse</span><input type="range" id="ctxSize" min="10" max="60" step="5" value="30" aria-label="Fenstergrösse"><span id="ctxSizeV">30</span></div>
+        <div class="row">
+          <button class="btn btn--sm" id="ctxPlay">▶ Log einlesen</button>
+          <button class="btn btn--soft btn--sm" id="ctxChunk">In Chunks aufteilen</button>
+        </div>
+      </div>
+      <div class="stack">
+        <p>Das <b class="key">Kontextfenster</b> ist die Menge an Tokens, die das Modell auf einmal berücksichtigen kann. Dazu gehören Prompt, Eingabedaten und die bisherige Antwort.</p>
+        <div><span class="small key">Rechenaufwand & Kosten</span><div class="meter mt-s"><i id="ctxCost"></i></div></div>
+        <p class="small">Ein grösseres Fenster hilft z.&nbsp;B. bei langen Testlogs, kostet aber mehr Rechenzeit und Geld.</p>
+        <div class="note"><strong>Faustregel:</strong> Grosse Testartefakte vor dem Prompten in <b>Chunks</b> aufteilen und einzeln verarbeiten.</div>
+      </div>
+    </div>
+  </div>
+  <aside class="notes"><strong>Kontextfenster (1,5 Min.)</strong> «Log einlesen» klicken: Grau wird, was nicht mehr ins Fenster passt. Das Modell vergisst es für diese Antwort. Dann die Fenstergrösse verändern und zeigen, dass der Kostenbalken mitwächst. «In Chunks aufteilen» zeigt die Lösung: Das Log wird in Stücke zerlegt, die einzeln ins Fenster passen.</aside>
+</section>
+
+<!-- ============ 9 · Modelltypen ============ -->
+<section class="slide band" data-title="Modelltypen">
+  <div class="inner">
+    <span class="eyebrow">Kapitel 1.1.3 · Modelltypen</span>
+    <h2>Drei Stufen der Spezialisierung</h2>
+    <div class="mtypes">
+      <div class="mtype reveal" style="--i:1"><div class="card">
+        <span class="tag">Stufe 1</span><h3 class="mt-s">Foundation LLM</h3>
+        <dl><dt>Training</dt><dd>Riesige, breite Datenmengen</dd><dt>Stark bei</dt><dd>Breiten Entwürfen, Ideensammlung</dd><dt>Achtung</dt><dd>Hält sich schlecht an konkrete Aufgaben</dd></dl>
+      </div></div>
+      <div class="mtype reveal" style="--i:2"><div class="card">
+        <span class="tag">Stufe 2</span><h3 class="mt-s">Instruction-tuned LLM</h3>
+        <dl><dt>Training</dt><dd>+ Paare aus Anweisung und erwarteter Antwort</dd><dt>Stark bei</dt><dd>Anweisungen befolgen, Formate einhalten</dd><dt>Achtung</dt><dd>Begrenzt bei mehrstufigem Denken</dd></dl>
+      </div></div>
+      <div class="mtype reveal" style="--i:3"><div class="card">
+        <span class="tag tag--acc">Stufe 3</span><h3 class="mt-s">Reasoning LLM</h3>
+        <dl><dt>Training</dt><dd>+ Aufgaben mit Zwischenschritten (Chain of Thought)</dd><dt>Stark bei</dt><dd>Analyse, Priorisierung, komplexen Abwägungen</dd><dt>Achtung</dt><dd>Langsamer und teurer</dd></dl>
+      </div></div>
+    </div>
+    <div class="card mt mquiz reveal" style="--i:4" id="mquiz">
+      <b class="key">Welcher Modelltyp passt am besten?</b>
+    </div>
+  </div>
+  <aside class="notes"><strong>Modelltypen (1,5 Min.)</strong> Jede Stufe baut auf der vorherigen auf. Im Testalltag nutzen wir v.&nbsp;a. instruction-tuned und Reasoning-Modelle. Das Quiz mit dem Publikum lösen: Gherkin nach Vorlage → instruction-tuned; Priorisieren nach Risiko und Abhängigkeiten → Reasoning; erste Ideen aus groben Notizen → Foundation (bzw. jedes Modell).</aside>
+</section>
+
+<!-- ============ 10 · Multimodal ============ -->
+<section class="slide" data-title="Multimodale Modelle">
+  <div class="inner">
+    <span class="eyebrow">Kapitel 1.1.4 · Multimodale LLMs</span>
+    <h2>Text und Bild zusammen prüfen</h2>
+    <div class="grid-2" style="align-items:start">
+      <div class="stack">
+        <div class="story"><span class="eyebrow">User Story</span>Als versicherte Person möchte ich auf der Login-Seite über den Link <b>«Passwort vergessen?»</b> mein Passwort zurücksetzen können.</div>
+        <div class="mock" id="mmMock">
+          <div class="bar"><i></i><i></i><i></i><span>kundenportal / login</span></div>
+          <div class="body">
+            <div class="fld">Benutzername</div><div class="inp"></div>
+            <div class="fld">Passwort</div><div class="inp"></div>
+            <span class="mbtn">Anmelden</span><span class="gap">Link fehlt?</span>
+          </div>
+        </div>
+      </div>
+      <div class="card" data-flow>
+        <svg class="flow" viewBox="0 0 520 260" role="img" aria-label="User Story und Screenshot gehen in ein multimodales LLM, das einen Befund liefert">
+          <path class="edge" id="mm-e1" d="M150 50 C190 50 180 115 210 120"/>
+          <path class="edge" id="mm-e2" d="M150 210 C190 210 180 145 210 140"/>
+          <path class="edge" id="mm-e3" d="M350 130 H390"/>
+          <g class="node" id="mm-story"><rect x="10" y="20" width="140" height="60" rx="5"/><text x="80" y="44">User Story</text><text class="sub" x="80" y="62">Text</text></g>
+          <g class="node" id="mm-shot"><rect x="10" y="180" width="140" height="60" rx="5"/><text x="80" y="204">Screenshot</text><text class="sub" x="80" y="222">Bild</text></g>
+          <g class="node" id="mm-llm"><rect x="210" y="95" width="140" height="70" rx="5"/><text x="280" y="122">Multimodales</text><text x="280" y="142">LLM</text></g>
+          <g class="node alt" id="mm-out"><rect x="390" y="100" width="120" height="60" rx="5"/><text x="450" y="124">Befund</text><text class="sub" x="450" y="142">zur Prüfung</text></g>
+        </svg>
+        <ol class="steps small" style="margin-top:6px">
+          <li data-hot="mm-story mm-llm" data-edge="mm-e1">User Story als Text an das Modell</li>
+          <li data-hot="mm-shot mm-llm" data-edge="mm-e2">Screenshot als Bild dazu (Vision-Language-Modell)</li>
+          <li data-hot="mm-llm mm-out" data-edge="mm-e3" data-mark="mmMock">Modell vergleicht Text und Bild und meldet eine Abweichung</li>
+        </ol>
+        <div class="finding step-show" data-step-show="2"><b>Befund:</b> Der in der Story geforderte Link «Passwort vergessen?» ist im Screenshot nicht zu sehen.<br><span class="small muted">→ Immer gegen das Testorakel prüfen: Fehlen UI-Zustände? Hat das Modell Details erfunden?</span></div>
+      </div>
+    </div>
+  </div>
+  <aside class="notes"><strong>Multimodal (1 Min.)</strong> Multimodale Modelle verarbeiten Text, Bilder, Audio und Video. Vision-Language-Modelle verbinden Bild und Text. Im Test: Screenshots oder Wireframes mit User Stories oder Fehlerberichten abgleichen und daraus reichere Testfälle ableiten. Das Ergebnis bleibt ein Vorschlag, den wir prüfen.</aside>
+</section>
+
+<!-- ============ 11 · Fähigkeiten ============ -->
+<section class="slide band" data-title="Wo LLMs helfen">
+  <div class="inner">
+    <span class="eyebrow">Kapitel 1.2.1 · Fähigkeiten</span>
+    <h2>Wobei ein LLM im Testprozess unterstützt</h2>
+    <div class="caps">
+      <div class="card cap reveal" style="--i:1"><div class="icon-disc"><svg viewBox="0 0 24 24"><circle cx="11" cy="11" r="6"/><path d="M20 20l-4.5-4.5"/></svg></div><h3>Anforderungen analysieren</h3><p>Unklarheiten, Widersprüche und Lücken finden, Rückfragen formulieren</p></div>
+      <div class="card cap reveal" style="--i:2"><div class="icon-disc"><svg viewBox="0 0 24 24"><rect x="5" y="4" width="14" height="16" rx="2"/><path d="M9 9h6M9 13h6M9 17h3"/></svg></div><h3>Testfälle entwerfen</h3><p>Testfälle und Testziele aus Stories oder Anforderungen</p></div>
+      <div class="card cap reveal" style="--i:3"><div class="icon-disc"><svg viewBox="0 0 24 24"><path d="M5 12l4 4 10-10"/></svg></div><h3>Testorakel</h3><p>Erwartete Ergebnisse vorschlagen</p></div>
+      <div class="card cap reveal" style="--i:4"><div class="icon-disc"><svg viewBox="0 0 24 24"><path d="M4 7h16M4 12h16M4 17h16"/><path d="M9 4v16"/></svg></div><h3>Testdaten</h3><p>Datensätze, Grenzwerte und Kombinationen erzeugen</p></div>
+      <div class="card cap reveal" style="--i:5"><div class="icon-disc"><svg viewBox="0 0 24 24"><path d="M8 7l-5 5 5 5M16 7l5 5-5 5"/></svg></div><h3>Testautomatisierung</h3><p>Testskripte erstellen und verbessern</p></div>
+      <div class="card cap reveal" style="--i:6"><div class="icon-disc"><svg viewBox="0 0 24 24"><path d="M4 19V9M10 19V5M16 19v-7M22 19H2"/></svg></div><h3>Ergebnisse analysieren</h3><p>Zusammenfassen, Anomalien nach Schwere klassifizieren</p></div>
+      <div class="card cap reveal" style="--i:7"><div class="icon-disc"><svg viewBox="0 0 24 24"><path d="M6 3h9l4 4v14H6z"/><path d="M14 3v5h5"/></svg></div><h3>Testmittel pflegen</h3><p>Testpläne, -berichte und Fehlerberichte erstellen und aktuell halten</p></div>
+    </div>
+  </div>
+  <aside class="notes"><strong>Fähigkeiten (1 Min.)</strong> Nur kurz überfliegen: LLMs können entlang des ganzen Testprozesses unterstützen. In Session 2 gehen wir diesen Weg mit einer konkreten User Story durch.</aside>
+</section>
+
+<!-- ============ 12 · Chatbot vs App ============ -->
+<section class="slide" data-title="Chatbot oder Testanwendung">
+  <div class="inner">
+    <span class="eyebrow">Kapitel 1.2.2 · Interaktionsmodelle</span>
+    <h2>Zwei Wege, mit GenAI zu arbeiten</h2>
+    <div class="vs">
+      <div class="card reveal" style="--i:1">
+        <h3>💬 KI-Chatbot</h3>
+        <div class="mini-flow"><span>Tester</span><em>⇄</em><span>Chat</span><em>⇄</em><span>LLM</span></div>
+        <ul><li>Gesprächsbasiert und flexibel</li><li>Ideal für Ad-hoc-Aufgaben, exploratives Arbeiten, schnelle Klärungen</li><li>Iterativ verfeinern per Prompt Chaining</li><li>Auch für Nicht-Techniker zugänglich, gut für das Onboarding</li></ul>
+      </div>
+      <div class="mid reveal" style="--i:2">vs.</div>
+      <div class="card reveal" style="--i:3">
+        <h3>🧩 LLM-basierte Testanwendung</h3>
+        <div class="mini-flow"><span>Testwerkzeug</span><em>→</em><span>API</span><em>→</em><span>LLM</span></div>
+        <ul><li>Werkzeugbasiert und aufgabenspezifisch</li><li>Ideal für wiederholbare, automatisierte Abläufe</li><li>Besser anpassbar und skalierbar, in bestehende Frameworks integriert</li><li>Bis hin zu KI-Agenten (Session 3)</li></ul>
+      </div>
+    </div>
+    <p class="big-quote center mt reveal" style="--i:4">In beiden Fällen gilt: Die Qualität hängt am <b>Prompt</b>.</p>
+  </div>
+  <aside class="notes"><strong>Chatbot vs. Anwendung (1 Min.)</strong> Überleitung zum zweiten Teil: Egal ob Chat oder integriertes Tool, gutes Prompt Engineering entscheidet über die Qualität.</aside>
+</section>
+
+<!-- ============ 13 · Prompt-Anatomie ============ -->
+<section class="slide band" data-title="Strukturierter Prompt">
+  <div class="inner">
+    <span class="eyebrow">Kapitel 2.1.1 · Prompt-Struktur</span>
+    <h2>Sechs Bausteine eines guten Prompts</h2>
+    <div class="grid-2 grid-anat" style="align-items:start">
+      <div class="prompt-box" id="anat"></div>
+      <div class="stack">
+        <ul class="legend6" id="anatLegend"></ul>
+        <div class="row"><button class="btn btn--soft btn--sm" id="anatPlay">▶ Aufbauen</button><button class="btn btn--soft btn--sm" id="anatStep">Schritt</button><button class="btn btn--soft btn--sm" id="anatAll">Alles zeigen</button></div>
+        <p class="small"><b class="key">Tipp:</b> Prompts so reviewen wie Anforderungen. Jeder fehlende Baustein lässt dem Modell Raum zum Raten.</p>
+      </div>
+    </div>
+  </div>
+  <aside class="notes"><strong>Prompt-Struktur (2 Min.)</strong> Der Prompt baut sich Baustein für Baustein auf. Bei jedem kurz sagen, wozu er dient. Rolle = Perspektive, Kontext = Hintergrund zum Testobjekt, Anweisung = was zu tun ist, Eingabedaten = Story und Akzeptanzkriterien, Einschränkungen = Grenzen und Fokus, Ausgabeformat = Struktur der Antwort.</aside>
+</section>
+
+<!-- ============ 14 · Quiz ============ -->
+<section class="slide" data-title="Quiz: Bausteine finden">
+  <div class="inner">
+    <span class="eyebrow">Mitmachen</span>
+    <h2>Findest du die sechs Bausteine?</h2>
+    <p class="small muted" style="margin-bottom:10px">Erst einen Baustein wählen, dann auf den passenden Satz klicken.</p>
+    <div class="qchips" id="qChips"></div>
+    <div class="mt-s" id="qSegs"></div>
+    <div class="row" style="justify-content:space-between"><span class="score" id="qScore"></span><span class="row"><button class="btn btn--soft btn--sm" id="qSolve">Auflösen</button><button class="btn btn--soft btn--sm" id="qReset">Zurücksetzen</button></span></div>
+  </div>
+  <aside class="notes"><strong>Quiz (1,5 Min.)</strong> Das Publikum nennt die Zuordnung, ich klicke. Der Kontext steht hier bewusst zuerst, die Reihenfolge ist egal, Hauptsache alle Bausteine sind da. Die Altersgruppen (0–18, 19–25, ab 26) sind die bekannten Prämienstufen. Solche Grenzwerte eignen sich ideal für Testdaten.</aside>
+</section>
+
+<!-- ============ 15 · Prompt Chaining ============ -->
+<section class="slide" data-title="Prompt Chaining">
+  <div class="inner">
+    <span class="eyebrow">Kapitel 2.1.2 · Technik 1 von 3</span>
+    <h2>Prompt Chaining: in geprüften Schritten zum Ziel</h2>
+    <div class="card" data-flow>
+      <svg class="flow" viewBox="0 0 720 140" role="img" aria-label="Drei Prompts hintereinander, jeweils mit menschlicher Prüfung dazwischen">
+        <path class="edge" id="pc-e1" d="M170 70 H196"/><path class="edge" id="pc-e2" d="M244 70 H270"/>
+        <path class="edge" id="pc-e3" d="M430 70 H456"/><path class="edge" id="pc-e4" d="M504 70 H530"/>
+        <g class="node" id="pc-s1"><rect x="10" y="35" width="160" height="70" rx="5"/><text x="90" y="60">Prompt 1</text><text class="sub" x="90" y="82">Story analysieren</text></g>
+        <g class="node" id="pc-c1"><circle cx="220" cy="70" r="24"/><text x="220" y="71">✓</text></g>
+        <g class="node" id="pc-s2"><rect x="270" y="35" width="160" height="70" rx="5"/><text x="350" y="60">Prompt 2</text><text class="sub" x="350" y="82">Testbedingungen</text></g>
+        <g class="node" id="pc-c2"><circle cx="480" cy="70" r="24"/><text x="480" y="71">✓</text></g>
+        <g class="node" id="pc-s3"><rect x="530" y="35" width="180" height="70" rx="5"/><text x="620" y="60">Prompt 3</text><text class="sub" x="620" y="82">Testfälle priorisieren</text></g>
+        <text class="label" x="220" y="122">Mensch prüft</text><text class="label" x="480" y="122">Mensch prüft</text>
+      </svg>
+      <div class="grid-2" style="align-items:start;gap:24px">
+        <ol class="steps small">
+          <li data-hot="pc-s1">Prompt 1: Die KI prüft die User Story auf Lücken und Unklarheiten.</li>
+          <li data-hot="pc-s1 pc-c1" data-edge="pc-e1">Zwischenergebnis prüfen: Stimmen die gefundenen Lücken? Korrigieren.</li>
+          <li data-hot="pc-c1 pc-s2" data-edge="pc-e2">Prompt 2: Aus dem geprüften Resultat Testbedingungen ableiten.</li>
+          <li data-hot="pc-s2 pc-c2" data-edge="pc-e3">Wieder prüfen: Ist die Abdeckung vollständig?</li>
+          <li data-hot="pc-c2 pc-s3" data-edge="pc-e4">Prompt 3: Testfälle nach Risiko und Abhängigkeiten priorisieren.</li>
+        </ol>
+        <div class="stack">
+          <p class="small"><b class="key">Idee:</b> Eine komplexe Aufgabe in kleinere Prompts zerlegen. Jedes Zwischenergebnis wird geprüft und verfeinert, bevor es in den nächsten Schritt geht.</p>
+          <p class="small"><b class="key">Gut für:</b> Analyse, Priorisierung, Abdeckungsprüfung. Mehr Kontrolle und Genauigkeit, der Mensch bleibt im Loop.</p>
+          <div class="flow-controls" style="margin-top:0"><button class="btn btn--soft btn--sm" data-flow-play>▶ Abspielen</button><button class="btn btn--soft btn--sm" data-flow-step>Schritt</button><button class="btn btn--soft btn--sm" data-flow-reset>Zurück</button></div>
+        </div>
+      </div>
+    </div>
+  </div>
+  <aside class="notes"><strong>Prompt Chaining (1 Min.)</strong> Das Prinzip: Schritt, Prüfung, nächster Schritt. Fehler werden früh abgefangen statt am Ende in einem riesigen Ergebnis versteckt.</aside>
+</section>
+
+<!-- ============ 16 · Few-Shot ============ -->
+<section class="slide" data-title="Few-Shot Prompting">
+  <div class="inner">
+    <span class="eyebrow">Kapitel 2.1.2 · Technik 2 von 3</span>
+    <h2>Few-Shot: Beispiele zeigen, was gemeint ist</h2>
+    <div class="seg" role="tablist" id="fsSeg"><button data-n="0" class="on">Zero-Shot</button><button data-n="1">One-Shot</button><button data-n="2">Few-Shot</button></div>
+    <div class="grid-2 mt" style="align-items:start">
+      <div class="card">
+        <span class="eyebrow">Prompt</span>
+        <div style="font:500 14px/1.5 var(--font-mono);color:var(--c-ink-deep)">Formuliere Testbedingungen zur Story «Prämie online berechnen».</div>
+        <div id="fsEx"></div>
+      </div>
+      <div class="card">
+        <span class="eyebrow">Mögliche Antworten</span>
+        <div class="answers" id="fsAns"></div>
+        <p class="small mt-s" id="fsNote"></p>
+      </div>
+    </div>
+  </div>
+  <aside class="notes"><strong>Few-Shot (1 Min.)</strong> Zero-Shot: Das Modell nutzt nur sein Vorwissen, Format und Detailtiefe schwanken. One-Shot: Ein Beispiel gibt das Format vor. Few-Shot: Mehrere Beispiele festigen Format und Stil, die Ergebnisse werden konsistent. Ideal für Gherkin oder schlüsselwortgetriebene Skripte (Session 2).</aside>
+</section>
+
+<!-- ============ 17 · Meta-Prompting ============ -->
+<section class="slide" data-title="Meta-Prompting">
+  <div class="inner">
+    <span class="eyebrow">Kapitel 2.1.2 · Technik 3 von 3</span>
+    <h2>Meta-Prompting: Die KI hilft beim Prompt</h2>
+    <div class="grid-2" style="align-items:start">
+      <div class="card" data-flow>
+        <svg class="flow" viewBox="0 0 560 220" role="img" aria-label="Kreislauf zwischen Tester und LLM, das den Prompt schrittweise verbessert">
+          <path class="edge" id="mp-e1" d="M150 95 C230 15 330 15 410 95"/>
+          <path class="edge" id="mp-e2" d="M410 125 C330 205 230 205 150 125"/>
+          <text class="label" x="280" y="30">Anfrage / Feedback</text><text class="label" x="280" y="212">Prompt-Vorschlag</text>
+          <g class="node" id="mp-t"><rect x="20" y="78" width="130" height="64" rx="5"/><text x="85" y="102">Tester</text><text class="sub" x="85" y="122">prüft & verfeinert</text></g>
+          <g class="node" id="mp-l"><rect x="410" y="78" width="130" height="64" rx="5"/><text x="475" y="102">LLM</text><text class="sub" x="475" y="122">schlägt Prompt vor</text></g>
+        </svg>
+        <ol class="steps small">
+          <li data-hot="mp-t mp-l" data-edge="mp-e1">«Hilf mir, einen Prompt für Grenzwert-Testdaten zu schreiben.»</li>
+          <li data-hot="mp-l mp-t" data-edge="mp-e2">LLM liefert Prompt v1.</li>
+          <li data-hot="mp-t mp-l" data-edge="mp-e1">Feedback: «Ausgabeformat fehlt, ungültige Werte ergänzen.»</li>
+          <li data-hot="mp-l mp-t" data-edge="mp-e2">LLM liefert verbesserten Prompt v2.</li>
+          <li data-hot="mp-t">Tester testet Prompt v2 und legt ihn in der Prompt-Bibliothek ab.</li>
+        </ol>
+        <div class="flow-controls"><button class="btn btn--soft btn--sm" data-flow-play>▶ Abspielen</button><button class="btn btn--soft btn--sm" data-flow-step>Schritt</button></div>
+      </div>
+      <div class="stack">
+        <p>Das LLM <b class="key">erzeugt oder verbessert Prompts</b>, der Mensch bewertet und verfeinert sie in einem iterativen Zyklus.</p>
+        <p>Das ist eine Art <b class="key">Pairing mit der KI</b>, ähnlich wie Pair Testing: Man erarbeitet gemeinsam einen Prompt, auch wenn man selbst nicht genau weiss, wie man ihn formulieren soll.</p>
+        <div class="note small"><strong>Kombinieren:</strong> Erst die Struktur (6 Bausteine), dann passende Techniken. Diese lassen sich kombinieren, z.&nbsp;B. eine Kette, in der ein Schritt Few-Shot nutzt.</div>
+      </div>
+    </div>
+  </div>
+  <aside class="notes"><strong>Meta-Prompting (1 Min.)</strong> Praktischer Tipp: Wer nicht weiss, wie man anfängt, fragt die KI nach einem Prompt, prüft ihn und verbessert ihn. Bewährte Prompts sollte man im Team teilen (Prompt-Bibliothek).</aside>
+</section>
+
+<!-- ============ 18 · System vs User Prompt ============ -->
+<section class="slide band" data-title="System- & User-Prompt">
+  <div class="inner">
+    <span class="eyebrow">Kapitel 2.1.3 · System- und User-Prompt</span>
+    <h2>Die Spielregeln und die eigentliche Frage</h2>
+    <div class="grid-2" style="align-items:start">
+      <div class="stack">
+        <div class="card"><h3>🔒 System-Prompt</h3><ul class="small" style="margin:0;padding-left:18px"><li>Wird von Entwicklern oder Testern festgelegt, für Nutzer meist unsichtbar</li><li>Definiert Rolle, Ton, Regeln und Grenzen</li><li>Bleibt für die ganze Sitzung <b class="key">konstant</b></li></ul></div>
+        <div class="card"><h3>💬 User-Prompt</h3><ul class="small" style="margin:0;padding-left:18px"><li>Die konkrete Frage oder Aufgabe</li><li><b class="key">Wechselt</b> mit jeder Interaktion</li><li>Fokussiert, mit Anweisung, Kontext und Ausgabeformat</li></ul></div>
+        <div class="row"><button class="btn btn--soft btn--sm" id="chatNext">Nächste Nachricht</button><button class="btn btn--soft btn--sm" id="chatReset">Zurück</button></div>
+      </div>
+      <div class="chat card" id="chat">
+        <div class="sys" id="sysBox"><span class="tag">System-Prompt</span>Du bist ein professioneller Assistent für Softwaretests. Antworte klar und sachlich, halte dich an ISTQB-Praktiken und spekuliere nicht.</div>
+      </div>
+    </div>
+  </div>
+  <aside class="notes"><strong>System vs. User (1 Min.)</strong> Nachrichten durchklicken. Bei der dritten Frage (Wetter) greift der System-Prompt: Das Modell bleibt in seiner Rolle. Das Modell berücksichtigt bei jeder Antwort beide Prompts zusammen.</aside>
+</section>
+
+<!-- ============ 19 · Kernaussagen ============ -->
+<section class="slide" data-title="Kernaussagen">
+  <div class="inner">
+    <span class="eyebrow">Zusammenfassung</span>
+    <h2 class="display">Das nehmen wir mit</h2>
+    <ol class="take">
+      <li class="reveal" style="--i:1"><span><b>GenAI erzeugt plausible Inhalte.</b> Plausibel ist nicht automatisch korrekt, also immer prüfen.</span></li>
+      <li class="reveal" style="--i:2"><span><b>Tokens und Kontextfenster</b> bestimmen Kosten und was das Modell «sieht». Grosse Artefakte in Chunks aufteilen.</span></li>
+      <li class="reveal" style="--i:3"><span><b>Gleicher Prompt, andere Antwort:</b> LLMs sind nicht-deterministisch.</span></li>
+      <li class="reveal" style="--i:4"><span><b>Modelltyp passend zur Aufgabe</b> wählen: instruction-tuned für Formate, Reasoning für komplexe Analysen.</span></li>
+      <li class="reveal" style="--i:5"><span><b>Struktur vor Technik:</b> 6 Bausteine, dann Prompt Chaining, Few-Shot oder Meta-Prompting.</span></li>
+    </ol>
+    <div class="split next mt reveal" style="--i:6">
+      <div style="background:var(--c-primary);display:grid;place-items:center;padding:20px;min-height:120px"><span style="color:#fff;font-size:44px;font-weight:300">2</span></div>
+      <div class="panel" style="padding:20px 28px"><span class="eyebrow">Nächste Session</span><h3 style="margin:0">GenAI im Testprozess und wie man Fehler erkennt</h3><p class="small" style="margin:4px 0 0">Eine User Story von der Analyse bis zum Report, dazu Halluzinationen, Denkfehler und Bias.</p></div>
+    </div>
+  </div>
+  <aside class="notes"><strong>Abschluss (1 Min.)</strong> Die fünf Punkte vorlesen und dann Fragen sammeln. Kleine Hausaufgabe bis nächste Woche: Einen eigenen Test-Prompt mit allen sechs Bausteinen schreiben und ausprobieren.</aside>
+</section>
+
+<!-- ============ 20 · Backup Glossar ============ -->
+<section class="slide band" data-title="Reserve: Glossar">
+  <div class="inner">
+    <span class="eyebrow">Reserve</span>
+    <h2>Glossar</h2>
+    <div class="gloss">
+      <div><b>Token</b>: Verarbeitungseinheit eines LLM (Zeichen, Wortteil oder Wort)</div>
+      <div><b>Embedding</b>: Zahlenvektor, der die Bedeutung eines Tokens abbildet</div>
+      <div><b>Transformer</b>: Netzarchitektur, die Beziehungen zwischen Tokens lernt</div>
+      <div><b>Kontextfenster</b>: maximale Anzahl Tokens, die das Modell auf einmal berücksichtigt</div>
+      <div><b>LLM / SLM</b>: grosses bzw. kleines, fokussiertes Sprachmodell</div>
+      <div><b>Foundation LLM</b>: breit vortrainiertes Basismodell</div>
+      <div><b>Instruction-tuned LLM</b>: auf das Befolgen von Anweisungen nachtrainiert</div>
+      <div><b>Reasoning LLM</b>: auf mehrstufiges Schlussfolgern trainiert</div>
+      <div><b>Multimodales Modell</b>: verarbeitet Text, Bild, Audio, Video</div>
+      <div><b>Vision-Language-Modell</b>: verbindet Bild- und Textverständnis</div>
+      <div><b>Prompt Chaining</b>: Aufgabe in geprüfte Teilschritte zerlegen</div>
+      <div><b>Zero-/One-/Few-Shot</b>: Prompt mit 0, 1 oder mehreren Beispielen</div>
+      <div><b>Meta-Prompting</b>: Das LLM erstellt oder verbessert Prompts</div>
+      <div><b>System-/User-Prompt</b>: feste Rahmenregeln bzw. konkrete Anfrage</div>
+    </div>
+  </div>
+  <aside class="notes">Reservefolie für Rückfragen zu Begriffen.</aside>
+</section>
+
+<!-- ============ 21 · Backup Quellen ============ -->
+<section class="slide" data-title="Reserve: Quellen">
+  <div class="inner">
+    <span class="eyebrow">Reserve</span>
+    <h2>Quellen & Weiterlesen</h2>
+    <ul>
+      <li><b class="key">ISTQB® Certified Tester Testing with Generative AI (CT-GenAI), Syllabus v1.1</b>, Kapitel 1 und 2.1. Frei verfügbar auf istqb.org.</li>
+      <li>Die Inhalte dieser Präsentation sind eigenständig formuliert. Beispiele (Kundenportal, Prämienrechner) sind fiktiv.</li>
+      <li>Die Tokenisierung und die Wahrscheinlichkeiten auf den Demo-Folien sind vereinfachte Veranschaulichungen.</li>
+    </ul>
+  </div>
+  <aside class="notes">Reservefolie.</aside>
+</section>
+
+</main>
+
+<footer class="foot" id="foot">Joanna · Interne Weiterbildung Concordia</footer>
+<div class="notes-panel" id="notesPanel" hidden></div>
+
+<nav class="navbar" aria-label="Folien-Navigation">
+  <button class="nav-arrow" id="prev" aria-label="Vorherige Folie"><svg viewBox="0 0 24 24"><path d="M15 5l-7 7 7 7"/></svg></button>
+  <div class="dots" id="dots" role="tablist"></div>
+  <span class="counter" id="counter"></span>
+  <button class="nav-arrow" id="next" aria-label="Nächste Folie"><svg viewBox="0 0 24 24"><path d="M9 5l7 7-7 7"/></svg></button>
+</nav>
+
+<script>
+(() => {
+  const $ = id => document.getElementById(id);
+  const reduce = matchMedia('(prefers-reduced-motion: reduce)').matches;
+  const esc = s => s.replace(/[&<>]/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;' }[c]));
+
+  /* =================== slide navigation =================== */
+  const slides = [...document.querySelectorAll('.slide')];
+  const dotsEl = $('dots');
+  let cur = 0;
+  slides.forEach((s, i) => {
+    const d = document.createElement('button');
+    d.className = 'dot'; d.setAttribute('role', 'tab');
+    d.setAttribute('aria-label', `Folie ${i + 1}: ${s.dataset.title || ''}`);
+    d.title = s.dataset.title || '';
+    d.onclick = () => go(i);
+    dotsEl.appendChild(d);
+  });
+  const dots = [...dotsEl.children];
+
+  function go(n) {
+    n = Math.max(0, Math.min(slides.length - 1, n));
+    slides.forEach((s, i) => {
+      s.classList.toggle('is-active', i === n);
+      s.classList.toggle('is-before', i < n);
+      s.setAttribute('aria-hidden', i !== n);
+      if (i === n) s.removeAttribute('inert'); else s.setAttribute('inert', '');
+    });
+    dots.forEach((d, i) => { d.classList.toggle('is-active', i === n); d.setAttribute('aria-selected', i === n); });
+    cur = n;
+    $('prev').disabled = n === 0;
+    $('next').disabled = n === slides.length - 1;
+    $('counter').textContent = `${n + 1} / ${slides.length}`;
+    $('chapter').textContent = slides[n].dataset.title || '';
+    $('progress').style.width = `${(n / Math.max(1, slides.length - 1)) * 100}%`;
+    slides[n].scrollTop = 0; $('deck').scrollLeft = 0;
+    dots[n].scrollIntoView({ block: 'nearest', inline: 'center' });
+    history.replaceState(null, '', '#' + (n + 1));
+    updateNotes();
+    $('foot').classList.toggle('off', n === 0);
+    document.dispatchEvent(new CustomEvent('slidechange', { detail: { index: n, slide: slides[n] } }));
+  }
+  window.goToSlide = go;
+  $('prev').onclick = () => go(cur - 1);
+  $('next').onclick = () => go(cur + 1);
+  document.addEventListener('click', e => {
+    const t = e.target.closest('[data-go]'); if (!t) return;
+    const v = t.dataset.go; go(v === 'next' ? cur + 1 : v === 'prev' ? cur - 1 : +v);
+  });
+
+  /* speaker notes + fullscreen */
+  let notesOn = false;
+  function updateNotes() {
+    const n = slides[cur].querySelector('.notes');
+    $('notesPanel').innerHTML = (n ? n.innerHTML : '<span class="hint">Keine Notizen</span>') + `<div class="hint" style="margin-top:6px">Folie ${cur + 1} · N = Notizen ausblenden</div>`;
+    $('notesPanel').hidden = !notesOn;
+  }
+  const toggleNotes = () => { notesOn = !notesOn; updateNotes(); };
+  const toggleFull = () => { if (!document.fullscreenElement) document.documentElement.requestFullscreen?.().catch(() => {}); else document.exitFullscreen?.(); };
+  $('btnNotes').onclick = toggleNotes;
+  $('btnFull').onclick = toggleFull;
+
+  document.addEventListener('keydown', e => {
+    if (e.target.closest('input, textarea, select')) return;
+    if (['ArrowRight', 'PageDown'].includes(e.key) || (e.key === ' ' && !e.target.closest('button'))) { e.preventDefault(); go(cur + 1); }
+    else if (['ArrowLeft', 'PageUp'].includes(e.key)) { e.preventDefault(); go(cur - 1); }
+    else if (e.key === 'Home') go(0);
+    else if (e.key === 'End') go(slides.length - 1);
+    else if (e.key === 'n' || e.key === 'N') toggleNotes();
+    else if (e.key === 'f' || e.key === 'F') toggleFull();
+  });
+  let sx = null, sy = null;
+  $('deck').addEventListener('touchstart', e => { sx = e.touches[0].clientX; sy = e.touches[0].clientY; }, { passive: true });
+  $('deck').addEventListener('touchend', e => {
+    if (sx === null) return;
+    const dx = e.changedTouches[0].clientX - sx, dy = e.changedTouches[0].clientY - sy;
+    if (Math.abs(dx) > 60 && Math.abs(dx) > Math.abs(dy) * 1.5 && !e.target.closest('input')) go(cur + (dx < 0 ? 1 : -1));
+    sx = null;
+  });
+
+  /* helper: run fn when a given slide becomes active / inactive */
+  const onSlide = (slideEl, enter, leave) => document.addEventListener('slidechange', e => {
+    if (e.detail.slide === slideEl) enter && enter(); else leave && leave();
+  });
+  const slideOf = el => el.closest('.slide');
+
+  /* =================== flow engine =================== */
+  const NS = 'http://www.w3.org/2000/svg';
+  function makeFlow(root) {
+    const svg = root.querySelector('svg.flow');
+    const steps = [...root.querySelectorAll('.steps > li')];
+    let i = -1, timer = null, raf = null;
+    const packet = document.createElementNS(NS, 'circle');
+    packet.setAttribute('r', 8); packet.setAttribute('class', 'packet'); packet.style.opacity = 0;
+    svg.appendChild(packet);
+    function travel(pathId, ms = 1100) {
+      cancelAnimationFrame(raf);
+      const path = svg.querySelector('#' + pathId);
+      if (!path) return;
+      svg.querySelectorAll('.edge').forEach(e => e.classList.toggle('live', e === path));
+      const len = path.getTotalLength(); const t0 = performance.now();
+      packet.style.opacity = 1;
+      const tick = now => {
+        let t = Math.min(1, (now - t0) / (reduce ? 1 : ms));
+        t = t < .5 ? 2 * t * t : 1 - Math.pow(-2 * t + 2, 2) / 2;
+        const p = path.getPointAtLength(len * t);
+        packet.setAttribute('cx', p.x); packet.setAttribute('cy', p.y);
+        if (t < 1) raf = requestAnimationFrame(tick);
+      };
+      raf = requestAnimationFrame(tick);
+    }
+    function show(n) {
+      i = n;
+      steps.forEach((li, k) => li.classList.toggle('is-on', k === n));
+      const hot = (steps[n]?.dataset.hot || '').split(/\s+/);
+      svg.querySelectorAll('.node').forEach(g => g.classList.toggle('hot', hot.includes(g.id)));
+      root.querySelectorAll('[data-step-show]').forEach(el => el.classList.toggle('shown', n >= +el.dataset.stepShow));
+      steps.forEach((li, k) => { if (li.dataset.mark) $(li.dataset.mark)?.classList.toggle('flag', n >= k); });
+      const edge = steps[n]?.dataset.edge;
+      if (edge) travel(edge);
+      else { packet.style.opacity = 0; svg.querySelectorAll('.edge').forEach(e => e.classList.remove('live')); }
+    }
+    const step = () => show((i + 1) % steps.length);
+    const stop = () => { clearInterval(timer); timer = null; };
+    const play = () => { stop(); show(0); timer = setInterval(() => { if (i >= steps.length - 1) return stop(); step(); }, 2000); };
+    const reset = () => { stop(); cancelAnimationFrame(raf); show(-1); };
+    root.querySelector('[data-flow-play]')?.addEventListener('click', play);
+    root.querySelector('[data-flow-step]')?.addEventListener('click', () => { stop(); step(); });
+    root.querySelector('[data-flow-reset]')?.addEventListener('click', reset);
+    steps.forEach((li, k) => { li.style.cursor = 'pointer'; li.onclick = () => { stop(); show(k); }; });
+    onSlide(slideOf(root), () => setTimeout(play, 400), reset);
+    reset();
+  }
+  document.querySelectorAll('[data-flow]').forEach(makeFlow);
+
+  /* =================== AI ladder =================== */
+  (() => {
+    const data = [
+      { mech: 'Wissen als Symbole und logische Regeln, von Menschen formuliert', ex: 'Regelbasierte Entscheidungsunterstützung', lim: 'Starr und schwer skalierbar' },
+      { mech: 'Lernt aus Daten. Merkmale (Features) wählt man selbst aus', ex: 'Fehlerberichte automatisch kategorisieren', lim: 'Braucht Datenaufbereitung und Feature-Arbeit' },
+      { mech: 'Neuronale Netze lernen Merkmale selbst aus grossen Datenmengen', ex: 'Muster in Screenshots erkennen', lim: 'Schwer nachvollziehbar (geringe Erklärbarkeit)' },
+      { mech: 'Erzeugt neue Inhalte aus gelernten Mustern; vortrainiert und sofort nutzbar', ex: 'Testfälle oder Berichte entwerfen', lim: 'Plausibel ist nicht automatisch korrekt' },
+    ];
+    const rungs = [...document.querySelectorAll('#ladder .rung')];
+    const vals = [...document.querySelectorAll('#ladderDetail .val')];
+    let t = [];
+    function pick(i) {
+      rungs.forEach((r, k) => r.classList.toggle('is-on', k === i));
+      vals.forEach(v => { v.textContent = data[i][v.dataset.k]; v.parentElement.classList.remove('fade-swap'); void v.offsetWidth; v.parentElement.classList.add('fade-swap'); });
+    }
+    rungs.forEach((r, i) => r.onclick = () => { t.forEach(clearTimeout); pick(i); });
+    onSlide(slideOf($('ladder')), () => { t.forEach(clearTimeout); t = [0, 1, 2, 3].map(i => setTimeout(() => pick(i), 700 + i * 1300)); }, () => t.forEach(clearTimeout));
+    pick(0);
+  })();
+
+  /* =================== LLM pipeline =================== */
+  (() => {
+    const st = [...document.querySelectorAll('#pipe .st')]; let t = [];
+    onSlide(slideOf($('pipe')),
+      () => { st.forEach(s => s.classList.remove('on')); t = st.map((s, i) => setTimeout(() => s.classList.add('on'), 400 + i * 700)); },
+      () => t.forEach(clearTimeout));
+  })();
+
+  /* =================== Tokenizer =================== */
+  (() => {
+    const presets = {
+      de: 'Als registrierter Benutzer möchte ich mein Passwort zurücksetzen, damit ich wieder Zugriff auf mein Konto habe.',
+      en: 'As a registered user I want to reset my password so that I can access my account again.',
+      log: '2026-10-31 12:03:44 ERROR LoginService: NullPointerException at PasswordResetController.java:118',
+    };
+    const COMMON = new Set('as a an i want to my the user users registered reset password so that can access account again in of for with is at error login service test when then given and new or not be this it on by from'.split(' '));
+    function tokenize(text) {
+      const parts = text.match(/\s*[A-Za-zÀ-ÖØ-öø-ÿ]+|\s*\d+|\s*[^\sA-Za-zÀ-ÖØ-öø-ÿ\d]/g) || [];
+      const out = [];
+      for (const p of parts) {
+        const sp = /^\s/.test(p), w = p.trim();
+        if (/^\d+$/.test(w)) { for (let k = 0; k < w.length; k += 3) out.push({ t: w.slice(k, k + 3), sp: sp && k === 0 }); continue; }
+        if (/^[^\dA-Za-zÀ-ÖØ-öø-ÿ]$/.test(w)) { out.push({ t: w, sp }); continue; }
+        // CamelCase → split into words first
+        const words = w.split(/(?<=[a-zäöü])(?=[A-ZÄÖÜ])/);
+        words.forEach((cw, ci) => {
+          const lead = sp && ci === 0;
+          if (COMMON.has(cw.toLowerCase()) || cw.length <= 4) { out.push({ t: cw, sp: lead }); return; }
+          const isEn = /^[A-Za-z]+$/.test(cw) && !/[äöüÄÖÜ]/.test(cw) && /(tion|ment|ing|er|or|ce|ion|ive|ss)$/.test(cw.toLowerCase());
+          const size = isEn ? 6 : 4;
+          for (let k = 0; k < cw.length; k += size) {
+            let piece = cw.slice(k, k + size);
+            if (cw.length - (k + size) > 0 && cw.length - (k + size) < 2) { piece = cw.slice(k); k = cw.length; }
+            out.push({ t: piece, sp: lead && k === 0 });
+          }
+        });
+      }
+      return out;
+    }
+    const inp = $('tokIn'), outEl = $('tokOut');
+    function render() {
+      const toks = tokenize(inp.value);
+      outEl.innerHTML = toks.map((t, i) => `<span class="chip c${i % 4}${t.sp ? ' sp' : ''}" style="--d:${Math.min(i, 60)}">${esc(t.t)}</span>`).join('');
+      const words = (inp.value.match(/[A-Za-zÀ-ÖØ-öø-ÿ0-9]+/g) || []).length;
+      $('tokN').textContent = toks.length; $('tokW').textContent = words; $('tokC').textContent = inp.value.length;
+      $('tokR').textContent = words ? (toks.length / words).toFixed(1).replace('.', ',') : '0';
+    }
+    let deb;
+    inp.addEventListener('input', () => { clearTimeout(deb); deb = setTimeout(render, 200); });
+    document.querySelectorAll('[data-tok]').forEach(b => b.onclick = () => {
+      inp.value = presets[b.dataset.tok];
+      document.querySelectorAll('[data-tok]').forEach(x => x.classList.toggle('is-on', x === b));
+      render();
+    });
+    onSlide(slideOf(inp), () => { if (!inp.value) document.querySelector('[data-tok="de"]').click(); else render(); });
+  })();
+
+  /* =================== Embeddings =================== */
+  (() => {
+    const pts = [
+      ['Login', 115, 105], ['Anmeldung', 175, 125], ['Passwort', 95, 165], ['Kennwort', 160, 185],
+      ['Bug', 440, 90], ['Defekt', 505, 120], ['Fehler', 425, 150], ['Abweichung', 490, 185],
+      ['Prämie', 245, 285], ['Police', 320, 265], ['Franchise', 390, 300], ['Versicherung', 300, 320],
+    ];
+    const g = $('embPts');
+    g.innerHTML = pts.map(([w], i) => `<g class="pt" data-i="${i}" style="transform:translate(300px,190px)"><circle r="7"/><text x="11" y="5">${w}</text></g>`).join('');
+    const els = [...g.children];
+    let lines = [];
+    function clear() { lines.forEach(l => l.remove()); lines = []; els.forEach(e => e.classList.remove('sel', 'dim')); }
+    function select(i) {
+      clear();
+      const [, x, y] = pts[i];
+      const near = pts.map((p, k) => [k, Math.hypot(p[1] - x, p[2] - y)]).filter(([k]) => k !== i).sort((a, b) => a[1] - b[1]).slice(0, 3).map(a => a[0]);
+      els.forEach((e, k) => { e.classList.toggle('sel', k === i); e.classList.toggle('dim', k !== i && !near.includes(k)); });
+      near.forEach(k => {
+        const l = document.createElementNS(NS, 'line');
+        l.setAttribute('x1', x); l.setAttribute('y1', y); l.setAttribute('x2', pts[k][1]); l.setAttribute('y2', pts[k][2]);
+        l.setAttribute('class', 'nb'); g.insertBefore(l, g.firstChild); lines.push(l);
+      });
+    }
+    els.forEach((e, i) => e.addEventListener('click', () => select(i)));
+    let t = [];
+    onSlide(slideOf(g), () => {
+      clear(); t.forEach(clearTimeout);
+      els.forEach(e => e.style.transform = 'translate(300px,190px)');
+      t = [setTimeout(() => els.forEach((e, i) => { e.style.transitionDelay = (i * 60) + 'ms'; e.style.transform = `translate(${pts[i][1]}px,${pts[i][2]}px)`; }), 150),
+           setTimeout(() => { els.forEach(e => e.style.transitionDelay = '0ms'); select(2); }, 2200)];
+    }, () => t.forEach(clearTimeout));
+  })();
+
+  /* =================== Next token =================== */
+  (() => {
+    const PREFIX = 'Given ein registrierter Benutzer, wenn er';
+    const PW = [['zurücksetzt', .50], ['ändert', .30], ['vergisst', .15], ['eingibt', .05]];
+    const T = {
+      '': [['sein', .45], ['das', .30], ['auf', .15], ['im', .10]],
+      'sein': [['Passwort', .70], ['Konto', .20], ['Profil', .10]],
+      'das': [['Passwort', .55], ['Formular', .30], ['Kundenportal', .15]],
+      'auf': [['«Passwort vergessen?»', .65], ['den Link', .35]],
+      'im': [['Login-Dialog', .70], ['Profil', .30]],
+      'sein Passwort': PW, 'das Passwort': PW,
+      'sein Konto': [['entsperrt', .60], ['löscht', .40]],
+      'sein Profil': [['öffnet', .70], ['bearbeitet', .30]],
+      'das Formular': [['absendet', .80], ['öffnet', .20]],
+      'das Kundenportal': [['öffnet', .85], ['verlässt', .15]],
+      'auf «Passwort vergessen?»': [['klickt', .90], ['tippt', .10]],
+      'auf den Link': [['klickt', .90], ['tippt', .10]],
+      'im Login-Dialog': [['sein Passwort eingibt', .60], ['«Weiter» wählt', .40]],
+      'im Profil': [['sein Passwort ändert', .80], ['sich abmeldet', .20]],
+    };
+    let path = [], timer = null, busy = false;
+    const temp = () => +$('temp').value;
+    const cands = () => T[path.join(' ')];
+    function probs(c) {
+      const tt = temp();
+      if (tt < 0.05) { const m = Math.max(...c.map(x => x[1])); return c.map(x => x[1] === m ? 1 : 0); }
+      const w = c.map(x => Math.pow(x[1], 1 / tt)); const s = w.reduce((a, b) => a + b, 0); return w.map(x => x / s);
+    }
+    function render(pick = -1) {
+      const c = cands();
+      $('genText').innerHTML = esc(PREFIX) + ' ' + path.map((w, i) => i === path.length - 1 && pick === -2 ? `<span class="new">${esc(w)}</span>` : esc(w)).join(' ') + (c ? '<span class="cursor"></span>' : ' …');
+      if (!c) { $('cands').innerHTML = '<li class="small muted" style="padding:8px 0">Satz fertig. «Neu starten» oder erneut generieren.</li>'; return; }
+      const p = probs(c);
+      $('cands').innerHTML = c.map(([w], i) => `<li class="cand${i === pick ? ' pick' : ''}"><span class="w">${esc(w)}</span><span class="bar"><i style="width:${(p[i] * 100).toFixed(0)}%"></i></span><span class="p">${Math.round(p[i] * 100)}%</span></li>`).join('');
+    }
+    function sample() {
+      const c = cands(); if (!c) return -1;
+      const p = probs(c); let r = Math.random(), k = 0;
+      for (; k < p.length - 1; k++) { r -= p[k]; if (r <= 0) break; }
+      return k;
+    }
+    function step(done) {
+      const c = cands(); if (!c) { done && done(); return; }
+      const k = sample(); render(k);
+      setTimeout(() => { path.push(c[k][0]); render(-2); if (!cands()) addHist(); done && done(); }, reduce ? 50 : 650);
+    }
+    function addHist() {
+      const h = $('genHist'); if (h.querySelector('.muted')) h.innerHTML = '';
+      const li = document.createElement('li');
+      li.textContent = `${PREFIX} ${path.join(' ')}`.replace(PREFIX, '…') + `  (T = ${temp().toFixed(1)})`;
+      h.prepend(li); while (h.children.length > 4) h.lastChild.remove();
+    }
+    function reset() { clearTimeout(timer); busy = false; path = []; render(); }
+    function auto() {
+      if (busy) return; reset(); busy = true;
+      const loop = () => step(() => { if (cands()) timer = setTimeout(loop, reduce ? 50 : 500); else busy = false; });
+      timer = setTimeout(loop, 300);
+    }
+    $('genStep').onclick = () => { if (!busy) step(); };
+    $('genAuto').onclick = auto;
+    $('genReset').onclick = reset;
+    $('temp').oninput = () => { $('tempV').textContent = temp().toFixed(1); render(); };
+    onSlide(slideOf($('genText')), reset, () => { clearTimeout(timer); busy = false; });
+    reset();
+  })();
+
+  /* =================== Context window =================== */
+  (() => {
+    const N = 100, el = $('blocks');
+    el.innerHTML = Array.from({ length: N }, () => '<div class="blk"></div>').join('');
+    const blks = [...el.children];
+    let pos = 0, timer = null;
+    const size = () => +$('ctxSize').value;
+    function paint() {
+      const w = size();
+      blks.forEach((b, i) => { b.className = 'blk' + (i >= pos ? '' : i >= pos - w ? (i === pos - 1 ? ' newest' : ' in') : ' out'); });
+      const seen = Math.min(pos, w), lost = Math.max(0, pos - w);
+      $('ctxInfo').textContent = pos ? `Modell sieht ${seen} · vergessen ${lost}` : '';
+      $('ctxCost').style.width = (w / 60 * 100) + '%';
+      $('ctxSizeV').textContent = w; $('ctxLegend').hidden = false;
+    }
+    function play() {
+      clearInterval(timer); pos = 0; paint();
+      timer = setInterval(() => { pos++; paint(); if (pos >= N) clearInterval(timer); }, reduce ? 1 : 45);
+    }
+    function chunk() {
+      clearInterval(timer); const w = size(); pos = N;
+      blks.forEach((b, i) => b.className = 'blk k' + (Math.floor(i / w) % 6));
+      const k = Math.ceil(N / w);
+      $('ctxInfo').textContent = `${k} Chunks à max. ${w} Tokens, jeder passt ins Fenster`; $('ctxLegend').hidden = true;
+    }
+    $('ctxPlay').onclick = play; $('ctxChunk').onclick = chunk;
+    $('ctxSize').oninput = () => { if (pos >= N && blks[0].className.includes(' k')) chunk(); else paint(); };
+    onSlide(slideOf(el), () => setTimeout(play, 500), () => clearInterval(timer));
+    paint();
+  })();
+
+  /* =================== Model quiz =================== */
+  (() => {
+    const qs = [
+      ['Gherkin-Szenarien exakt nach unserer Vorlage formatieren', 1],
+      ['Regressionstests nach Risiko und Abhängigkeiten priorisieren', 2],
+      ['Erste, breite Testideen aus groben Notizen sammeln', 0],
+    ];
+    const names = ['Foundation', 'Instruction-tuned', 'Reasoning'];
+    const why = ['Breites Ideensammeln braucht keine spezielle Ausrichtung.', 'Formattreue ist die Stärke von instruction-tuned Modellen.', 'Mehrstufiges Abwägen ist eine Reasoning-Aufgabe.'];
+    const box = $('mquiz');
+    qs.forEach(([q, a]) => {
+      const row = document.createElement('div'); row.className = 'q';
+      row.innerHTML = `<span>${q}<span class="fb"></span></span><span class="opts">${names.map((n, i) => `<button class="opt" data-i="${i}">${n}</button>`).join('')}</span>`;
+      row.querySelectorAll('.opt').forEach(b => b.onclick = () => {
+        const ok = +b.dataset.i === a;
+        b.classList.remove('no'); void b.offsetWidth; b.classList.add(ok ? 'ok' : 'no');
+        if (ok) row.querySelector('.fb').textContent = '✓ ' + why[a];
+      });
+      box.appendChild(row);
+    });
+  })();
+
+  /* =================== Prompt anatomy =================== */
+  const PARTS = [
+    { k: 'role', n: 'Rolle', d: 'Perspektive, aus der geantwortet wird' },
+    { k: 'ctx', n: 'Kontext', d: 'Hintergrund: Testobjekt, Funktion, Umfeld' },
+    { k: 'ins', n: 'Anweisung', d: 'Die konkrete Aufgabe, klar und knapp' },
+    { k: 'in', n: 'Eingabedaten', d: 'Material: Story, Kriterien, Screenshots, Code' },
+    { k: 'con', n: 'Einschränkungen', d: 'Grenzen, Fokus, was zu vermeiden ist' },
+    { k: 'out', n: 'Ausgabeformat', d: 'Struktur der Antwort, z. B. Tabelle' },
+  ];
+  (() => {
+    const TXT = [
+      'Du bist Test Analyst in einem agilen Team.',
+      'Wir testen die Funktion «Passwort zurücksetzen» im Kundenportal einer Krankenversicherung.',
+      'Erstelle Testszenarien im Gherkin-Format für diese Funktion.',
+      'User Story: «Als versicherte Person möchte ich mein Passwort per E-Mail-Link zurücksetzen.» AK1: Der Link ist 30 Minuten gültig. AK2: Das neue Passwort muss die Passwortregeln erfüllen.',
+      'Verwende Given–When–Then. Decke Normal- und Grenzfälle ab (z. B. abgelaufener Link). Erfinde keine zusätzlichen Anforderungen.',
+      'Gib die Szenarien als Markdown-Codeblock zurück, mindestens ein Scenario pro Akzeptanzkriterium.',
+    ];
+    const box = $('anat'), leg = $('anatLegend');
+    box.innerHTML = PARTS.map((p, i) => `<div class="pl hidden" style="--k:var(--k-${p.k})"><span class="lab">${p.n}</span><span class="txt">${esc(TXT[i])}</span></div>`).join('');
+    leg.innerHTML = PARTS.map(p => `<li style="--k:var(--k-${p.k})"><i></i><span><b>${p.n}</b>: ${p.d}</span></li>`).join('');
+    const lines = [...box.children], lis = [...leg.children];
+    let n = 0, timer = null;
+    function show(k) {
+      n = k;
+      lines.forEach((l, i) => { const was = l.classList.contains('hidden'); l.classList.toggle('hidden', i >= k); if (was && i < k) { l.classList.remove('enter'); void l.offsetWidth; l.classList.add('enter'); } });
+      lis.forEach((l, i) => l.classList.toggle('on', k === PARTS.length ? i < k : i === k - 1));
+    }
+    const stop = () => clearInterval(timer);
+    const play = () => { stop(); show(1); timer = setInterval(() => { if (n >= PARTS.length) return stop(); show(n + 1); }, 1500); };
+    $('anatPlay').onclick = play;
+    $('anatStep').onclick = () => { stop(); show(n >= PARTS.length ? 1 : n + 1); };
+    $('anatAll').onclick = () => { stop(); show(PARTS.length); };
+    onSlide(slideOf(box), () => setTimeout(play, 300), stop);
+    show(0);
+  })();
+
+  /* =================== Quiz: find the parts =================== */
+  (() => {
+    const SEG = [
+      ['ctx', 'Für den Online-Prämienrechner unserer Krankenversicherung brauchen wir Testdaten für die Altersgrenzen.'],
+      ['role', 'Du bist Spezialist für Testdaten.'],
+      ['in', 'Regeln: Kinder 0–18 Jahre, junge Erwachsene 19–25 Jahre, Erwachsene ab 26 Jahren.'],
+      ['ins', 'Erzeuge Testdaten mit Grenzwerten für jede Altersgruppe.'],
+      ['out', 'Liefere eine Tabelle mit den Spalten Geburtsdatum, Alter und erwartete Gruppe.'],
+      ['con', 'Nur fiktive Personen, keine echten Kundendaten. Stichtag ist der 1.1.2027.'],
+    ];
+    const chipsEl = $('qChips'), segsEl = $('qSegs');
+    let sel = null, done = new Set();
+    function build() {
+      sel = null; done = new Set();
+      chipsEl.innerHTML = PARTS.map(p => `<button class="qchip" data-k="${p.k}" style="--k:var(--k-${p.k})">${p.n}</button>`).join('');
+      segsEl.innerHTML = SEG.map(([k, t]) => `<div class="qseg" data-k="${k}" style="--k:var(--k-${k})" tabindex="0" role="button"><span class="lab">?</span><span>${esc(t)}</span></div>`).join('');
+      chipsEl.querySelectorAll('.qchip').forEach(c => c.onclick = () => {
+        if (c.classList.contains('used')) return;
+        sel = c.dataset.k; chipsEl.querySelectorAll('.qchip').forEach(x => x.classList.toggle('sel', x === c));
+      });
+      segsEl.querySelectorAll('.qseg').forEach(s => {
+        const act = () => {
+          if (s.classList.contains('done')) return;
+          if (!sel) { $('qScore').textContent = 'Zuerst oben einen Baustein wählen.'; return; }
+          if (sel === s.dataset.k) mark(s);
+          else { s.classList.remove('wrong'); void s.offsetWidth; s.classList.add('wrong'); $('qScore').textContent = 'Nicht ganz. Versuch es nochmal.'; }
+        };
+        s.onclick = act; s.onkeydown = e => { if (e.key === 'Enter') act(); };
+      });
+      score();
+    }
+    function mark(s) {
+      const k = s.dataset.k; done.add(k);
+      s.classList.remove('wrong'); s.classList.add('done');
+      s.querySelector('.lab').textContent = PARTS.find(p => p.k === k).n;
+      const c = chipsEl.querySelector(`[data-k="${k}"]`); c.classList.add('used'); c.classList.remove('sel'); sel = null;
+      score();
+    }
+    function score() { $('qScore').textContent = done.size === 6 ? '🎉 6 / 6. Alle Bausteine gefunden!' : `${done.size} / 6 gefunden`; }
+    $('qSolve').onclick = () => segsEl.querySelectorAll('.qseg:not(.done)').forEach(mark);
+    $('qReset').onclick = build;
+    build();
+  })();
+
+  /* =================== Few-shot =================== */
+  (() => {
+    const EX = [
+      'Story: «Police als PDF herunterladen»\n→ TB-1: Gültige Police | Download | PDF wird geöffnet',
+      'Story: «Adresse ändern»\n→ TB-1: Gültige PLZ | Speichern | Adresse aktualisiert\n→ TB-2: Ungültige PLZ | Speichern | Fehlermeldung',
+    ];
+    const ANS = [
+      [['Man sollte prüfen, ob die Prämie korrekt berechnet wird, auch bei verschiedenen Franchisen und Modellen …', true], ['1. Prämie berechnen 2. Fehlerfälle?', true]],
+      [['TB-1: Gültige Angaben | Berechnen | Prämie wird angezeigt', false], ['TB-2: Franchise wählen | Berechnen | ?', true]],
+      [['TB-1: Gültiges Alter und Franchise | Berechnen | Prämie wird angezeigt', false], ['TB-2: Ungültige PLZ | Berechnen | Fehlermeldung', false], ['TB-3: Alter 25 → 26 | Berechnen | Prämienstufe wechselt', false]],
+    ];
+    const NOTE = [
+      'Ohne Beispiel nutzt das Modell nur sein Vorwissen. Format und Tiefe sind unvorhersehbar.',
+      'Ein Beispiel gibt das Format vor. Das Modell folgt ihm, aber noch nicht zuverlässig.',
+      'Mehrere Beispiele festigen Format und Stil. Die Ergebnisse werden konsistent, inklusive Fehlerfällen.',
+    ];
+    const btns = [...document.querySelectorAll('#fsSeg button')];
+    function set(n) {
+      btns.forEach(b => b.classList.toggle('on', +b.dataset.n === n));
+      $('fsEx').innerHTML = EX.slice(0, n).map((e, i) => `<div class="ex" style="white-space:pre-wrap"><span class="tag">Beispiel ${i + 1}</span>\n${esc(e)}</div>`).join('');
+      $('fsAns').innerHTML = ANS[n].map(([a, off]) => `<div class="ans${off ? ' off' : ''}">${esc(a)}</div>`).join('');
+      $('fsNote').innerHTML = `<b class="key">${['Zero-Shot', 'One-Shot', 'Few-Shot'][n]}:</b> ${NOTE[n]}`;
+    }
+    btns.forEach(b => b.onclick = () => set(+b.dataset.n));
+    let t = [];
+    onSlide(slideOf($('fsSeg')), () => { set(0); t = [setTimeout(() => set(1), 2500), setTimeout(() => set(2), 5000)]; }, () => t.forEach(clearTimeout));
+    set(0);
+  })();
+
+  /* =================== Chat: system vs user =================== */
+  (() => {
+    const MSG = [
+      ['u', 'Nenne die wichtigsten Unterschiede zwischen Black-Box- und White-Box-Test, mit je einem Beispiel.'],
+      ['a', 'Black-Box: Test anhand der Spezifikation, ohne Kenntnis des Codes, z. B. Äquivalenzklassen. White-Box: Test anhand der inneren Struktur, z. B. Anweisungsüberdeckung.'],
+      ['u', 'Leite Testwerte für das Feld «Franchise» ab. Erlaubt sind die Stufen 300, 500, 1000, 1500, 2000 und 2500 CHF.'],
+      ['a', 'Gültig: alle sechs Stufen (Grenzen 300 und 2500). Ungültig: 299, 2501, ein Wert zwischen zwei Stufen (z. B. 750), leere Eingabe.'],
+      ['u', 'Wie wird das Wetter morgen in Luzern?'],
+      ['a', 'Dazu kann ich keine verlässliche Auskunft geben. Ich unterstütze bei Fragen rund um Softwaretests.'],
+    ];
+    const chat = $('chat'); let n = 0;
+    function reset() { chat.querySelectorAll('.msg').forEach(m => m.remove()); n = 0; }
+    function next() {
+      if (n >= MSG.length) return;
+      const [who, txt] = MSG[n++];
+      const d = document.createElement('div'); d.className = 'msg ' + who;
+      d.innerHTML = `<span class="who">${who === 'u' ? 'User-Prompt' : 'Antwort'}</span>${esc(txt)}`;
+      chat.appendChild(d); chat.scrollTop = chat.scrollHeight;
+      if (who === 'a') { const s = $('sysBox'); s.classList.remove('ping'); void s.offsetWidth; s.classList.add('ping'); }
+    }
+    $('chatNext').onclick = next; $('chatReset').onclick = reset;
+    let t = [];
+    onSlide(slideOf(chat), () => { reset(); t = [0, 1].map(i => setTimeout(next, 600 + i * 1400)); }, () => t.forEach(clearTimeout));
+  })();
+
+  /* start */
+  const h = parseInt(location.hash.slice(1), 10);
+  go(Number.isFinite(h) ? h - 1 : 0);
+})();
+</script>
+</body>
+</html>

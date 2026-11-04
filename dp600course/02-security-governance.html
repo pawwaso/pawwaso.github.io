@@ -5,415 +5,367 @@
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>Security &amp; governance – DP-600</title>
 <link rel="stylesheet" href="assets/style.css">
+<style>
+.p02-pick { display: flex; flex-wrap: wrap; gap: 6px; margin: 6px 0 10px; }
+.p02-pick button { border-radius: 16px; font-weight: 600; }
+.p02-pick button.on { background: var(--dom); color: var(--bg); border-color: var(--dom); }
+.p02-acts { list-style: none; padding: 0; margin: 0; display: grid; grid-template-columns: repeat(auto-fit, minmax(280px, 1fr)); gap: 4px 14px; }
+.p02-acts li { padding: 5px 10px; border-radius: 6px; font-size: .93em; }
+.p02-acts li.y { background: var(--ok-soft); } .p02-acts li.n { background: var(--bad-soft); color: var(--muted); } .p02-acts li.p { background: var(--warn-soft); }
+.p02-acts li b { display: inline-block; width: 1.4em; }
+.p02-grid { display: flex; flex-wrap: wrap; gap: 8px 18px; align-items: center; margin-bottom: 8px; }
+.p02-tbl { border-collapse: collapse; margin-top: 8px; font-size: .92em; }
+.p02-tbl td, .p02-tbl th { padding: 4px 10px; border: 1px solid var(--line); }
+.p02-tbl tr.off td { opacity: .35; text-decoration: line-through; }
+.p02-tbl tr.on td { background: var(--ok-soft); }
+</style>
 </head>
-<body>
+<body data-domain="1">
 <main>
-<h1>Security &amp; governance</h1>
-<p class="lead">Who can do what, and who can see which data: workspace roles, item permissions and sharing, OneLake security,
-SQL granular security (GRANT/DENY, RLS, CLS, dynamic data masking), semantic model RLS and OLS, how Direct Lake combines them,
-sensitivity labels, endorsement, Purview hub, lineage and impact analysis, domains, admin monitoring, workspace identity and service
-principals. Maps to Domain 1 "Implement security and governance".</p>
+<header class="hero">
+  <div class="hi">🔐</div>
+  <div>
+    <h1>Security &amp; governance</h1>
+    <p class="lead">Who can do what, and who sees which rows: layer by layer, engine by engine.</p>
+    <div class="meta"><span class="pill">Domain 1 · Maintain</span><span class="pill">⏱ 40 min</span><span class="pill">7 lessons</span></div>
+    <ul class="goals"><li>Pick the least-privilege role or permission</li><li>Secure the Spark, T-SQL and DAX paths</li><li>Build static and dynamic RLS</li><li>Apply labels and endorsement</li></ul>
+  </div>
+</header>
+<div class="tldr"><ul>
+  <li>Roles: <b>Admin › Member › Contributor › Viewer</b>. Contributor and up bypass data-level rules.</li>
+  <li>Item permissions: <b>Read, ReadData (SQL), ReadAll (OneLake), Build, Write, Reshare</b>.</li>
+  <li>Each path has its own lock: <b>OneLake security</b>, <b>SQL security</b>, <b>model RLS/OLS</b>.</li>
+  </ul></div>
 
-<h2>The security layers in Fabric</h2>
-<p>Think of Fabric security as stacked layers. A user must pass <em>every</em> layer on the path they use to reach data, and each
-engine path (Spark, T-SQL, DAX, KQL) can have its own rules.</p>
-<div class="tw"><table>
-<tr><th>Layer</th><th>Plane</th><th>Defined where</th><th>Granularity</th><th>Applies to</th></tr>
-<tr><td>Workspace roles</td><td>Control plane</td><td>Workspace → Manage access</td><td>All items in the workspace</td><td>Everyone in the role</td></tr>
-<tr><td>Item permissions (sharing)</td><td>Control plane</td><td>Item → Share / Manage permissions</td><td>One item</td><td>Users without (or in addition to) a role</td></tr>
-<tr><td><strong>OneLake security</strong> roles</td><td>Data plane</td><td>Lakehouse (and other data items) → Manage OneLake security</td><td>Tables, folders, schemas, rows, columns</td><td>Viewers / users with Read on the item; enforced across engines</td></tr>
-<tr><td>SQL granular security</td><td>Data plane (SQL engine)</td><td>Warehouse / SQL analytics endpoint with T-SQL</td><td>Schema, table, view, column, row, masking</td><td>Queries through the TDS (SQL) endpoint only</td></tr>
-<tr><td>Semantic model RLS / OLS</td><td>Data plane (model)</td><td>Semantic model roles</td><td>Rows, tables, columns</td><td>Users with Read (not Write) on the model</td></tr>
-<tr><td>KQL database security</td><td>Data plane</td><td>KQL management commands (database/table roles, RLS policy)</td><td>Database, table, rows</td><td>KQL queries</td></tr>
-<tr><td>Sensitivity labels, DLP</td><td>Information protection</td><td>Microsoft Purview + Fabric</td><td>Item and exported files</td><td>Classification, encryption of exports, alerts</td></tr>
-</table></div>
+<section class="lesson">
+<h2>Security is layered</h2>
+<p class="idea">Pass every layer on your path; each engine has its own rules.</p>
+<div class="layers" data-hint="Click a layer: where is it defined, what does it protect?">
+  <div data-title="Workspace roles" data-info="Control plane. Workspace → Manage access. Applies to all items in the workspace.">🗂️ Workspace roles <small>control plane · all items</small></div>
+  <div data-title="Item permissions" data-info="Control plane. Item → Share / Manage permissions. One item only, for users without (or in addition to) a role.">📦 Item permissions <small>control plane · one item</small></div>
+  <div data-title="OneLake security" data-info="Data plane. Roles on the lakehouse: tables, folders, rows, columns. Enforced across Spark, OneLake APIs, shortcuts, Direct Lake on OneLake.">🏞️ OneLake security <small>data plane · Spark &amp; OneLake</small></div>
+  <div data-title="SQL granular security" data-info="Data plane, SQL engine. GRANT/DENY, RLS, CLS, DDM on warehouse / SQL analytics endpoint. Only for T-SQL (TDS) queries.">🏢 SQL security <small>T-SQL path only</small></div>
+  <div data-title="Semantic model RLS / OLS" data-info="Data plane, model. DAX role filters and hidden objects. Applies to users with Read (not Write) on the model.">🧠 Model RLS / OLS <small>DAX path only</small></div>
+</div>
+<div class="vs">
+  <div><h4>🔓 Not filtered by data rules</h4><ul><li>Admin, Member, Contributor</li><li>Anyone with Write on the model</li></ul></div>
+  <div class="vsmark">VS</div>
+  <div><h4>🔒 Filtered</h4><ul><li>Viewers</li><li>Users with item permissions only</li></ul></div>
+</div>
+<div class="remember"><b>"Rules bind readers, not writers."</b> RLS, OLS and OneLake security only restrict Viewers and Read users.</div>
+<details><summary>Deep dive: KQL database and information protection layers</summary>
+<ul><li>KQL databases: database/table roles and an RLS policy via KQL management commands.</li>
+<li>Sensitivity labels and DLP (Microsoft Purview): classify items, encrypt exports, raise alerts.</li></ul></details>
+</section>
 
+<section class="lesson">
 <h2>Workspace roles</h2>
-<p>Four roles: <strong>Admin, Member, Contributor, Viewer</strong>. Assign them to users, <strong>security groups</strong>, Microsoft 365 groups,
-distribution lists or <strong>service principals</strong>. If someone gets roles through several groups, the <strong>highest</strong> role wins.
-Best practice: assign roles to groups.</p>
-<div class="tw"><table>
-<tr><th>Capability</th><th>Admin</th><th>Member</th><th>Contributor</th><th>Viewer</th></tr>
-<tr><td>Update and delete the workspace; add/remove Admins</td><td>✔</td><td></td><td></td><td></td></tr>
-<tr><td>Connect the workspace to Git; create workspace identity</td><td>✔</td><td></td><td></td><td></td></tr>
-<tr><td>Change workspace type / capacity (plus assignment permission on the target capacity)</td><td>✔</td><td></td><td></td><td></td></tr>
-<tr><td>Add Members, Contributors, Viewers</td><td>✔</td><td>✔</td><td></td><td></td></tr>
-<tr><td>Share items and allow others to reshare</td><td>✔</td><td>✔</td><td>only with Reshare</td><td>only with Reshare</td></tr>
-<tr><td>Publish, update and unpublish the workspace app</td><td>✔</td><td>✔</td><td>update only if the workspace setting allows</td><td></td></tr>
-<tr><td>Create and edit OneLake security roles</td><td>✔</td><td>✔</td><td></td><td></td></tr>
-<tr><td>Create, edit, delete items (lakehouse, warehouse, notebook, pipeline, semantic model, report, eventhouse…)</td><td>✔</td><td>✔</td><td>✔</td><td></td></tr>
-<tr><td>Run/cancel notebooks, Spark jobs and pipelines; schedule refreshes; modify gateway connection settings</td><td>✔</td><td>✔</td><td>✔</td><td></td></tr>
-<tr><td>Write data to lakehouses, warehouses, KQL databases</td><td>✔</td><td>✔</td><td>✔</td><td></td></tr>
-<tr><td>Read lakehouse/warehouse data through OneLake APIs, Spark and Lakehouse explorer (ReadAll)</td><td>✔</td><td>✔</td><td>✔</td><td>only via OneLake security role</td></tr>
-<tr><td>Connect to the SQL analytics endpoint / warehouse and read with T-SQL (ReadData)</td><td>✔</td><td>✔</td><td>✔</td><td>✔</td></tr>
-<tr><td>View and interact with reports, dashboards; view pipeline/notebook content and run output</td><td>✔</td><td>✔</td><td>✔</td><td>✔</td></tr>
-<tr><td>Bypass semantic model RLS/OLS (implicit Write on models)</td><td>✔</td><td>✔</td><td>✔</td><td>no – Viewers are filtered</td></tr>
-</table></div>
-<div class="exam"><p>Typical role questions: "create and run notebooks, publish reports, but must not manage access" → <strong>Contributor</strong>.
-"Add other users (but not admins)" → <strong>Member</strong>. "Reassign capacity, delete the workspace, connect Git" → <strong>Admin</strong>.
-"Query with T-SQL and open reports but never create or modify items" → <strong>Viewer</strong> (or item-level ReadData if they must not see other items).</p></div>
-<div class="warn"><p>Viewers can query the SQL analytics endpoint and warehouse (ReadData) but <strong>cannot</strong> read OneLake files/tables
-through Spark or the Lakehouse explorer unless a <strong>OneLake security role</strong> grants it. Contributors and higher always have full
-data access – granular rules (OneLake security, SQL security, model RLS) target Viewers and item-level users.</p></div>
-
-<div class="check" data-answer="2">
-<p>A developer must create and run notebooks and publish reports in a workspace but must not add users or move the workspace to another capacity. Which role?</p>
-<ul><li>Admin</li><li>Contributor</li><li>Member</li><li>Viewer</li></ul>
-<p class="why">Contributor can create, edit, delete and run items but can't manage access or capacity. Member can add users; Admin can also change capacity and delete the workspace; Viewer can't create items.</p>
+<p class="idea">Four roles, each a superset of the next; assign them to groups.</p>
+<div class="sim">
+  <div class="wtitle">Role explorer</div>
+  <div class="p02-pick" id="p02-roles"></div>
+  <ul class="p02-acts" id="p02-acts"></ul>
 </div>
-
-<h2>Item permissions and sharing</h2>
-<p>Sharing an item (or using <strong>Manage permissions</strong>) gives access to <em>that item only</em>: the user doesn't see other
-items in the workspace and isn't in any workspace role. Sharing with no extra checkbox grants <strong>Read</strong> (connect/metadata).</p>
-<div class="tw"><table>
-<tr><th>Permission</th><th>Meaning</th><th>Typical items</th><th>Share dialog wording (examples)</th></tr>
-<tr><td><strong>Read</strong></td><td>See the item and its metadata, connect to it (e.g. connect to the SQL endpoint), open a report</td><td>All</td><td>Granted by default when sharing</td></tr>
-<tr><td><strong>ReadData</strong></td><td>Read <em>all</em> table data through the <strong>SQL</strong> (TDS) endpoint, subject to SQL granular security</td><td>Warehouse, lakehouse SQL analytics endpoint</td><td>"Read all data using SQL" / "Read all SQL endpoint data"</td></tr>
-<tr><td><strong>ReadAll</strong></td><td>Read all underlying files/tables in <strong>OneLake</strong> (Spark, OneLake APIs, Lakehouse explorer); via the <em>DefaultReader</em> OneLake security role</td><td>Lakehouse, warehouse, KQL database (OneLake data)</td><td>"Read all Apache Spark and subscribe to events" / "Read all OneLake data"</td></tr>
-<tr><td><strong>Build</strong></td><td>Create new content on a semantic model: new reports, composite models, Analyze in Excel, XMLA reads of metadata, DAX queries from tools</td><td>Semantic model</td><td>"Allow recipients to build content with the data associated with this semantic model"</td></tr>
-<tr><td><strong>Write</strong></td><td>Edit the item (and for semantic models: bypass RLS, refresh, change settings)</td><td>Semantic model, other items</td><td>Implicit for Admin/Member/Contributor</td></tr>
-<tr><td><strong>Reshare</strong></td><td>Share the item with others, granting the same or fewer permissions</td><td>All shareable items</td><td>"Allow recipients to share this …"</td></tr>
-<tr><td>Execute / Run, Edit (notebooks)</td><td>Notebook sharing can grant Share, Edit and Run</td><td>Notebook</td><td>"Share", "Edit", "Run"</td></tr>
-</table></div>
-
-<ul>
-<li><strong>Least privilege to one warehouse table</strong>: share the warehouse with <em>no extra checkboxes</em> (Read = connect only), then <code>GRANT SELECT ON dbo.Sales TO [user]</code>. ReadData would expose <em>all</em> tables.</li>
-<li><strong>Report creation on a shared model</strong>: grant <strong>Build</strong> on the semantic model. For an <strong>Import</strong> model, report authors need no access to the source warehouse – the model refreshes with the owner's credentials.</li>
-<li>Read-only report consumers: share the report/app (Read). For a shared model in another workspace, consumers need Read on the model (granted automatically through app/report sharing in most cases).</li>
-<li><strong>Apps</strong>: publish a workspace app with <strong>audiences</strong> so different groups see different subsets of content from one app.</li>
-<li><strong>External data sharing</strong>: share lakehouse/warehouse/KQL data in place with users in <em>another Fabric tenant</em>; they accept and access it through a shortcut. Requires tenant settings on both sides.</li>
-</ul>
-
-<div class="match" data-task="Match each item permission to what it allows.">
-<dl>
-<dt>Read</dt><dd>Connect to the item and see its metadata only</dd>
-<dt>ReadData</dt><dd>Query all tables through the SQL endpoint</dd>
-<dt>ReadAll</dt><dd>Read the item's data in OneLake with Spark or OneLake APIs</dd>
-<dt>Build</dt><dd>Create reports or Analyze in Excel on a semantic model</dd>
-<dt>Write</dt><dd>Edit the item; for a model, bypasses its RLS</dd>
-<dt>Reshare</dt><dd>Share the item onward with other users</dd>
-</dl>
+<script>
+(function () {
+  var R = ['Admin', 'Member', 'Contributor', 'Viewer'];
+  // per action: value for Admin, Member, Contributor, Viewer (1 yes, 0 no, string = partial)
+  var A = [
+    ['Delete workspace, add/remove Admins', [1, 0, 0, 0]],
+    ['Connect Git, create workspace identity', [1, 0, 0, 0]],
+    ['Change workspace type / capacity', [1, 0, 0, 0]],
+    ['Add Members, Contributors, Viewers', [1, 1, 0, 0]],
+    ['Share items, allow resharing', [1, 1, 'only with Reshare', 'only with Reshare']],
+    ['Publish / update the workspace app', [1, 1, 'update only if setting allows', 0]],
+    ['Create and edit OneLake security roles', [1, 1, 0, 0]],
+    ['Create, edit, delete items', [1, 1, 1, 0]],
+    ['Run notebooks, pipelines; schedule refresh', [1, 1, 1, 0]],
+    ['Write data to lakehouse / warehouse / KQL DB', [1, 1, 1, 0]],
+    ['Read OneLake data via Spark (ReadAll)', [1, 1, 1, 'only via a OneLake security role']],
+    ['Query SQL endpoint / warehouse (ReadData)', [1, 1, 1, 1]],
+    ['View reports and run output', [1, 1, 1, 1]],
+    ['Bypass model RLS / OLS', [1, 1, 1, 0]]
+  ];
+  var pick = document.getElementById('p02-roles'), acts = document.getElementById('p02-acts');
+  function show(r) {
+    [].forEach.call(pick.children, function (b, i) { b.classList.toggle('on', i === r); });
+    acts.innerHTML = A.map(function (a) {
+      var v = a[1][r];
+      return v === 1 ? '<li class="y"><b>✓</b>' + a[0] + '</li>' : v === 0 ? '<li class="n"><b>✗</b>' + a[0] + '</li>' : '<li class="p"><b>~</b>' + a[0] + ' <small>(' + v + ')</small></li>';
+    }).join('');
+  }
+  R.forEach(function (n, i) { var b = document.createElement('button'); b.type = 'button'; b.textContent = ['👑 ', '🧑‍🤝‍🧑 ', '🛠️ ', '👀 '][i] + n; b.onclick = function () { show(i); }; pick.appendChild(b); });
+  show(2);
+})();
+</script>
+<div class="flips">
+  <div class="flip"><div class="front">Create and run items, but not manage access</div><div class="back">🛠️ Contributor</div></div>
+  <div class="flip"><div class="front">Add other users, but not admins</div><div class="back">🧑‍🤝‍🧑 Member</div></div>
+  <div class="flip"><div class="front">Change capacity, connect Git</div><div class="back">👑 Admin</div></div>
+  <div class="flip"><div class="front">Query with T-SQL, never modify</div><div class="back">👀 Viewer (or item-level ReadData)</div></div>
 </div>
+<details><summary>Deep dive: assignment rules</summary>
+<ul><li>Assign to users, security groups, Microsoft 365 groups, distribution lists or service principals.</li>
+<li>Several roles via different groups: the highest role wins.</li>
+<li>Viewers can query the SQL endpoint (ReadData) but can't read OneLake files/tables through Spark or the Lakehouse explorer unless a OneLake security role grants it.</li></ul></details>
+<div class="check" data-answer="2"><p>A developer must create and run notebooks and publish reports, but must not add users or move the workspace. Which role?</p><ul><li>Admin</li><li>Contributor</li><li>Member</li><li>Viewer</li></ul><p class="why">Contributor creates, edits and runs items but can't manage access or capacity.</p></div>
+</section>
 
-<div class="check" data-answer="4">
-<p>User1 must query only dbo.Sales in Warehouse1 with T-SQL, must not see other workspace items or other tables, and you want least privilege. What do you do?</p>
-<ul><li>Add User1 to the workspace Viewer role</li><li>Share Warehouse1 with "Read all data using SQL" checked</li><li>Share Warehouse1 with "Read all OneLake data" checked</li><li>Share Warehouse1 with no additional permissions, then run GRANT SELECT ON dbo.Sales TO User1</li></ul>
-<p class="why">Plain sharing grants only Read (connect). A granular GRANT then opens exactly one table. The Viewer role exposes the whole workspace; ReadData exposes all tables; ReadAll exposes OneLake files.</p>
+<section class="lesson">
+<h2>Item permissions &amp; sharing</h2>
+<p class="idea">Sharing grants one item only; plain sharing gives just Read (connect).</p>
+<div class="icards" data-hint="Click a permission to see what it unlocks.">
+  <div class="icard" data-title="Read" data-info="See the item and metadata, connect (e.g. to the SQL endpoint), open a report. Granted by default when sharing."><div class="i">👁️</div><h4>Read</h4><p>Connect + metadata</p></div>
+  <div class="icard" data-title="ReadData" data-info="Read all tables through the SQL (TDS) endpoint, subject to SQL granular security. Share dialog: &quot;Read all data using SQL&quot;."><div class="i">🏢</div><h4>ReadData</h4><p>All tables via SQL</p></div>
+  <div class="icard" data-title="ReadAll" data-info="Read all files/tables in OneLake via Spark, OneLake APIs, Lakehouse explorer (through the DefaultReader role). Share dialog: &quot;Read all OneLake data&quot; / &quot;Read all Apache Spark&quot;."><div class="i">🏞️</div><h4>ReadAll</h4><p>All OneLake data via Spark</p></div>
+  <div class="icard" data-title="Build" data-info="Create content on a semantic model: new reports, composite models, Analyze in Excel, DAX queries from tools."><div class="i">🧱</div><h4>Build</h4><p>Reports on a model</p></div>
+  <div class="icard" data-title="Write" data-info="Edit the item. For a semantic model: bypasses RLS, refresh, settings. Implicit for Admin/Member/Contributor."><div class="i">✏️</div><h4>Write</h4><p>Edit; bypasses RLS</p></div>
+  <div class="icard" data-title="Reshare" data-info="Share the item onward with the same or fewer permissions."><div class="i">🔁</div><h4>Reshare</h4><p>Share onward</p></div>
 </div>
-
-<div class="check" data-answer="1">
-<p>An analyst with only Read permission on a certified semantic model cannot connect Excel to it. Which permission is missing?</p>
-<ul><li>Build</li><li>Reshare</li><li>ReadAll</li><li>Contributor role on the workspace</li></ul>
-<p class="why">Analyze in Excel and new reports require Build on the semantic model. ReadAll concerns OneLake data, Reshare concerns sharing, and a Contributor role violates least privilege.</p>
+<div class="flow" data-hint="Least privilege to ONE warehouse table: click each step.">
+  <div data-title="Share" data-info="Share Warehouse1 with no extra checkboxes: Read = connect only."><span class="fi">📨</span>Share item<small>no checkboxes</small></div>
+  <div data-title="GRANT" data-info="GRANT SELECT ON dbo.Sales TO [user]. ReadData would expose every table."><span class="fi">🔑</span>GRANT SELECT<small>one table</small></div>
+  <div data-title="Result" data-info="The user sees only Warehouse1 and only dbo.Sales; no workspace role needed."><span class="fi">✅</span>Least privilege<small>1 item, 1 table</small></div>
 </div>
+<details><summary>Deep dive: apps, external sharing, notebooks, Import models</summary>
+<ul><li>Report authors on an Import model need only Build on the model, not source access: refresh uses the owner's credentials.</li>
+<li>Consumers of a shared model in another workspace need Read on it (usually granted via app/report sharing).</li>
+<li>Workspace apps with <b>audiences</b> show different content subsets to different groups.</li>
+<li><b>External data sharing</b>: share lakehouse/warehouse/KQL data in place with another Fabric tenant (they access it via a shortcut); tenant settings on both sides.</li>
+<li>Notebook sharing can grant Share, Edit and Run.</li></ul></details>
+<div class="match" data-task="Match each permission to what it allows."><dl>
+  <dt>Read</dt><dd>Connect to the item and see metadata</dd>
+  <dt>ReadData</dt><dd>Query all tables through the SQL endpoint</dd>
+  <dt>ReadAll</dt><dd>Read OneLake data with Spark or APIs</dd>
+  <dt>Build</dt><dd>Create reports or Analyze in Excel on a model</dd>
+  <dt>Write</dt><dd>Edit the item; bypasses model RLS</dd>
+  <dt>Reshare</dt><dd>Share the item onward</dd>
+</dl></div>
+<div class="check" data-answer="4"><p>User1 must query only dbo.Sales in Warehouse1 with T-SQL and see nothing else. Least privilege?</p><ul><li>Workspace Viewer role</li><li>Share with "Read all data using SQL"</li><li>Share with "Read all OneLake data"</li><li>Share with no extra permissions + GRANT SELECT ON dbo.Sales</li></ul><p class="why">Viewer, ReadData and ReadAll all expose more.</p></div>
+<div class="check" data-answer="1"><p>An analyst with Read on a certified model can't use Analyze in Excel. What's missing?</p><ul><li>Build</li><li>Reshare</li><li>ReadAll</li><li>Contributor role</li></ul><p class="why">New reports and Analyze in Excel require Build.</p></div>
+</section>
 
-<h2>OneLake security</h2>
-<p><strong>OneLake security</strong> (formerly <em>OneLake data access roles</em>) is the data-plane, role-based security model for data
-in OneLake. Roles are defined <strong>once on the item</strong> (e.g. a lakehouse) and enforced <strong>consistently across engines</strong>:
-Spark notebooks, Lakehouse explorer, OneLake APIs, shortcuts, the SQL analytics endpoint (in user identity mode) and Direct Lake on OneLake semantic models.</p>
-<ul>
-<li>Workspace <strong>Admins and Members</strong> create and manage roles (Manage OneLake security).</li>
-<li>A role has: <strong>permission</strong> (Read or ReadWrite), <strong>data</strong> (tables, schemas, folders under <code>Tables/</code> or <code>Files/</code>), optional <strong>row-level security</strong> (a single-table predicate such as <code>SELECT * FROM dbo.movies WHERE rating &lt;&gt; 'R'</code>) and <strong>column-level security</strong> (remove columns), and <strong>members</strong> (users, groups, service principals/managed identities).</li>
-<li>Roles are <strong>grant-only</strong> (no deny roles); multiple roles are combined (union).</li>
-<li>Roles affect <strong>Viewers and users with Read on the item</strong>. Admins, Members and Contributors already have full read/write access and are not limited by them.</li>
-<li>The <strong>DefaultReader</strong> role exists in every lakehouse: it gives everyone with <strong>ReadAll</strong> access to all data. Edit or delete it to restrict access to specific roles only.</li>
-<li>Limitations to know: no dynamic RLS (no per-user function such as USERPRINCIPALNAME), no multi-table RLS, <strong>no dynamic data masking</strong> (DDM must be done in SQL), table renames break role definitions.</li>
-<li>Shortcuts: the security defined at the <em>source</em> item applies when data is read through a shortcut.</li>
-</ul>
-
-<h3>OneLake security and the SQL analytics endpoint</h3>
-<div class="tw"><table>
-<tr><th>SQL analytics endpoint mode</th><th>How data access is checked</th><th>Where you define RLS/CLS/DDM</th></tr>
-<tr><td><strong>Delegated identity mode</strong> (default for new endpoints)</td><td>SQL permissions are checked for the user, then data is read from OneLake with the <strong>item owner's</strong> identity. OneLake security roles do <em>not</em> apply to T-SQL queries.</td><td>T-SQL: GRANT/DENY, <code>CREATE SECURITY POLICY</code>, column GRANT/DENY, <code>MASKED WITH</code></td></tr>
-<tr><td><strong>User identity mode</strong></td><td>The signed-in user's identity is passed to OneLake; <strong>OneLake security</strong> decides table, row and column access. SQL GRANT on tables is not used.</td><td>OneLake security roles (synced to SQL as <code>OLS_</code> roles within ~5 minutes); SQL permissions still apply to views, procedures and functions; DDM not supported</td></tr>
-</table></div>
-<div class="warn"><p>A lakehouse has <strong>two</strong> access paths. Configuring OneLake security protects Spark/OneLake/Direct Lake on OneLake, but in
-delegated mode the SQL endpoint must be secured separately with T-SQL – otherwise users with ReadData see everything. Conversely,
-<strong>warehouse SQL security (RLS/CLS/DDM) is enforced only through the SQL endpoint</strong>: anyone with ReadAll reading the
-warehouse's Delta files through OneLake or a shortcut bypasses it.</p></div>
-
-<div class="check" data-answer="3">
-<p>Analysts have the Viewer role. They must read only the Tables/sales table and Files/sales folder of a lakehouse from Spark notebooks, not the rest. What should you configure?</p>
-<ul><li>SQL GRANT SELECT on dbo.sales on the SQL analytics endpoint</li><li>Promote the lakehouse and share it with ReadAll</li><li>A OneLake security role on the lakehouse granting Read on those table and folder paths</li><li>Semantic model RLS</li></ul>
-<p class="why">OneLake security roles grant Viewers/Read users access to selected tables and folders and are enforced in Spark. SQL GRANT only affects T-SQL; ReadAll would expose all data; model RLS only filters the model.</p>
+<section class="lesson">
+<h2>OneLake security &amp; the SQL endpoint</h2>
+<p class="idea">Define data roles once; OneLake engines enforce them, T-SQL may not.</p>
+<div class="flow" data-hint="Click each part of a OneLake security role.">
+  <div data-title="Permission" data-info="Read or ReadWrite. Roles are grant-only (no deny); several roles combine as a union."><span class="fi">🔑</span>Permission<small>Read / ReadWrite</small></div>
+  <div data-title="Data" data-info="Tables, schemas, folders under Tables/ or Files/."><span class="fi">📁</span>Data<small>tables, folders</small></div>
+  <div data-title="Row + column rules" data-info="Optional RLS (single-table predicate, e.g. WHERE rating &lt;&gt; 'R') and CLS (remove columns)."><span class="fi">✂️</span>RLS + CLS<small>optional</small></div>
+  <div data-title="Members" data-info="Users, groups, service principals, managed identities. Created by workspace Admins and Members."><span class="fi">👥</span>Members<small>users, groups</small></div>
 </div>
+<div class="vs">
+  <div><h4>Delegated identity (default)</h4><ul><li>Data read as the item owner</li><li>OneLake roles <b>don't</b> apply</li><li>Secure with T-SQL (GRANT, RLS, DDM)</li></ul></div>
+  <div class="vsmark">VS</div>
+  <div><h4>User identity mode</h4><ul><li>User identity passed to OneLake</li><li>OneLake security decides access</li><li>No DDM</li></ul></div>
+</div>
+<details><summary>Deep dive: DefaultReader, limitations, shortcuts</summary>
+<ul><li><b>DefaultReader</b> exists in every lakehouse and gives everyone with ReadAll all data: edit or delete it to restrict access.</li>
+<li>Limitations: no dynamic RLS (no USERPRINCIPALNAME), no multi-table RLS, no DDM, table renames break roles.</li>
+<li>Enforced in Spark, Lakehouse explorer, OneLake APIs, shortcuts (source security applies), SQL endpoint in user identity mode, Direct Lake on OneLake.</li>
+<li>Two paths, two locks: in delegated mode secure the SQL endpoint separately, or ReadData users see everything. Warehouse SQL RLS/CLS/DDM is bypassed by anyone with ReadAll reading Delta files via OneLake.</li></ul></details>
+<div class="check" data-answer="3"><p>Viewers must read only Tables/sales and Files/sales from Spark notebooks. What do you configure?</p><ul><li>SQL GRANT SELECT on dbo.sales</li><li>Share the lakehouse with ReadAll</li><li>A OneLake security role granting Read on those paths</li><li>Semantic model RLS</li></ul><p class="why">SQL GRANT only affects T-SQL; ReadAll exposes everything.</p></div>
+</section>
 
-<h2>SQL granular security (warehouse and SQL analytics endpoint)</h2>
-<p>The warehouse (and SQL analytics endpoint in delegated mode) supports the familiar SQL Server security model. A user first needs
-<strong>control-plane access</strong> (workspace role or at least Read on the item) to connect; then T-SQL permissions apply.</p>
-
-<h3>Object- and column-level security</h3>
-<pre><code>-- custom role and object permissions
-CREATE ROLE SalesReaders;
-ALTER ROLE SalesReaders ADD MEMBER [analyst@contoso.com];
-GRANT SELECT ON SCHEMA::sales TO SalesReaders;
-DENY SELECT ON dbo.Payroll TO SalesReaders;
-GRANT EXECUTE ON dbo.usp_LoadSales TO [etl@contoso.com];
-
--- column-level security: allow-list columns ...
-GRANT SELECT ON dbo.Employee (EmployeeID, Name, Department) TO SalesReaders;
--- ... or deny a sensitive column to users who already read the table (e.g. via db_datareader)
-DENY SELECT ON dbo.Employee (Salary) TO SalesReaders;</code></pre>
-<ul>
-<li>DENY overrides GRANT. If a user already reads the whole table through a role such as <code>db_datareader</code>, a column GRANT adds nothing – use <strong>DENY</strong> on the sensitive column.</li>
-<li>With a column denied, <code>SELECT *</code> fails; users must list allowed columns. A <strong>view</strong> exposing only permitted (and friendly-named) columns with <code>GRANT SELECT</code> on the view is a common alternative.</li>
-<li>Fixed database roles exist (<code>db_owner</code>, <code>db_datareader</code>, <code>db_datawriter</code>, <code>db_ddladmin</code>). Workspace Admin/Member/Contributor have full control of the warehouse anyway.</li>
-</ul>
-
-<h3>Row-level security with security policies</h3>
-<pre><code>CREATE SCHEMA Security;
-GO
-CREATE FUNCTION Security.fn_rls_region(@SalesRepEmail AS varchar(256))
-    RETURNS TABLE
-WITH SCHEMABINDING
-AS
-    RETURN SELECT 1 AS allowed
-           WHERE @SalesRepEmail = USER_NAME()          -- signed-in user (UPN)
-              OR IS_MEMBER('SalesManagers') = 1;       -- managers see all
+<section class="lesson">
+<h2>SQL granular security</h2>
+<p class="idea">T-SQL secures objects, columns, rows and values, on the SQL path only.</p>
+<div class="tabset">
+  <section data-tab="🧱 Objects &amp; columns">
+<pre><code>GRANT SELECT ON SCHEMA::sales TO SalesReaders;
+DENY  SELECT ON dbo.Payroll TO SalesReaders;
+GRANT SELECT ON dbo.Employee (EmployeeID, Name) TO SalesReaders;  -- CLS allow-list
+DENY  SELECT ON dbo.Employee (Salary) TO SalesReaders;            -- CLS deny</code></pre>
+    <ul><li><b>DENY beats GRANT.</b> Users already reading via db_datareader need a column DENY.</li><li>With a denied column, <code>SELECT *</code> fails; a view is a friendly alternative.</li></ul>
+  </section>
+  <section data-tab="🚦 Row-level security">
+<div class="walk">
+<pre><code>CREATE FUNCTION Security.fn_rls(@Rep AS varchar(256))
+  RETURNS TABLE WITH SCHEMABINDING
+AS RETURN SELECT 1 AS allowed
+  WHERE @Rep = USER_NAME() OR IS_MEMBER('SalesManagers') = 1;
 GO
 CREATE SECURITY POLICY Security.SalesFilter
-    ADD FILTER PREDICATE Security.fn_rls_region(SalesRepEmail) ON dbo.Sales
-    WITH (STATE = ON);</code></pre>
-<ul>
-<li>RLS = an <strong>inline table-valued function</strong> (the predicate, created <code>WITH SCHEMABINDING</code>) bound to tables by a <strong>security policy</strong> with a <strong>FILTER</strong> predicate. Fabric Warehouse supports filter predicates (block predicates aren't supported).</li>
-<li>Enforced by the engine for every T-SQL query (including from Power BI DirectQuery and Direct Lake fallback with SSO).</li>
-<li>Effect on Direct Lake on SQL endpoint: tables with SQL RLS make queries <strong>fall back to DirectQuery</strong>.</li>
-</ul>
-
-<div class="order" data-task="Order the steps to implement row-level security in a Fabric warehouse.">
+  ADD FILTER PREDICATE Security.fn_rls(SalesRepEmail) ON dbo.Sales
+  WITH (STATE = ON);</code></pre>
 <ol>
-<li>Create a schema to hold security objects</li>
-<li>Create an inline table-valued predicate function WITH SCHEMABINDING that compares a column to USER_NAME()</li>
-<li>Create a security policy that adds the function as a FILTER PREDICATE on the target table</li>
-<li>Turn the policy on (STATE = ON)</li>
-<li>Test by querying as a restricted user (for example, a Viewer or a user with item access only)</li>
+  <li data-lines="1-2">Inline table-valued function, WITH SCHEMABINDING.</li>
+  <li data-lines="3-4">Row allowed when it belongs to the signed-in user, or the user is a manager.</li>
+  <li data-lines="6-7">The security policy binds the function as a FILTER predicate (block predicates aren't supported).</li>
+  <li data-lines="8">Turn it on. Enforced for every T-SQL query.</li>
 </ol>
 </div>
-
-<h3>Dynamic data masking (DDM)</h3>
-<pre><code>ALTER TABLE dbo.Customer ALTER COLUMN Email ADD MASKED WITH (FUNCTION = 'email()');      -- aXXX@XXXX.com
-ALTER TABLE dbo.Customer ALTER COLUMN Phone ADD MASKED WITH (FUNCTION = 'partial(0,"XXX-XXX-",4)');
-ALTER TABLE dbo.Customer ALTER COLUMN CreditLimit ADD MASKED WITH (FUNCTION = 'random(1, 100)');
-ALTER TABLE dbo.Customer ALTER COLUMN BirthDate ADD MASKED WITH (FUNCTION = 'default()');
-
-GRANT UNMASK TO [FraudTeam];       -- privileged users see real values</code></pre>
-<ul>
-<li>Masks values <strong>in query results</strong>; the stored data is unchanged – one copy serves both masked and unmasked users.</li>
-<li>Mask functions: <code>default()</code>, <code>email()</code>, <code>random(a,b)</code> (numeric), <code>partial(prefix,"padding",suffix)</code>.</li>
-<li>Users with elevated rights (workspace Admin, Member, Contributor; <code>UNMASK</code> holders) see unmasked data.</li>
-<li>DDM is <strong>not a strong security boundary</strong>: users can infer values with WHERE predicates. Combine with RLS/CLS for real protection.</li>
-<li>Not available through OneLake security; not applied when data is read via Spark/OneLake.</li>
-</ul>
-
-<div class="check" data-answer="4">
-<p>Support staff must query a Customer table but see only obfuscated email addresses; the fraud team must see them in full. Which approach needs the least duplication?</p>
-<ul><li>A second table with hashed emails for support</li><li>Column-level security denying Email to support</li><li>A OneLake security role with CLS</li><li>Dynamic data masking on Email, with UNMASK granted to the fraud team</li></ul>
-<p class="why">DDM shows masked values by default and real ones to UNMASK holders, from one copy. CLS would hide the column entirely; a second table duplicates data; OneLake security doesn't do masking.</p>
+  </section>
+  <section data-tab="🎭 Dynamic data masking">
+<pre><code>ALTER TABLE dbo.Customer ALTER COLUMN Email ADD MASKED WITH (FUNCTION = 'email()');
+GRANT UNMASK TO [FraudTeam];</code></pre>
+    <p>Masks results, not storage. Weak boundary: WHERE can infer values.</p>
+  </section>
 </div>
-
-<h2>Semantic model row-level security (RLS)</h2>
-<p>RLS in a semantic model filters rows with <strong>DAX table filter expressions</strong> defined in <strong>roles</strong>.</p>
-<ul>
-<li>Create roles in Power BI Desktop (Modeling → <em>Manage roles</em>), in Tabular Editor/TMDL, or in the web modeling experience; each role has a DAX filter per table returning TRUE/FALSE per row.</li>
-<li>After publishing, add <strong>members</strong> (users or, better, security groups) to roles in the service (semantic model → <em>Security</em>).</li>
-<li><strong>Static RLS</strong>: hard-coded values, e.g. <code>[Region] = "Germany"</code> – one role per region.</li>
-<li><strong>Dynamic RLS</strong>: one role whose filter uses the user identity, typically a mapping table:
-<code>'Security'[UserEmail] = USERPRINCIPALNAME()</code>, with the Security table related to the dimension (one-to-many) so the filter propagates.
-Changes in the mapping table flow in with the next refresh – no model change needed.</li>
-<li><code>USERPRINCIPALNAME()</code> returns the UPN (e.g. <code>anna@contoso.com</code>) in Desktop and the service; <code>USERNAME()</code> returns <code>DOMAIN\user</code> in Desktop and the UPN in the service – prefer USERPRINCIPALNAME. <code>CUSTOMDATA()</code> is for embedded scenarios.</li>
-<li>Filters propagate along relationships from the one side to the many side. To propagate across a bidirectional relationship, enable <strong>Apply security filter in both directions</strong>.</li>
-<li>A user in several roles sees the <strong>union</strong> of the rows each role allows (roles are additive, never subtractive).</li>
-<li>RLS applies only to users with <strong>Read</strong> on the model (Viewers, app/report consumers). Users with <strong>Write</strong> (workspace Admin, Member, Contributor) are <strong>not</strong> filtered.</li>
-<li>Validate with <strong>View as</strong> in Desktop (choose roles and "Other user" to test dynamic RLS) and <strong>Test as role</strong> in the service.</li>
-<li>A composite model with DirectQuery to another semantic model passes the user identity: the <strong>source model's RLS is enforced</strong> and users need Build on the source.</li>
-</ul>
-<pre><code>-- Role "Sales managers" on table 'UserRegion' (hidden, related to 'Region' 1:* on RegionKey)
-'UserRegion'[Email] = USERPRINCIPALNAME()
-
--- Role "Germany" (static) on table 'Customer'
-'Customer'[Country] = "Germany"</code></pre>
-
-<div class="check" data-answer="3">
-<p>A user belongs to two RLS roles: Role1 filters Country = "France", Role2 filters Country = "Spain". What does the user see?</p>
-<ul><li>No data, because the filters intersect</li><li>Only France, because the first role wins</li><li>France and Spain, because role permissions are combined as a union</li><li>All countries, because multiple roles disable RLS</li></ul>
-<p class="why">Semantic model roles are additive: the user sees rows allowed by any of the roles.</p>
+<div class="sim">
+  <div class="wtitle">Masking simulator</div>
+  <label for="p02-mu">Query as</label> <select id="p02-mu"><option>Support agent (no UNMASK)</option><option>Fraud team (UNMASK)</option><option>Workspace Contributor</option></select>
+  <div id="p02-mout"></div>
 </div>
+<script>
+(function () {
+  var rows = [['anna@contoso.com', '555-201-1234', 5000, '1988-04-12'], ['ben@fabrikam.com', '555-777-9876', 12000, '1975-11-30']];
+  var sel = document.getElementById('p02-mu'), out = document.getElementById('p02-mout');
+  function upd() {
+    var masked = sel.selectedIndex === 0;
+    var h = '<table class="p02-tbl"><tr><th>Email <small>email()</small></th><th>Phone <small>partial(0,"XXX-XXX-",4)</small></th><th>CreditLimit <small>random(1,100)</small></th><th>BirthDate <small>default()</small></th></tr>';
+    rows.forEach(function (r) {
+      h += '<tr><td>' + (masked ? r[0].charAt(0) + 'XXX@XXXX.com' : r[0]) + '</td><td>' + (masked ? 'XXX-XXX-' + r[1].slice(-4) : r[1]) + '</td><td>' +
+        (masked ? 1 + Math.floor(Math.random() * 100) : r[2]) + '</td><td>' + (masked ? '1900-01-01' : r[3]) + '</td></tr>';
+    });
+    out.innerHTML = h + '</table><div class="out">' + (masked ? '<span class="badge warn">masked</span> Same stored data, obfuscated result.' :
+      '<span class="badge ok">real values</span> ' + (sel.selectedIndex === 1 ? 'UNMASK holders see clear text.' : 'Admin, Member and Contributor always see unmasked data.')) + '</div>';
+  }
+  sel.addEventListener('change', upd); upd();
+})();
+</script>
+<details><summary>Deep dive: roles, effects on Direct Lake, DDM limits</summary>
+<ul><li>Custom roles: <code>CREATE ROLE</code>, <code>ALTER ROLE … ADD MEMBER</code>; fixed roles db_owner, db_datareader, db_datawriter, db_ddladmin. <code>GRANT EXECUTE</code> on procedures.</li>
+<li>Users first need control-plane access (role or Read on the item) to connect.</li>
+<li>SQL RLS applies to DirectQuery and Direct Lake fallback with SSO. Tables with SQL RLS make Direct Lake on SQL endpoint fall back to DirectQuery.</li>
+<li>DDM isn't available through OneLake security and isn't applied via Spark/OneLake. Combine with RLS/CLS for real protection.</li></ul></details>
+<div class="order" data-task="Order the steps to implement warehouse RLS."><ol>
+  <li>Create a schema for security objects</li>
+  <li>Create a predicate function WITH SCHEMABINDING using USER_NAME()</li>
+  <li>Create a security policy with a FILTER PREDICATE</li>
+  <li>Turn the policy on (STATE = ON)</li>
+  <li>Test as a restricted user (e.g. a Viewer)</li>
+</ol></div>
+<div class="check" data-answer="4"><p>Support staff must see obfuscated emails; the fraud team needs them in full. Least duplication?</p><ul><li>A second table with hashed emails</li><li>CLS denying Email to support</li><li>A OneLake security role with CLS</li><li>DDM on Email + UNMASK for the fraud team</li></ul><p class="why">One copy serves both; CLS would hide the column.</p></div>
+</section>
 
-<div class="check" data-answer="1">
-<p>During testing, a user with the Contributor role sees all rows although they are a member of a restricted RLS role. Why?</p>
-<ul><li>Users with edit (Write) rights on the model, such as Admin, Member and Contributor, aren't restricted by RLS</li><li>RLS only works in Import mode</li><li>Contributors need Build permission for RLS to apply</li><li>RLS roles must be assigned to groups, not users</li></ul>
-<p class="why">RLS constrains read-only consumers. Workspace Admins, Members and Contributors have Write on the model and bypass it – test with a Viewer or item-level user.</p>
+<section class="lesson">
+<h2>Semantic model RLS, OLS &amp; Direct Lake</h2>
+<p class="idea">Model roles filter rows with DAX; dynamic RLS uses USERPRINCIPALNAME() and a mapping table.</p>
+<div class="sim">
+  <div class="wtitle">RLS simulator</div>
+  <div class="p02-grid">
+    <label>User <select id="p02-u"><option>anna@contoso.com</option><option>ben@contoso.com</option><option>carl@contoso.com</option></select></label>
+    <label>Workspace role <select id="p02-w"><option>Viewer</option><option>Contributor</option></select></label>
+  </div>
+  <div class="p02-grid">
+    <label><input type="checkbox" id="p02-r1"> Static role "West": <code>[Region] = "West"</code></label>
+    <label><input type="checkbox" id="p02-r2"> Static role "East": <code>[Region] = "East"</code></label>
+    <label><input type="checkbox" id="p02-r3" checked> Dynamic role: <code>'UserRegion'[Email] = USERPRINCIPALNAME()</code></label>
+  </div>
+  <div style="display:flex;gap:24px;flex-wrap:wrap">
+    <div><small class="muted">UserRegion (mapping table)</small><table class="p02-tbl"><tr><th>Email</th><th>Region</th></tr><tr><td>anna@</td><td>West</td></tr><tr><td>ben@</td><td>East</td></tr><tr><td>ben@</td><td>North</td></tr></table></div>
+    <div><small class="muted">Sales, as this user sees it</small><table class="p02-tbl" id="p02-sales"></table></div>
+  </div>
+  <div class="out" id="p02-rout"></div>
 </div>
-
-<h2>Object-level security (OLS)</h2>
-<ul>
-<li>OLS secures <strong>tables or columns</strong> in a semantic model for a role (metadata permission <em>None</em>): the object disappears from the model for role members – they can't see that it exists or query it.</li>
-<li>Typically configured with <strong>Tabular Editor</strong> (or TMDL/TMSL via XMLA) on the role's <em>Table permissions</em> / <em>Column permissions</em>.</li>
-<li>Visuals that reference a secured object return an <strong>error</strong> for restricted users – design reports (or use field parameters/separate reports) accordingly.</li>
-<li>A user can't combine RLS and OLS coming from <strong>different roles</strong> (it raises an error); define both in the same role when needed.</li>
-<li>Like RLS, OLS restricts only Read users, not Write holders.</li>
-<li>Defense in depth: for an <strong>Import</strong> model over a SQL endpoint, CLS in SQL protects the T-SQL path and OLS protects the model path – duplicate the rule in both.</li>
-</ul>
-
-<div class="sort" data-task="Which security feature do you use for each requirement?">
-  <ul data-bucket="OneLake security role"><li>Viewers may read only one folder of a lakehouse from Spark</li><li>Same row filter must apply in Spark and in Direct Lake on OneLake</li></ul>
-  <ul data-bucket="SQL granular security"><li>Obfuscate email addresses for T-SQL users except the fraud team</li><li>T-SQL users see only their department's rows in a warehouse</li><li>Deny the Salary column to warehouse query users</li></ul>
-  <ul data-bucket="Semantic model RLS/OLS"><li>Each sales manager sees only their regions in reports, via USERPRINCIPALNAME</li><li>Report users must not even know the Salary column exists in the model</li></ul>
-  <ul data-bucket="Workspace role or item permission"><li>A developer can create notebooks but can't add users</li><li>An analyst may build reports on a certified semantic model</li></ul>
+<script>
+(function () {
+  var S = [['West', 'Bikes', 120], ['East', 'Helmets', 80], ['North', 'Bikes', 95], ['South', 'Gloves', 40], ['West', 'Gloves', 60]];
+  var MAP = { anna: ['West'], ben: ['East', 'North'], carl: [] };
+  function $(i) { return document.getElementById(i); }
+  function upd() {
+    var u = $('p02-u').value, short = u.split('@')[0], writer = $('p02-w').selectedIndex === 1;
+    var r1 = $('p02-r1').checked, r2 = $('p02-r2').checked, r3 = $('p02-r3').checked, allowed = {};
+    if (r1) allowed.West = 1; if (r2) allowed.East = 1; if (r3) MAP[short].forEach(function (x) { allowed[x] = 1; });
+    var any = r1 || r2 || r3, n = 0;
+    $('p02-sales').innerHTML = '<tr><th>Region</th><th>Product</th><th>Amount</th></tr>' + S.map(function (s) {
+      var ok = writer || allowed[s[0]]; if (ok) n++;
+      return '<tr class="' + (ok ? 'on' : 'off') + '"><td>' + s[0] + '</td><td>' + s[1] + '</td><td>' + s[2] + '</td></tr>';
+    }).join('');
+    var msg = 'USERPRINCIPALNAME() = <code>' + u + '</code><br>';
+    if (writer) msg += '<span class="badge warn">RLS bypassed</span> Contributor has Write on the model: sees all ' + n + ' rows. Test with a Viewer!';
+    else if (!any) msg += '<span class="badge bad">no access</span> On a model with roles, a Viewer in no role sees no data.';
+    else msg += '<span class="badge ok">' + n + ' of ' + S.length + ' rows</span> ' + ((r1 || r2) && r3 ? 'Roles combine as a <b>union</b>. ' : '') + (r3 && !MAP[short].length ? 'Dynamic role: no mapping row for this user → nothing from it.' : '');
+    $('p02-rout').innerHTML = msg;
+  }
+  ['p02-u', 'p02-w', 'p02-r1', 'p02-r2', 'p02-r3'].forEach(function (i) { $(i).addEventListener('change', upd); });
+  upd();
+})();
+</script>
+<details><summary>Deep dive: RLS rules for the exam</summary>
+<ul><li>Create roles in Desktop (Modeling → Manage roles), Tabular Editor/TMDL or web modeling; add members (preferably groups) in the service (model → Security).</li>
+<li>Mapping table relates one-to-many to the dimension; mapping changes arrive with the next refresh, no model change.</li>
+<li><code>USERNAME()</code> returns DOMAIN\user in Desktop: prefer <code>USERPRINCIPALNAME()</code>. <code>CUSTOMDATA()</code> is for embedding.</li>
+<li>Filters flow one → many; across bidirectional relationships enable "Apply security filter in both directions".</li>
+<li>Test with <b>View as</b> (Desktop, "Other user" for dynamic) and <b>Test as role</b> (service).</li>
+<li>Composite model over another model (DirectQuery): source RLS enforced; users need Build on the source.</li></ul></details>
+<div class="icards" data-hint="Click: OLS in three facts.">
+  <div class="icard" data-title="What OLS does" data-info="Hides tables or columns (metadata permission None) for role members: they can't see they exist or query them."><div class="i">🙈</div><h4>OLS hides objects</h4><p>Tables, columns</p></div>
+  <div class="icard" data-title="How to configure" data-info="Tabular Editor (or TMDL/TMSL via XMLA): role → Table / Column permissions."><div class="i">🛠️</div><h4>Tabular Editor</h4><p>Not in Desktop UI</p></div>
+  <div class="icard" data-title="Visual errors" data-info="Visuals that reference a secured object error for restricted users. Design reports accordingly. RLS and OLS from different roles can't be combined: define both in one role."><div class="i">⚠️</div><h4>Visuals error</h4><p>Plan reports</p></div>
 </div>
-
-<h2>Direct Lake and security</h2>
-<p>A Direct Lake model reads Delta tables in OneLake. Which identity is checked depends on the model's <strong>connection</strong>:</p>
-<div class="tw"><table>
-<tr><th></th><th>SSO (Microsoft Entra ID) – default</th><th>Fixed identity (cloud connection, SSO disabled)</th></tr>
-<tr><td>Identity used to read data</td><td>The <strong>current report user</strong></td><td>A <strong>fixed identity</strong>: service principal, workspace identity or OAuth account</td></tr>
-<tr><td>Users need source permissions?</td><td>Yes – Read on the item plus SELECT (DL on SQL) or a OneLake security role/ReadAll (DL on OneLake)</td><td><strong>No</strong> – only Read (or Build) on the semantic model/report</td></tr>
-<tr><td>Where to put row rules</td><td>OneLake security (applies everywhere) or SQL endpoint RLS (DL on SQL → DirectQuery fallback)</td><td><strong>Semantic model RLS/OLS</strong></td></tr>
-<tr><td>Use when</td><td>Per-user authorization at the source; users may query the lakehouse anyway</td><td>Consumers must <strong>not</strong> be able to query the lakehouse/SQL endpoint directly</td></tr>
-</table></div>
-<ul>
-<li><strong>Direct Lake on SQL endpoint</strong>: if a queried table has SQL RLS (or the table is a SQL view), queries <strong>fall back to DirectQuery</strong> so the SQL engine applies the rules; SQL CLS/OLS on a referenced column returns an <strong>error</strong>. With fallback disabled (DirectLakeOnly) such queries fail.</li>
-<li><strong>Direct Lake on OneLake</strong>: enforces <strong>OneLake security</strong> (RLS/CLS/table roles) of the effective identity in memory – no fallback exists; if access is denied, visuals error. With OneLake security and model roles both present, OneLake roles are unioned first, then intersected with model roles.</li>
-<li>The <strong>model owner</strong> must also have read access to the source tables, otherwise framing (refresh) fails.</li>
-<li>Semantic model rules only protect the model: with SSO, users who can query the lakehouse directly bypass model RLS – so pair model RLS with a fixed identity and no source permissions.</li>
-</ul>
-
-<div class="check" data-answer="2">
-<p>Report consumers of a Direct Lake model must see only permitted rows and must not be able to query the lakehouse directly; data engineers keep full lakehouse access. What do you configure?</p>
-<ul><li>OneLake security roles for consumers and keep SSO</li><li>Semantic model RLS roles, a fixed-identity connection (SSO disabled), and access to the model/app only for consumers</li><li>SQL RLS on the SQL analytics endpoint and Direct Lake on OneLake</li><li>Give consumers the Contributor role and model RLS</li></ul>
-<p class="why">With a fixed identity, the model reads the lakehouse on behalf of users, so they need no lakehouse permissions; model RLS filters their rows. SSO would require source access; Contributors bypass RLS.</p>
+<div class="vs">
+  <div><h4>Direct Lake with SSO (default)</h4><ul><li>Reads as the report user</li><li>Users need source access</li><li>Rules at the source</li></ul></div>
+  <div class="vsmark">VS</div>
+  <div><h4>Fixed identity</h4><ul><li>Reads as a service principal or workspace identity</li><li>Users need only the model</li><li>Rules in model RLS/OLS</li></ul></div>
 </div>
+<details><summary>Deep dive: Direct Lake security details</summary>
+<ul><li>DL on SQL endpoint: SQL RLS or SQL views → DirectQuery fallback; SQL CLS/OLS on a used column → error. DirectLakeOnly makes such queries fail.</li>
+<li>DL on OneLake: enforces OneLake security in memory, never falls back; denied access → visual errors. OneLake roles are unioned, then intersected with model roles.</li>
+<li>The model owner needs read access to source tables, or framing fails.</li>
+<li>With SSO, users who can query the lakehouse directly bypass model RLS.</li>
+<li>Defense in depth: Import model over a SQL endpoint → CLS in SQL <i>and</i> OLS in the model.</li></ul></details>
+<div class="check" data-answer="3"><p>A user is in Role1 (Country = "France") and Role2 (Country = "Spain"). What do they see?</p><ul><li>No data: filters intersect</li><li>Only France: first role wins</li><li>France and Spain: roles are a union</li><li>All countries</li></ul><p class="why">Model roles are additive.</p></div>
+<div class="check" data-answer="1"><p>A Contributor in a restricted RLS role sees all rows. Why?</p><ul><li>Write holders (Admin, Member, Contributor) aren't restricted by RLS</li><li>RLS works only in Import</li><li>Contributors need Build for RLS</li><li>Roles must use groups</li></ul><p class="why">Test RLS with a Viewer.</p></div>
+<div class="check" data-answer="2"><p>Direct Lake consumers must see only permitted rows and must not query the lakehouse directly. What do you configure?</p><ul><li>OneLake security roles, keep SSO</li><li>Model RLS + fixed-identity connection + model/app access only</li><li>SQL RLS + Direct Lake on OneLake</li><li>Contributor role + model RLS</li></ul><p class="why">Fixed identity: no lakehouse permissions needed.</p></div>
+</section>
 
-<h2>Sensitivity labels</h2>
-<p>Fabric integrates <strong>Microsoft Purview Information Protection</strong> sensitivity labels (e.g. Public, General, Confidential, Highly Confidential).</p>
-<ul>
-<li>Prerequisites: labels published in Purview, the tenant setting <em>Allow users to apply sensitivity labels for content</em>, edit permission on the item; applying labels to Power BI content requires a Pro or PPU license.</li>
-<li>Labels can be applied to Fabric items (lakehouse, warehouse, semantic model, report, notebook, pipeline…) in the item settings, the header flyout or Power BI Desktop.</li>
-<li><strong>Inheritance</strong>:
-  <ul>
-  <li><em>Downstream inheritance</em> – a label on an upstream item (e.g. lakehouse → semantic model → report/dashboard) flows to downstream items. It never overwrites a manually applied label and only applies a label that is at least as restrictive.</li>
-  <li><em>Inheritance on creation</em> – a new report built on a labeled model gets its label.</li>
-  <li><em>Inheritance from data sources</em> – labels of sources such as Azure SQL Database (classified in Purview) can be applied to semantic models.</li>
-  </ul></li>
-<li><strong>Exports</strong> to Excel, PowerPoint, PDF and <code>.pbix</code> downloads carry the label – and, if the label has <strong>encryption (protection)</strong>, the file stays encrypted so only authorized users can open it.</li>
-<li><strong>Default label policy</strong> labels new items automatically; <strong>mandatory labeling</strong> forces users to choose a label.</li>
-<li><strong>Data loss prevention (DLP) policies</strong> in Purview scan Fabric items (e.g. semantic models, lakehouses) for sensitive information types such as credit-card numbers and raise alerts or policy tips.</li>
-<li>Labels classify and protect <em>exports</em>; they don't restrict who can open the item inside Fabric (permissions do that). Purview <em>protection policies</em> can additionally restrict access based on labels.</li>
-</ul>
-
-<div class="check" data-answer="3">
-<p>Users must be able to export Report1 to Excel and download it as .pbix, but the exported files must remain encrypted and readable only by authorized users. What do you do?</p>
-<ul><li>Disable export in the tenant settings</li><li>Apply RLS to the semantic model</li><li>Apply a sensitivity label with encryption (protection) settings to the model and report</li><li>Endorse the report as Certified</li></ul>
-<p class="why">A label with protection settings travels with supported exports (Excel, PowerPoint, PDF, .pbix) and keeps them encrypted. Disabling export breaks the requirement; RLS and endorsement don't protect files.</p>
+<section class="lesson">
+<h2>Labels, endorsement &amp; governance</h2>
+<p class="idea">Labels classify and travel downstream; endorsement signals trust; lineage shows impact.</p>
+<div class="flow" data-hint="Click a step of sensitivity-label inheritance.">
+  <div data-title="Lakehouse" data-info="Label applied in item settings (needs Purview labels, the tenant setting, edit permission; Pro/PPU for Power BI items). Default label policy / mandatory labeling can enforce it."><span class="fi">🏞️</span>Lakehouse<small>🏷️ Confidential</small></div>
+  <div data-title="Semantic model" data-info="Downstream inheritance: the label flows on. It never overwrites a manual label and only applies one at least as restrictive. Labels from sources like Azure SQL can also be inherited."><span class="fi">🧠</span>Model<small>inherits</small></div>
+  <div data-title="Report" data-info="New reports built on a labeled model get its label on creation."><span class="fi">📊</span>Report<small>inherits</small></div>
+  <div data-title="Export" data-info="Excel, PowerPoint, PDF and .pbix exports carry the label; with encryption they stay readable only by authorized users. Labels don't control access inside Fabric."><span class="fi">📤</span>Export<small>🔒 stays encrypted</small></div>
 </div>
-
-<h2>Endorsement</h2>
-<div class="tw"><table>
-<tr><th>Badge</th><th>Meaning</th><th>Who can apply</th><th>Items</th></tr>
-<tr><td><strong>Promoted</strong></td><td>Creators consider it ready for sharing and reuse</td><td>Any user with <strong>Write</strong> permission on the item</td><td>All Fabric/Power BI items except dashboards</td></tr>
-<tr><td><strong>Certified</strong></td><td>An authorized reviewer confirmed it meets organizational quality standards</td><td>Only users/groups named by a Fabric admin in the <strong>certification tenant setting</strong> (can be delegated per domain); anyone can <em>request</em> certification</td><td>All Fabric/Power BI items except dashboards</td></tr>
-<tr><td><strong>Master data</strong></td><td>Core, authoritative source of organizational data (single source of truth, e.g. customer list)</td><td>Only users named by a Fabric admin in the <strong>master data</strong> tenant setting</td><td><strong>Items that contain data</strong> (lakehouse, warehouse, semantic model, KQL database…)</td></tr>
-</table></div>
-<p>An item carries one endorsement badge. Endorsed items are labeled in the UI, listed first in some lists and filterable in the
-OneLake catalog. Pattern to drive reuse: <strong>certify</strong> the enterprise model, make it discoverable in the OneLake catalog,
-and grant <strong>Build</strong> to analysts.</p>
-
-<div class="match" data-task="Match each governance feature to its purpose.">
-<dl>
-<dt>Promoted</dt><dd>Item creator signals readiness for reuse</dd>
-<dt>Certified</dt><dd>Tenant-designated reviewer confirms quality standards</dd>
-<dt>Master data</dt><dd>Marks a data item as the authoritative single source of truth</dd>
-<dt>Impact analysis</dt><dd>Lists downstream items and lets you notify their contacts before a change</dd>
-<dt>Domains</dt><dd>Group workspaces by business area for federated governance</dd>
-<dt>Sensitivity label</dt><dd>Classifies an item and protects exported files</dd>
-</dl>
+<div class="icards" data-hint="Click a badge: who can apply it?">
+  <div class="icard" data-title="Promoted" data-info="Creator says &quot;ready for reuse&quot;. Anyone with Write on the item. All items except dashboards."><div class="i">👍</div><h4>Promoted</h4><p>Any Write holder</p></div>
+  <div class="icard" data-title="Certified" data-info="Reviewer confirms quality standards. Only users/groups named by a Fabric admin in the tenant setting (can be delegated per domain); anyone can request it."><div class="i">🏅</div><h4>Certified</h4><p>Named reviewers only</p></div>
+  <div class="icard" data-title="Master data" data-info="Authoritative single source of truth (e.g. customer list). Only users named in the master data tenant setting; data items only."><div class="i">👑</div><h4>Master data</h4><p>Data items, named users</p></div>
 </div>
-
-<h2>Purview hub, lineage and impact analysis</h2>
-<ul>
-<li><strong>Microsoft Purview hub</strong> (in Fabric settings): a governance dashboard. Admins get tenant-wide insights (sensitivity label coverage, endorsement, items by workspace/domain); data owners get insights about their own items. Links lead to the Purview portal (Unified Catalog, Information Protection, DLP, Audit).</li>
-<li><strong>OneLake catalog – Govern</strong>: owner-oriented insights and recommended actions (unlabeled, undescribed or unendorsed items).</li>
-<li><strong>Lineage view</strong> (workspace): diagram of data sources → pipelines/dataflows/notebooks → lakehouse/warehouse → semantic models → reports/dashboards/apps, including cross-workspace links.</li>
-<li><strong>Impact analysis</strong> (from an item such as a lakehouse, warehouse, dataflow or semantic model): shows the downstream items and workspaces affected by a change, with viewer counts, and lets you <strong>notify contacts</strong> by email before renaming a column or changing a schema.</li>
-<li>Purview Unified Catalog can scan the Fabric tenant for metadata and lineage across the estate.</li>
-</ul>
-
-<h2>Domains</h2>
-<ul>
-<li>A <strong>domain</strong> groups workspaces belonging to a business area (Finance, Sales…) to support data-mesh, federated governance. <strong>Subdomains</strong> refine them.</li>
-<li>Created by a <strong>Fabric admin</strong>; <strong>domain admins</strong> manage settings and assign workspaces; <strong>domain contributors</strong> can assign workspaces they administer to the domain.</li>
-<li>A workspace belongs to at most one domain; workspaces can be assigned by name, by workspace admin, or by capacity.</li>
-<li>Delegated settings at domain level, e.g. <strong>certification reviewers</strong> per domain, default sensitivity label; domain branding (image) in the OneLake catalog.</li>
-<li>Users can filter the OneLake catalog by domain to find relevant data.</li>
-</ul>
-
-<h2>Admin monitoring and auditing</h2>
-<div class="tw"><table>
-<tr><th>Need</th><th>Tool</th></tr>
-<tr><td>Who deleted a warehouse / who viewed a report / who changed a role</td><td><strong>Audit log</strong> (Microsoft Purview portal → Audit), or the admin Activity Events API</td></tr>
-<tr><td>How a report is used</td><td>Report <strong>usage metrics</strong> report</td></tr>
-<tr><td>Tenant-wide adoption and feature usage</td><td><strong>Admin monitoring workspace</strong> (Feature Usage and Adoption report, Purview hub report) – for Fabric admins</td></tr>
-<tr><td>Did last night's runs succeed?</td><td><strong>Monitoring hub</strong></td></tr>
-<tr><td>Detailed per-workspace query/operation logs</td><td><strong>Workspace monitoring</strong> (logs in an eventhouse, query with KQL)</td></tr>
-<tr><td>Capacity consumption and throttling</td><td><strong>Fabric Capacity Metrics app</strong> (see <a href="01-fabric-platform.html">Fabric platform</a>)</td></tr>
-<tr><td>Audit access to OneLake data</td><td><strong>OneLake diagnostics</strong> (events stored in a lakehouse you choose)</td></tr>
-</table></div>
-
-<h2>Workspace identity and service principals</h2>
-<h3>Workspace identity</h3>
-<ul>
-<li>An automatically managed <strong>service principal (managed identity) tied to the workspace</strong>. Created (and deleted) by a workspace <strong>Admin</strong> in workspace settings; credentials are managed by Fabric – no secrets to rotate. Deleted when the workspace is deleted.</li>
-<li>Use it as the authentication of connections (e.g. ADLS Gen2 shortcuts, pipelines, Dataflow Gen2, semantic models) and grant it RBAC roles on Azure resources.</li>
-<li><strong>Trusted workspace access</strong>: lets Fabric reach an <strong>ADLS Gen2 account with public access disabled</strong> (firewall) by adding a <strong>resource instance rule</strong> for the workspace and granting the workspace identity access – requires the workspace on an F SKU capacity.</li>
-</ul>
-<h3>Service principals</h3>
-<ul>
-<li>Microsoft Entra app registrations used for automation (REST APIs, CI/CD, XMLA, deployment pipelines) and as non-personal identities for connections.</li>
-<li>Prerequisites: tenant setting <em>Service principals can call Fabric public APIs</em> (often scoped to a security group – the SPN must be in it) <strong>and</strong> a workspace role (Contributor or higher to create/update items) or item permission.</li>
-<li>Service principals/shared connections avoid broken refreshes when an employee leaves. If an owner leaves, <strong>take over</strong> the semantic model and rebind credentials to a non-personal identity.</li>
-</ul>
-
-<div class="check" data-answer="1">
-<p>A lakehouse shortcut to an ADLS Gen2 account fails because the storage account has public network access disabled. You must not enable public access. What do you configure?</p>
-<ul><li>Trusted workspace access with a resource instance rule authorizing the workspace identity</li><li>An on-premises data gateway</li><li>A OneLake security role on the shortcut</li><li>Change the shortcut to use a SAS token</li></ul>
-<p class="why">Trusted workspace access lets the workspace (via its workspace identity) through the storage firewall using a resource instance rule. A gateway is for on-premises/private sources in dataflows/pipelines, not shortcuts; OneLake roles and SAS don't bypass the firewall.</p>
+<div class="tabset">
+  <section data-tab="🔗 Lineage &amp; impact"><p><b>Impact analysis</b> lists downstream items and viewers; notify contacts before a change.</p></section>
+  <section data-tab="🏷️ Domains"><p>Group workspaces by business area. Fabric admin creates; domain admins assign workspaces.</p></section>
+  <section data-tab="🕵️ Audit &amp; monitor"><p>Who did what → Purview audit log. Adoption → admin monitoring workspace. Insights → Purview hub.</p></section>
+  <section data-tab="🤖 Identities"><p><b>Workspace identity</b> → trusted access to firewalled ADLS Gen2. <b>Service principals</b> need the API tenant setting + a role.</p></section>
 </div>
-
-<div class="check" data-answer="2">
-<p>Only a small review board should be able to mark semantic models as Certified. What must be done?</p>
-<ul><li>Give the review board the workspace Admin role in every workspace</li><li>A Fabric administrator specifies the review board's security group in the certification tenant setting</li><li>Apply a Certified sensitivity label</li><li>Grant the board Write permission on each model</li></ul>
-<p class="why">Certification is restricted to users named in the tenant (or delegated domain) setting. Write permission only allows promotion; labels are unrelated to endorsement.</p>
+<details><summary>Deep dive: more governance facts</summary>
+<ul><li>One endorsement badge per item; endorsed items are filterable in the OneLake catalog. Pattern: certify the enterprise model + grant Build.</li>
+<li>DLP policies scan models and lakehouses for sensitive info types and raise alerts/policy tips. Purview protection policies can restrict access by label.</li>
+<li>Purview hub: tenant-wide insights for admins (label coverage, endorsement), item insights for owners. Purview Unified Catalog can scan the Fabric tenant.</li>
+<li>Domains: a workspace belongs to ≤ 1 domain; assign by name, admin or capacity; subdomains exist; filter the catalog by domain.</li>
+<li>Monitoring: report usage metrics; Monitoring hub (runs); workspace monitoring (KQL logs); Capacity Metrics app; OneLake diagnostics (data access audit).</li>
+<li>Workspace identity is created/deleted by a workspace Admin, deleted with the workspace; trusted access needs an F SKU and a resource instance rule. Use non-personal identities so refreshes survive staff leaving.</li></ul></details>
+<div class="sort" data-task="Which mechanism meets each requirement?">
+  <ul data-bucket="🏞️ OneLake security"><li>Viewers read one lakehouse folder from Spark</li><li>Same row filter in Spark and Direct Lake on OneLake</li></ul>
+  <ul data-bucket="🏢 SQL security"><li>Mask emails for T-SQL users</li><li>T-SQL users see only their department's rows</li></ul>
+  <ul data-bucket="🧠 Model RLS/OLS"><li>Managers see their regions via USERPRINCIPALNAME</li><li>Users must not know Salary exists in the model</li></ul>
+  <ul data-bucket="🗂️ Roles &amp; permissions"><li>Developer creates notebooks but can't add users</li><li>Analyst builds reports on a certified model</li></ul>
 </div>
+<div class="check" data-answer="3"><p>Exports of Report1 to Excel and .pbix must stay encrypted. What do you do?</p><ul><li>Disable export</li><li>Apply model RLS</li><li>Apply a sensitivity label with encryption</li><li>Certify the report</li></ul><p class="why">Protected labels travel with supported exports.</p></div>
+<div class="check" data-answer="2"><p>Only a review board may certify semantic models. What must be done?</p><ul><li>Make the board workspace Admins</li><li>A Fabric admin names the board's group in the certification tenant setting</li><li>Apply a "Certified" label</li><li>Grant the board Write on each model</li></ul><p class="why">Write only allows promotion.</p></div>
+<div class="check" data-answer="1"><p>A shortcut to ADLS Gen2 fails because public access is disabled, and it must stay disabled. Fix?</p><ul><li>Trusted workspace access via the workspace identity</li><li>On-premises data gateway</li><li>OneLake security role</li><li>SAS token</li></ul><p class="why">Uses a resource instance rule.</p></div>
+<div class="reveal"><p>Hide Employee.Salary from Analysts (Viewers: T-SQL + Import model); data scientists (Read) may use only telemetry in Spark. Design it.</p><div class="answer"><ul><li>🏢 T-SQL: <code>DENY SELECT ON dbo.Employee(Salary) TO [Analysts]</code>.</li><li>🧠 Model: OLS on Salary (Import bypasses SQL CLS).</li><li>🏞️ Spark: OneLake role on Tables/telemetry; edit DefaultReader.</li><li>🚫 No Contributor for either.</li></ul></div></div>
+</section>
 
-<h2>Scenario</h2>
-<div class="reveal">
-<p>Lakehouse <em>HR</em> contains an Employee table with a Salary column. Group <em>Analysts</em> (Viewers) query it with T-SQL through the SQL
-analytics endpoint (delegated mode) and use reports on an <strong>Import</strong> semantic model built on that endpoint. Data scientists
-(group <em>DS</em>, Read on the lakehouse) use Spark notebooks and may read only the <em>telemetry</em> table. Nobody outside HR may see Salary.
-Design the security.</p>
-<div class="answer">
-<ul>
-<li><strong>T-SQL path (Analysts)</strong>: column-level security on the SQL endpoint – <code>DENY SELECT ON dbo.Employee(Salary) TO [Analysts]</code> (or GRANT on allowed columns / a view).</li>
-<li><strong>Model path (Analysts)</strong>: the Import model refreshes with the owner's identity, so SQL CLS doesn't protect it – add <strong>OLS</strong> on Salary in a role containing Analysts (they are Viewers, so OLS applies).</li>
-<li><strong>Spark path (DS)</strong>: a <strong>OneLake security</strong> role granting Read on <code>Tables/telemetry</code> only; edit/remove the <em>DefaultReader</em> role so ReadAll doesn't expose everything.</li>
-<li>Don't give either group Contributor – that would bypass OneLake security and model OLS.</li>
-<li>Optionally label the lakehouse <em>Confidential</em> with downstream inheritance so the model, reports and exports carry the label.</li>
-</ul>
-</div>
-</div>
+<section class="lesson"><h2>Exam traps</h2>
+<ul class="traps">
+  <li>Contributors bypass model RLS, OLS and OneLake security: test with a Viewer.</li>
+  <li>OneLake security has no dynamic RLS and no masking.</li>
+  <li>Delegated SQL endpoint ignores OneLake roles: secure T-SQL separately.</li>
+  <li>Promote = Write; certify = named in tenant setting.</li>
+</ul></section>
 
-<h2>Key takeaways &amp; exam tips</h2>
-<ul>
-<li>Roles: <strong>Admin</strong> (delete workspace, add admins, Git, workspace identity, capacity), <strong>Member</strong> (add users, share, publish app, OneLake security roles), <strong>Contributor</strong> (create/edit/run items), <strong>Viewer</strong> (read; T-SQL ReadData; no Spark/OneLake data unless a OneLake security role grants it).</li>
-<li>Item permissions: Read (connect), <strong>ReadData</strong> (SQL), <strong>ReadAll</strong> (OneLake/Spark), <strong>Build</strong> (create content on a model), Write, Reshare. Least privilege for one table = share with Read + T-SQL GRANT.</li>
-<li><strong>OneLake security</strong>: defined by Admin/Member on the item, Read/ReadWrite, tables/folders + RLS + CLS, enforced across engines for Viewers/Read users; DefaultReader grants ReadAll users everything; no DDM, no dynamic RLS.</li>
-<li>SQL endpoint modes: <strong>delegated</strong> (default; SQL GRANT/RLS/CLS/DDM) vs <strong>user identity</strong> (OneLake security governs tables).</li>
-<li>Warehouse RLS = predicate function + <code>CREATE SECURITY POLICY … ADD FILTER PREDICATE</code>; CLS = column GRANT/DENY; DDM = <code>MASKED WITH</code> + <code>UNMASK</code>. All only on the SQL path.</li>
-<li>Model RLS: DAX filters, dynamic via <code>USERPRINCIPALNAME()</code>, roles union, Write holders bypass, test with View as. OLS hides tables/columns (visuals error), via Tabular Editor.</li>
-<li>Direct Lake: SSO = users need source access; <strong>fixed identity</strong> = users need only model access → put rules in the model. DL on SQL falls back to DirectQuery for SQL RLS/views; DL on OneLake enforces OneLake security and never falls back.</li>
-<li>Labels: Purview, downstream inheritance, travel with exports (encryption); DLP detects sensitive data. Endorsement: Promoted (Write), Certified and Master data (tenant-designated).</li>
-<li>Impact analysis before breaking changes; audit log for "who did what"; domains for federated governance; workspace identity + trusted workspace access for firewalled storage; service principals need the tenant setting <em>and</em> a workspace role.</li>
-</ul>
+<section class="lesson"><h2>Cheat sheet</h2>
+<div class="cheat">
+  <div><h4>Roles</h4><ul><li>Admin: delete, Git, capacity, identity</li><li>Member: add users, app, OneLake roles</li><li>Contributor: create/run items</li><li>Viewer: read, T-SQL</li></ul></div>
+  <div><h4>Permissions</h4><ul><li>Read · ReadData · ReadAll</li><li>Build · Write · Reshare</li><li>1 table: Read + GRANT</li></ul></div>
+  <div><h4>SQL</h4><ul><li>CLS: column GRANT/DENY</li><li>RLS: function + SECURITY POLICY</li><li>DDM: MASKED WITH + UNMASK</li></ul></div>
+  <div><h4>Model</h4><ul><li>RLS: DAX, USERPRINCIPALNAME, union</li><li>OLS: Tabular Editor</li><li>Fixed identity = users need model only</li></ul></div>
+  <div><h4>Governance</h4><ul><li>Labels inherit downstream</li><li>Promoted · Certified · Master data</li><li>Impact analysis before changes</li></ul></div>
+</div></section>
 </main>
 <script src="assets/app.js"></script>
 </body>

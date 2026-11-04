@@ -5,399 +5,370 @@
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>Warehouse &amp; T-SQL – DP-600</title>
 <link rel="stylesheet" href="assets/style.css">
+<style>
+/* page-specific visuals (p06) */
+.sim .wtitle { font-size: .78em; text-transform: uppercase; letter-spacing: .05em; color: var(--dom); font-weight: 700; margin-bottom: 8px; }
+.p06-stmt { font-family: Consolas, Menlo, monospace; font-size: .95em; padding: 12px 14px; border-radius: 8px; background: var(--code); border: 1px solid var(--line); margin: 6px 0 10px; white-space: pre-wrap; }
+.p06-row { display: flex; flex-wrap: wrap; gap: 8px; align-items: center; margin: 6px 0; }
+.p06-eng { display: grid; grid-template-columns: repeat(auto-fit, minmax(220px, 1fr)); gap: 10px; margin-top: 8px; }
+.p06-eng > div { border: 1px solid var(--line); border-radius: 8px; padding: 8px 12px; background: var(--bg); }
+.p06-score { margin-left: auto; font-weight: 700; color: var(--dom); }
+.p06-tl { width: 100%; height: auto; color: var(--fg); }
+.p06-tl text { fill: currentColor; font-size: 12px; }
+.p06-tools { display: grid; grid-template-columns: repeat(auto-fit, minmax(190px, 1fr)); gap: 8px; margin-top: 8px; }
+.p06-tools > div { border-radius: 8px; padding: 8px 10px; border: 2px solid var(--line); background: var(--bg); font-size: .92em; }
+.p06-tools > div.ok { border-color: var(--ok); background: var(--ok-soft); }
+.p06-tools > div.no { border-color: var(--bad); background: var(--bad-soft); opacity: .8; }
+.p06-tools > div.best { outline: 3px solid var(--dom); }
+.p06-tools b { display: block; }
+</style>
 </head>
-<body>
+<body data-domain="2">
 <main>
-<h1>Warehouse &amp; T-SQL</h1>
-<p class="lead">The Fabric Data Warehouse: architecture, the T-SQL surface area (what works, what doesn't), data types, loading with COPY INTO / CTAS / pipelines / Dataflow Gen2, zero-copy clones, time travel, restore points, programmability, statistics, transactions, caching and query insights – and how it differs from a lakehouse SQL analytics endpoint. Maps to <em>Prepare data</em> (get, transform and query data with T-SQL) and <em>Maintain a data analytics solution</em> (monitoring, recovery).</p>
+<header class="hero">
+  <div class="hi">🏢</div>
+  <div>
+    <h1>Warehouse &amp; T-SQL</h1>
+    <p class="lead">A read-write T-SQL warehouse over Delta in OneLake, with zero-copy recovery tools.</p>
+    <div class="meta"><span class="pill">Domain 2 · Prepare data</span><span class="pill">⏱ 30 min</span><span class="pill">5 lessons</span></div>
+    <ul class="goals"><li>Tell warehouse, SQL endpoint and SQL database apart</li><li>Know which T-SQL runs in Fabric</li><li>Pick COPY INTO, CTAS, pipelines or Dataflow Gen2</li><li>Recover with time travel, clones and restore points</li></ul>
+  </div>
+</header>
+<div class="tldr"><ul>
+  <li><b>Warehouse</b> = read-write T-SQL + multi-table ACID transactions. <b>SQL endpoint</b> = read-only data.</li>
+  <li>✓ IDENTITY (BIGINT), MERGE, #temp, CTAS. ✗ triggers, indexes, enforced keys, materialized views.</li>
+  <li><b>COPY INTO</b> bulk-loads files; <b>CTAS</b> creates + fills a table from a query.</li>
+  <li>Retention 1–120 days (default 30) bounds time travel, clones and restore points.</li>
+</ul></div>
 
-<h2>Architecture</h2>
-<ul>
-<li><strong>Delta under the hood</strong>: every warehouse table is stored as <strong>Delta Parquet in OneLake</strong> (written with V-Order by default). Spark, Direct Lake, other warehouses and shortcuts can read the same files – no export needed (OneCopy).</li>
-<li><strong>Distributed, serverless engine</strong>: compute is separated from storage and scales automatically within your Fabric capacity; there are no distributions, indexes or pools for you to manage. The same engine powers every SQL analytics endpoint.</li>
-<li><strong>Read-write T-SQL</strong>: full DML (<code>INSERT</code>, <code>UPDATE</code>, <code>DELETE</code>, <code>MERGE</code>, <code>TRUNCATE</code>), DDL, <strong>multi-table ACID transactions</strong>, stored procedures, views, functions.</li>
-<li><strong>Automatic maintenance</strong>: data compaction and garbage collection run in the background – no OPTIMIZE/VACUUM to schedule.</li>
-<li><strong>Cross-database queries</strong> with <strong>three-part names</strong> (<code>database.schema.table</code>) across warehouses and SQL analytics endpoints <strong>in the same workspace</strong>, without copying data. In the query editor, add the other item to the Explorer (<em>+ Warehouses</em>) first. Data in other workspaces: create a lakehouse shortcut and query it through that endpoint.</li>
-<li>Connect with the Fabric query editor, visual query editor, SSMS, VS Code (mssql), any TDS client via the SQL connection string; Spark via the <code>synapsesql</code> connector.</li>
-</ul>
-<pre><code>-- In Warehouse WH1: join a warehouse fact to a lakehouse dimension, no data movement
-SELECT c.Country, SUM(f.SalesAmount) AS Sales
-FROM dbo.FactSales AS f
-JOIN LH1.dbo.DimCustomer AS c          -- three-part name: lakehouse SQL endpoint
-  ON f.CustomerKey = c.CustomerKey
-GROUP BY c.Country;
-
--- Write a lakehouse-derived result into the warehouse
-INSERT INTO dbo.DimProduct (ProductID, ProductName)
-SELECT ProductID, ProductName FROM LH_Silver.dbo.products;</code></pre>
-<pre><code># From a PySpark notebook: append a DataFrame to a warehouse table
-# (Spark connector for Fabric Data Warehouse; stages data and ingests with COPY INTO)
-df.write.mode("append").synapsesql("Warehouse1.dbo.FactSales")
-wh_df = spark.read.synapsesql("Warehouse1.dbo.DimCustomer")</code></pre>
-
-<div class="check" data-answer="2">
-<p>You need a single T-SQL query in Warehouse1 that joins <code>dbo.FactSales</code> to the <code>Customer</code> table of Lakehouse1 in the same workspace, without copying data. What should you do?</p>
-<ul><li>Create an external table with OPENROWSET over the lakehouse Parquet files</li><li>Add Lakehouse1 to the query editor Explorer and reference <code>Lakehouse1.dbo.Customer</code></li><li>Copy the table with a pipeline into Warehouse1 first</li><li>Create a linked server to the SQL analytics endpoint</li></ul>
-<p class="why">Cross-database queries within a workspace use three-part names and read the data in place through the lakehouse's SQL analytics endpoint. Linked servers aren't supported and copying is unnecessary.</p>
+<section class="lesson">
+<h2>Warehouse vs SQL analytics endpoint</h2>
+<p class="idea">Same engine, same Delta storage: the warehouse writes, the endpoint only reads.</p>
+<div class="vs">
+  <div><h4>🏢 Warehouse</h4><ul><li>INSERT, UPDATE, DELETE, MERGE, COPY INTO</li><li>Multi-table ACID transactions</li><li>Clones, restore points, time travel</li><li>Automatic compaction &amp; cleanup</li></ul></div>
+  <div class="vsmark">VS</div>
+  <div><h4>🔎 SQL analytics endpoint</h4><ul><li>Read-only data (lakehouse writes via Spark)</li><li>Views, functions, procedures, security OK</li><li>No clones / restore points</li><li>You run OPTIMIZE / VACUUM</li></ul></div>
 </div>
-
-<h2>T-SQL surface area: supported vs unsupported</h2>
-<div class="tw"><table>
-<thead><tr><th>Supported (warehouse)</th><th>Not supported / limited</th></tr></thead>
-<tbody>
-<tr><td>
-<ul>
-<li>CREATE/DROP TABLE, CTAS, <code>SELECT … INTO</code>, <code>TRUNCATE TABLE</code></li>
-<li><strong>IDENTITY</strong> columns – <strong>BIGINT only</strong>, engine-generated unique values (not guaranteed sequential; no seed/increment)</li>
-<li><strong><code>MERGE</code> – generally available</strong></li>
-<li>Session-scoped <code>#temp</code> tables</li>
-<li><code>ALTER TABLE</code>: ADD nullable column, DROP COLUMN, ADD/DROP <code>PRIMARY KEY</code>/<code>UNIQUE</code>/<code>FOREIGN KEY</code> <strong>only with <code>NOT ENFORCED</code></strong> (PK/UNIQUE also <code>NONCLUSTERED</code>); ALTER COLUMN in preview</li>
-<li><code>sp_rename</code> for columns/tables</li>
-<li>Views, stored procedures, inline TVFs and scalar UDFs</li>
-<li>CTEs (nested CTEs preview), window functions, <code>QUALIFY</code>, <code>GROUP BY ALL</code>, FROM-first syntax</li>
-<li>Subset of query/join hints; <code>OPTION (FOR TIMESTAMP AS OF …)</code></li>
-<li>COPY INTO, OPENROWSET for files</li>
-<li>Explicit transactions (BEGIN/COMMIT/ROLLBACK), including supported DDL</li>
-</ul></td>
-<td>
-<ul>
-<li><strong>Triggers</strong></li>
-<li><strong>Materialized views</strong></li>
-<li><strong>Synonyms</strong></li>
-<li><strong>Recursive queries</strong> (recursive CTEs)</li>
-<li><code>CREATE USER</code> (identities come from Entra ID)</li>
-<li>Manually created <strong>multi-column statistics</strong></li>
-<li><code>SET TRANSACTION ISOLATION LEVEL</code> (always snapshot), <code>SET ROWCOUNT</code></li>
-<li><code>FOR XML</code>; <code>FOR JSON</code> only as the last operator</li>
-<li><code>PREDICT</code>, <code>sp_showspaceused</code></li>
-<li>Indexes (clustered/nonclustered) – not needed/available</li>
-<li>Enforced constraints – PK/FK/UNIQUE are metadata only; your load must guarantee uniqueness</li>
-<li>Distributed, named, marked transactions and savepoints</li>
-<li>Vector data type</li>
-</ul></td></tr>
-</tbody></table></div>
-<div class="note">The surface area changes often. When migrating, check the current "T-SQL surface area" and "Limitations" pages on Microsoft Learn. As of late 2026: IDENTITY (BIGINT) and MERGE are supported; triggers are not, so auditing logic has to move into load procedures or pipelines.</div>
-<pre><code>CREATE TABLE dbo.DimCustomer
-(
-    CustomerKey    BIGINT IDENTITY,          -- surrogate key generated by the engine
-    CustomerID     VARCHAR(20)  NOT NULL,    -- business key
-    CustomerName   VARCHAR(200) NOT NULL,
-    City           VARCHAR(100) NULL,
-    ValidFrom      DATETIME2(6) NOT NULL,
-    ValidTo        DATETIME2(6) NULL,
-    IsCurrent      BIT          NOT NULL
-);
-
-ALTER TABLE dbo.DimCustomer
-  ADD CONSTRAINT PK_DimCustomer PRIMARY KEY NONCLUSTERED (CustomerKey) NOT ENFORCED;
-
-ALTER TABLE dbo.FactSales
-  ADD CONSTRAINT FK_FactSales_Customer FOREIGN KEY (CustomerKey)
-  REFERENCES dbo.DimCustomer (CustomerKey) NOT ENFORCED;</code></pre>
-<p>Declared (unenforced) keys still help: tools read them (e.g. relationship detection) and the optimizer can use them. But a duplicate key is <em>not</em> rejected – validate in the load.</p>
-
-<div class="check" data-answer="2">
-<p>You're migrating a SQL Server data warehouse that uses IDENTITY surrogate keys, MERGE upserts, #temp tables in load procedures and DML triggers for auditing. Which component must be redesigned for a Fabric warehouse?</p>
-<ul><li>IDENTITY columns</li><li>DML triggers</li><li>MERGE statements</li><li>#temp tables</li></ul>
-<p class="why">Triggers are unsupported in Fabric Data Warehouse. IDENTITY (BIGINT), MERGE (GA) and session-scoped temp tables are supported.</p>
+<div class="icards" data-hint="Click a card.">
+  <div class="icard" data-title="Delta in OneLake" data-info="Every warehouse table is Delta Parquet in OneLake, V-Ordered by default. Spark, Direct Lake and shortcuts read the same files: OneCopy, no export."><div class="i">🧊</div><h4>Delta in OneLake</h4><p>Open format, V-Order on</p></div>
+  <div class="icard" data-title="Serverless engine" data-info="Compute separated from storage, scales within the capacity. No distributions, indexes or pools to manage. Same engine powers every SQL analytics endpoint."><div class="i">⚡</div><h4>Serverless engine</h4><p>Nothing to tune</p></div>
+  <div class="icard" data-title="Cross-database queries" data-info="Three-part names (database.schema.table) across warehouses and SQL endpoints in the SAME workspace, no copy. Add the item to the Explorer first. Other workspaces: create a lakehouse shortcut."><div class="i">🔗</div><h4>Cross-database</h4><p>LH1.dbo.Customer</p></div>
+  <div class="icard" data-title="SQL database in Fabric" data-info="Azure SQL Database engine for OLTP apps (frequent single-row writes). Data auto-replicated to OneLake as Delta with its own SQL endpoint: analyse without ETL."><div class="i">🗄️</div><h4>SQL database</h4><p>OLTP, mirrored to OneLake</p></div>
 </div>
+<div class="check" data-answer="2"><p>One T-SQL query in Warehouse1 must join dbo.FactSales to Lakehouse1's Customer table (same workspace) without copying data. What do you do?</p><ul><li>External table with OPENROWSET over the Parquet files</li><li>Add Lakehouse1 to the Explorer and reference Lakehouse1.dbo.Customer</li><li>Copy the table with a pipeline first</li><li>Create a linked server</li></ul><p class="why">Cross-database queries use three-part names within a workspace. Linked servers aren't supported.</p></div>
+<details><summary>Deep dive: connecting, Spark connector, 3-way comparison</summary>
+<ul>
+<li>Connect with the query editor, visual query editor, SSMS, VS Code (mssql), any TDS client.</li>
+<li>Spark: <code>df.write.mode("append").synapsesql("Warehouse1.dbo.FactSales")</code>, <code>spark.read.synapsesql("Warehouse1.dbo.DimCustomer")</code> (stages + COPY INTO).</li>
+<li>Time travel: warehouse 1–120 d; endpoint bounded by Delta VACUUM retention; SQL database: point-in-time restore.</li>
+<li>Security (GRANT/DENY, RLS, CLS, DDM, ReadData/ReadAll) → Security &amp; governance page.</li>
+</ul></details>
+</section>
 
-<h2>Data types</h2>
-<div class="tw"><table>
-<thead><tr><th>Category</th><th>Supported for tables</th><th>Unsupported → use instead</th></tr></thead>
-<tbody>
-<tr><td>Exact numerics</td><td><code>bit</code>, <code>smallint</code>, <code>int</code>, <code>bigint</code>, <code>decimal/numeric</code></td><td><code>tinyint</code> → smallint; <code>money/smallmoney</code> → decimal</td></tr>
-<tr><td>Approximate</td><td><code>float</code>, <code>real</code></td><td></td></tr>
-<tr><td>Date/time</td><td><code>date</code>, <code>time(n)</code>, <code>datetime2(n)</code> – max <strong>6</strong> fractional digits</td><td><code>datetime/smalldatetime</code> → datetime2; <code>datetimeoffset</code> → datetime2 (+ AT TIME ZONE)</td></tr>
-<tr><td>Strings</td><td><code>char</code>, <code>varchar</code> (<code>varchar(max)</code> up to 16 MB), UTF-8 collations</td><td><code>nchar/nvarchar</code> → char/varchar; <code>text/ntext</code> → varchar; <code>json</code> → varchar; <code>xml</code> → none</td></tr>
-<tr><td>Binary</td><td><code>varbinary</code> (max 16 MB), <code>uniqueidentifier</code> (stored as binary – not readable from the SQL endpoint)</td><td><code>image</code> → varbinary; geography/geometry → lat/long columns, WKB varbinary or WKT varchar</td></tr>
-</tbody></table></div>
-<p>Unsupported types may still be used in variables, parameters and in-memory expressions – just not persisted in tables or views. The default warehouse collation is <code>Latin1_General_100_BIN2_UTF8</code> (case-sensitive); a case-insensitive collation (<code>Latin1_General_100_CI_AS_KS_WS_SC_UTF8</code>) can be chosen when the warehouse is created (e.g. through the REST API).</p>
-
-<div class="match" data-task="Match each unsupported SQL Server type to its Fabric warehouse replacement.">
+<section class="lesson">
+<h2>What T-SQL runs here?</h2>
+<p class="idea">Most DW T-SQL works; triggers, indexes and enforced constraints don't.</p>
+<div class="tw"><table class="matrix">
+<tr><th>Feature</th><th>🏢 Warehouse</th><th>🔎 SQL endpoint</th></tr>
+<tr><td>SELECT, views, inline TVFs, procedures</td><td>✓</td><td>✓</td></tr>
+<tr><td>CTEs, window functions, QUALIFY</td><td>✓</td><td>✓</td></tr>
+<tr><td>INSERT / UPDATE / DELETE / TRUNCATE</td><td>✓</td><td>✗ read-only</td></tr>
+<tr><td>MERGE</td><td>✓ GA</td><td>✗</td></tr>
+<tr><td>#temp tables (session)</td><td>✓</td><td>—</td></tr>
+<tr><td>IDENTITY</td><td>~ BIGINT only, not sequential</td><td>✗</td></tr>
+<tr><td>PK / FK / UNIQUE</td><td>~ NOT ENFORCED only</td><td>✗</td></tr>
+<tr><td>ALTER TABLE</td><td>~ add nullable / drop column</td><td>✗</td></tr>
+<tr><td>Explicit transactions</td><td>✓ snapshot isolation</td><td>~ read-only</td></tr>
+<tr><td>Triggers</td><td>✗</td><td>✗</td></tr>
+<tr><td>Indexes, materialized views, synonyms</td><td>✗</td><td>✗</td></tr>
+<tr><td>Recursive CTEs, CREATE USER</td><td>✗</td><td>✗</td></tr>
+<tr><td>Multi-column statistics</td><td>✗ single-column only</td><td>✗</td></tr>
+</table></div>
+<div class="sim">
+  <div class="wtitle">Can I run this?</div>
+  <div class="p06-row"><span>Statement <b id="p06-n"></b></span><span class="p06-score" id="p06-score"></span></div>
+  <div class="p06-stmt" id="p06-stmt"></div>
+  <div class="p06-row"><span>Runs in a <b>warehouse</b>?</span><button id="p06-yes">✓ Yes</button><button id="p06-no">✗ No</button><button id="p06-next" class="primary">Next →</button></div>
+  <div class="out" id="p06-out"><span class="muted">Guess first, then see both engines.</span></div>
+</div>
+<script>
+(function () {
+  var $ = function (id) { return document.getElementById(id); };
+  // [statement, warehouse ok?, warehouse note, endpoint state (1 ok, 0 no, 2 partial), endpoint note]
+  var S = [
+    ['CREATE TABLE dbo.DimCustomer (\n  CustomerKey BIGINT IDENTITY,\n  CustomerID VARCHAR(20) NOT NULL);', 1, 'IDENTITY works on BIGINT; values unique, not sequential, no seed/increment.', 0, 'No CREATE TABLE on the endpoint.'],
+    ['MERGE dbo.DimProduct AS t USING stg.Product AS s\n  ON t.ProductID = s.ProductID\nWHEN MATCHED THEN UPDATE SET t.Name = s.Name\nWHEN NOT MATCHED THEN INSERT …;', 1, 'MERGE is generally available.', 0, 'Endpoint data is read-only.'],
+    ['CREATE TRIGGER trg_Audit ON dbo.Orders\nAFTER INSERT AS …', 0, 'Triggers are not supported: move audit logic into load procedures or pipelines.', 0, 'Not supported.'],
+    ['CREATE VIEW rpt.vSales AS\nSELECT Region, SUM(Amount) AS Sales\nFROM dbo.Sales GROUP BY Region;', 1, 'Views are supported.', 1, 'Views are allowed on the endpoint (metadata, not data).'],
+    ['CREATE NONCLUSTERED INDEX ix_Cust\n  ON dbo.FactSales (CustomerKey);', 0, 'No indexes: the engine manages layout. Fix slow joins with statistics instead.', 0, 'Not supported.'],
+    ['ALTER TABLE dbo.DimCustomer ADD CONSTRAINT PK_Cust\n  PRIMARY KEY NONCLUSTERED (CustomerKey) NOT ENFORCED;', 1, 'Allowed, metadata only. Duplicates are NOT rejected: validate in the load.', 0, 'Not on endpoint tables.'],
+    ['ALTER TABLE dbo.DimCustomer ADD CONSTRAINT PK_Cust\n  PRIMARY KEY (CustomerKey);', 0, 'Enforced constraints are not supported: add NONCLUSTERED … NOT ENFORCED.', 0, 'Not supported.'],
+    ["COPY INTO dbo.FactSales\nFROM 'https://…/Files/sales/*.parquet'\nWITH (FILE_TYPE = 'PARQUET');", 1, 'Bulk load of CSV/Parquet/JSONL. Target table must exist.', 0, 'No writes on the endpoint.'],
+    ['CREATE TABLE dbo.FactSales_Test\n  AS CLONE OF dbo.FactSales;', 1, 'Zero-copy clone: metadata only, same warehouse.', 0, 'Clones are not available on the endpoint.'],
+    ["SELECT * FROM dbo.FactSales\nOPTION (FOR TIMESTAMP AS OF '2026-11-03T18:00:00.000');", 1, 'Time travel within retention (1–120 days).', 2, 'Possible with the new metadata sync; bounded by Delta VACUUM retention.'],
+    ['CREATE MATERIALIZED VIEW mv_Sales AS …', 0, 'Not supported: materialise with CTAS instead.', 0, 'Not supported.'],
+    ['WITH r AS (SELECT … UNION ALL\n  SELECT … FROM r JOIN …)  -- recursive\nSELECT * FROM r;', 0, 'Recursive CTEs are not supported.', 0, 'Not supported.'],
+    ['CREATE TABLE dbo.T (Name NVARCHAR(50), Ts DATETIME);', 0, 'nvarchar and datetime are unsupported table types: use varchar (UTF-8) and datetime2.', 0, 'No CREATE TABLE anyway.'],
+    ['BEGIN TRAN;\n  UPDATE dbo.A …;  UPDATE dbo.B …;\nCOMMIT;', 1, 'Multi-table ACID transaction (snapshot isolation). Savepoints/distributed transactions are not.', 0, 'Endpoint can\'t UPDATE.'],
+    ['CREATE STATISTICS st_ab ON dbo.FactSales (A, B);', 0, 'Manual statistics are single-column only.', 0, 'Not supported.'],
+    ['TRUNCATE TABLE stg.Orders;', 1, 'Supported (also inside a transaction).', 0, 'Read-only.'],
+    ['CREATE USER [ana@contoso.com];', 0, 'No CREATE USER: identities come from Entra ID; grant permissions to them.', 0, 'Not supported.']
+  ];
+  var i = 0, done = false, ok = 0, tried = 0;
+  function show() {
+    done = false;
+    $('p06-n').textContent = (i + 1) + ' / ' + S.length;
+    $('p06-stmt').textContent = S[i][0];
+    $('p06-out').innerHTML = '<span class="muted">Guess first, then see both engines.</span>';
+    $('p06-score').textContent = tried ? 'Score ' + ok + ' / ' + tried : '';
+  }
+  function badge(v) { return v === 1 ? '<span class="badge ok">✓ runs</span>' : v === 2 ? '<span class="badge warn">~ limited</span>' : '<span class="badge bad">✗ fails</span>'; }
+  function guess(g) {
+    if (done) return; done = true; tried++;
+    var s = S[i], right = (g === !!s[1]); if (right) ok++;
+    $('p06-out').innerHTML = (right ? '🎉 Correct!' : '❌ Not quite.') +
+      '<div class="p06-eng"><div><b>🏢 Warehouse</b> ' + badge(s[1]) + '<br>' + s[2] + '</div><div><b>🔎 SQL endpoint</b> ' + badge(s[3]) + '<br>' + s[4] + '</div></div>';
+    $('p06-score').textContent = 'Score ' + ok + ' / ' + tried;
+  }
+  $('p06-yes').onclick = function () { guess(true); };
+  $('p06-no').onclick = function () { guess(false); };
+  $('p06-next').onclick = function () { i = (i + 1) % S.length; show(); };
+  show();
+})();
+</script>
+<div class="match" data-task="Unsupported type → what to use instead.">
 <dl>
-<dt>datetime</dt><dd>datetime2</dd>
+<dt>datetime</dt><dd>datetime2 (max 6 fractional digits)</dd>
 <dt>nvarchar</dt><dd>varchar with UTF-8 collation</dd>
 <dt>money</dt><dd>decimal</dd>
 <dt>tinyint</dt><dd>smallint</dd>
 <dt>image</dt><dd>varbinary</dd>
-<dt>json</dt><dd>varchar holding the JSON text</dd>
-</dl>
+</dl></div>
+<div class="check" data-answer="2"><p>Migrating a SQL Server DW with IDENTITY keys, MERGE upserts, #temp tables and DML triggers for auditing. What must be redesigned?</p><ul><li>IDENTITY columns</li><li>DML triggers</li><li>MERGE statements</li><li>#temp tables</li></ul><p class="why">Triggers are unsupported; IDENTITY (BIGINT), MERGE and session #temp tables work.</p></div>
+<details><summary>Deep dive: more surface-area and type details</summary>
+<ul>
+<li>Also supported: SELECT … INTO, sp_rename, scalar UDFs, nested CTEs (preview), GROUP BY ALL, FROM-first syntax, a subset of hints, OPENROWSET, DDL inside transactions. ALTER COLUMN in preview.</li>
+<li>Not supported: SET TRANSACTION ISOLATION LEVEL (always snapshot), SET ROWCOUNT, PREDICT, sp_showspaceused, named/marked/distributed transactions, savepoints, vector type. FOR XML; FOR JSON only as last operator.</li>
+<li>Unenforced keys still help: tools detect relationships, the optimizer can use them.</li>
+<li>More types: datetimeoffset → datetime2 (+ AT TIME ZONE); text/ntext/json → varchar; xml → none; geography/geometry → lat/long, WKB varbinary or WKT varchar. varchar(max)/varbinary(max) up to 16 MB. uniqueidentifier stored as binary (not readable from the endpoint).</li>
+<li>Unsupported types are fine in variables/parameters, not in tables. Default collation Latin1_General_100_BIN2_UTF8 (case-sensitive); a CI collation can be chosen at creation (e.g. REST API).</li>
+<li>The surface area changes often: check Microsoft Learn "T-SQL surface area" when migrating.</li>
+</ul></details>
+</section>
+
+<section class="lesson">
+<h2>Loading data</h2>
+<p class="idea">Files → COPY INTO. Query → CTAS or INSERT…SELECT. Many sources → pipeline. Low-code → Dataflow Gen2.</p>
+<div class="icards" data-hint="Click a loading option.">
+  <div class="icard" data-title="COPY INTO" data-info="High-throughput bulk load of CSV, Parquet, JSONL from ADLS Gen2, Blob Storage or OneLake. Wildcards, error files, column mapping/defaults. Target table must exist. Runs in the caller's security context."><div class="i">📥</div><h4>COPY INTO</h4><p>Bulk-load files</p></div>
+  <div class="icard" data-title="CTAS" data-info="CREATE TABLE … AS SELECT: create + fill in one set-based, minimally logged step inside the engine. Also the fix for views that make Direct Lake fall back."><div class="i">🏗️</div><h4>CTAS</h4><p>New table from a query</p></div>
+  <div class="icard" data-title="INSERT…SELECT / MERGE" data-info="Append into existing tables, including cross-database from lakehouse endpoints. MERGE/UPDATE/DELETE for upserts, SCD and deletes."><div class="i">➕</div><h4>INSERT…SELECT</h4><p>Append / upsert existing</p></div>
+  <div class="icard" data-title="Pipeline / Copy job" data-info="Copy activity or Copy job: 100+ sources, on-premises through a gateway, orchestration, incremental copy. Uses COPY INTO under the hood; staging may be required."><div class="i">🚚</div><h4>Pipeline / Copy job</h4><p>Many sources, on-prem</p></div>
+  <div class="icard" data-title="Dataflow Gen2" data-info="Power Query low-code transforms with a warehouse destination: Append or Replace."><div class="i">🧪</div><h4>Dataflow Gen2</h4><p>Low-code transforms</p></div>
+  <div class="icard" data-title="Spark synapsesql / OPENROWSET" data-info="synapsesql writes a DataFrame from a notebook (append/overwrite). OPENROWSET(BULK …) queries Parquet/CSV/JSONL in place, or INSERT … SELECT FROM OPENROWSET."><div class="i">🐍</div><h4>synapsesql · OPENROWSET</h4><p>Notebook / ad-hoc files</p></div>
 </div>
-
-<h2>Loading data into a warehouse</h2>
-<div class="tw"><table>
-<thead><tr><th>Method</th><th>Best for</th><th>Notes</th></tr></thead>
-<tbody>
-<tr><td><strong>COPY INTO</strong></td><td>High-throughput bulk load of files</td><td>CSV, <strong>Parquet</strong>, <strong>JSONL</strong> from <strong>ADLS Gen2, Azure Blob Storage, OneLake</strong>; wildcards, multiple files, error files, column mapping/defaults. Target table must exist.</td></tr>
-<tr><td><strong>CTAS</strong> (<code>CREATE TABLE AS SELECT</code>)</td><td>Create + populate a new table from a query (e.g. gold from three silver tables)</td><td>Single set-based, minimally logged operation; runs inside the engine – no data movement</td></tr>
-<tr><td><strong>INSERT … SELECT</strong> / <code>SELECT … INTO</code></td><td>Append into existing tables, cross-database loads from lakehouse endpoints</td><td>Set-based T-SQL ELT</td></tr>
-<tr><td><strong>MERGE</strong>, UPDATE/DELETE</td><td>Upserts, SCD, applying deletes</td><td>Watch write-write conflicts (table-level)</td></tr>
-<tr><td><strong>Pipelines (Copy activity)</strong> / <strong>Copy job</strong></td><td>100+ sources, on-premises via gateway, orchestration, incremental copy</td><td>Uses COPY INTO under the hood; staging may be required for some source/sink combinations</td></tr>
-<tr><td><strong>Dataflow Gen2</strong></td><td>Low-code Power Query transforms with a warehouse destination</td><td>Append or Replace update methods</td></tr>
-<tr><td>Spark <code>synapsesql</code></td><td>Write a DataFrame from a notebook into a warehouse table</td><td>Supports append/overwrite modes</td></tr>
-<tr><td><strong>OPENROWSET(BULK …)</strong></td><td>Ad-hoc query of Parquet/CSV/JSONL files, or <code>INSERT … SELECT FROM OPENROWSET</code></td><td>Reads files in place</td></tr>
-</tbody></table></div>
-<h3>COPY INTO examples</h3>
-<pre><code>-- Parquet from OneLake (lakehouse Files) – caller's Entra identity is used, no CREDENTIAL needed
-COPY INTO dbo.FactSales
-FROM 'https://onelake.dfs.fabric.microsoft.com/&lt;workspaceId&gt;/&lt;lakehouseId&gt;/Files/sales/2026/*.parquet'
-WITH (FILE_TYPE = 'PARQUET');
-
--- Gzipped CSV from ADLS Gen2 with SAS, skip header, capture rejected rows
-COPY INTO dbo.StageCustomer (CustomerID 1, CustomerName 2, City DEFAULT 'Unknown' 3)
+<div class="decide" data-task="Which loading method?">
+  <div data-node="start" data-q="Where is the data now?"><button data-go="files">Files in ADLS / Blob / OneLake</button><button data-go="tables">Tables in Fabric</button><button data-go="ext">External DBs, SaaS, on-prem</button><button data-go="spark">Spark DataFrame</button></div>
+  <div data-node="files" data-q="Who loads it?"><button data-go="copy">SQL developer, T-SQL</button><button data-go="pipe">Scheduled, orchestrated</button></div>
+  <div data-node="tables" data-q="Does the target table exist yet?"><button data-go="ctas">No, create it</button><button data-go="ins">Yes, add / upsert rows</button></div>
+  <div data-node="ext" data-q="Do analysts need low-code transforms?"><button data-go="df">Yes</button><button data-go="pipe">No, just copy</button></div>
+  <div data-node="copy" data-result>📥 <b>COPY INTO</b>: fastest T-SQL bulk load (CSV, Parquet, JSONL).</div>
+  <div data-node="pipe" data-result>🚚 <b>Pipeline Copy activity / Copy job</b>: orchestration, gateway, incremental.</div>
+  <div data-node="ctas" data-result>🏗️ <b>CTAS</b>: create + populate in one set-based step.</div>
+  <div data-node="ins" data-result>➕ <b>INSERT…SELECT</b> (or <b>MERGE</b> for upserts), cross-database with 3-part names.</div>
+  <div data-node="df" data-result>🧪 <b>Dataflow Gen2</b> with a warehouse destination.</div>
+  <div data-node="spark" data-result>🐍 <b>synapsesql</b> connector: <code>df.write.synapsesql("WH.dbo.T")</code>.</div>
+</div>
+<div class="walk">
+<pre><code>COPY INTO dbo.StageCustomer (CustomerID 1, CustomerName 2, City DEFAULT 'Unknown' 3)
 FROM 'https://contosolake.dfs.core.windows.net/raw/customers/*.csv.gz'
 WITH (
-    FILE_TYPE       = 'CSV',
-    CREDENTIAL      = (IDENTITY = 'Shared Access Signature', SECRET = '&lt;sas-token&gt;'),
-    COMPRESSION     = 'Gzip',
-    FIELDTERMINATOR = ',',
-    ROWTERMINATOR   = '0x0A',
-    FIRSTROW        = 2,
-    MAXERRORS       = 10,
-    ERRORFILE       = '/rejected'          -- writes a _rejectedrows folder
-);
-
--- Firewalled storage: authorize with the workspace identity (+ trusted workspace access)
-COPY INTO dbo.Orders
-FROM 'https://securelake.blob.core.windows.net/raw/orders/'
-WITH (FILE_TYPE = 'PARQUET', CREDENTIAL = (IDENTITY = 'Workspace Identity'));</code></pre>
-<ul>
-<li>Authentication: <strong>Entra ID</strong> of the executing user (default – no CREDENTIAL), <strong>SAS</strong> (needs Read + List), <strong>storage account key</strong>, or <strong>Workspace Identity</strong>. Firewalled storage: Entra ID or workspace identity, with the workspace added as a <strong>resource instance rule</strong>. OneLake sources: Entra ID or workspace identity.</li>
-<li>For Parquet, column names must match exactly (non-matching target columns get NULL); type conversion errors fail the load regardless of MAXERRORS. ERRORFILE applies to CSV and JSONL.</li>
-<li>COPY INTO runs in the caller's SQL security context – a low-privileged loader doesn't need CONTROL on the warehouse.</li>
-</ul>
-<h3>CTAS and INSERT…SELECT</h3>
-<pre><code>-- Build a gold table in one set-based step
-CREATE TABLE gold.FactSalesDaily
+    FILE_TYPE  = 'CSV',
+    CREDENTIAL = (IDENTITY = 'Shared Access Signature', SECRET = '&lt;sas&gt;'),
+    COMPRESSION = 'Gzip',
+    FIRSTROW   = 2,
+    MAXERRORS  = 10,
+    ERRORFILE  = '/rejected'
+);</code></pre>
+<ol>
+  <li data-lines="1">Target must exist. Map columns by position, with defaults.</li>
+  <li data-lines="2">Wildcards load many files at once.</li>
+  <li data-lines="5">Auth: Entra ID (default, no CREDENTIAL), SAS (Read + List), key, or <b>Workspace Identity</b> for firewalled storage.</li>
+  <li data-lines="6-7">Gzip CSV, skip the header row.</li>
+  <li data-lines="8-9">Tolerate 10 bad rows; write them to a <code>_rejectedrows</code> folder (CSV/JSONL).</li>
+</ol>
+</div>
+<div class="walk">
+<pre><code>CREATE TABLE gold.FactSalesDaily
 AS
 SELECT  d.DateKey, p.ProductKey, c.CustomerKey,
-        SUM(s.Quantity)              AS Quantity,
         SUM(s.Quantity * s.UnitPrice) AS SalesAmount
 FROM    silver.Sales     AS s
 JOIN    gold.DimDate     AS d ON d.[Date] = CAST(s.OrderDate AS date)
 JOIN    gold.DimProduct  AS p ON p.ProductID = s.ProductID
 JOIN    gold.DimCustomer AS c ON c.CustomerID = s.CustomerID AND c.IsCurrent = 1
-GROUP BY d.DateKey, p.ProductKey, c.CustomerKey;
-
--- Idempotent reload of one day
-DELETE FROM gold.FactSalesDaily WHERE DateKey = 20261103;
-INSERT INTO gold.FactSalesDaily (DateKey, ProductKey, CustomerKey, Quantity, SalesAmount)
-SELECT … WHERE CAST(s.OrderDate AS date) = '2026-11-03' …;</code></pre>
-
-<div class="check" data-answer="3">
-<p>Which statement about COPY INTO in a Fabric warehouse is true?</p>
-<ul><li>It can only load from OneLake</li><li>It creates the target table automatically</li><li>It bulk loads CSV, Parquet and JSONL files from ADLS Gen2, Blob Storage or OneLake</li><li>It supports Avro and ORC</li></ul>
-<p class="why">COPY INTO supports CSV, Parquet and JSONL from ADLS Gen2, Azure Blob Storage and OneLake; the target table must already exist.</p>
+GROUP BY d.DateKey, p.ProductKey, c.CustomerKey;</code></pre>
+<ol>
+  <li data-lines="1-2">CTAS creates the table: no CREATE TABLE needed first.</li>
+  <li data-lines="3-4">Swap business keys for surrogate keys and aggregate.</li>
+  <li data-lines="6-8">Join dimensions; only the current SCD2 version of customers.</li>
+  <li data-lines="9">Pre-aggregated to daily grain: one set-based step, no data movement.</li>
+</ol>
 </div>
-
-<div class="sort" data-task="Pick the best loading method for each requirement.">
-<ul data-bucket="COPY INTO"><li>Bulk load 2,000 Parquet files from ADLS Gen2 with T-SQL</li><li>Load gzipped CSVs and capture rejected rows in an error folder</li></ul>
-<ul data-bucket="CTAS"><li>Create a new gold table from a join of three silver tables</li><li>Materialise a SQL view's logic as a Delta table for Direct Lake</li></ul>
-<ul data-bucket="Pipeline Copy activity"><li>Copy 60 tables from an on-premises SQL Server through a gateway</li><li>Metadata-driven Lookup + ForEach copy from many sources</li></ul>
-<ul data-bucket="Dataflow Gen2"><li>Business analyst merges a SharePoint list with Excel using Power Query</li><li>Low-code unpivot and load to a warehouse table</li></ul>
+<div class="remember"><b>"COPY needs a home, CTAS builds one."</b> COPY INTO loads into an existing table; CTAS creates the table from a query.</div>
+<div class="sort" data-task="Pick the loading method for each scenario.">
+<ul data-bucket="📥 COPY INTO"><li>2,000 Parquet files from ADLS Gen2 with T-SQL</li><li>Gzipped CSVs, keep rejected rows</li></ul>
+<ul data-bucket="🏗️ CTAS"><li>New gold table from three silver tables</li><li>Materialise a view for Direct Lake</li></ul>
+<ul data-bucket="🚚 Pipeline"><li>60 tables from on-prem SQL via gateway</li><li>Metadata-driven Lookup + ForEach copy</li></ul>
+<ul data-bucket="🧪 Dataflow Gen2"><li>Analyst merges SharePoint list with Excel</li><li>Low-code unpivot into a warehouse table</li></ul>
 </div>
-
-<h2>Zero-copy table clone</h2>
-<pre><code>-- Current state
-CREATE TABLE dbo.FactSales_Test AS CLONE OF dbo.FactSales;
-
--- Point in time (UTC) within the retention period
-CREATE TABLE test.FactSales_0101 AS CLONE OF dbo.FactSales AT '2026-11-01T00:00:00.000';</code></pre>
+<div class="check" data-answer="3"><p>Which statement about COPY INTO in a Fabric warehouse is true?</p><ul><li>It only loads from OneLake</li><li>It creates the target table automatically</li><li>It bulk loads CSV, Parquet and JSONL from ADLS Gen2, Blob or OneLake</li><li>It supports Avro and ORC</li></ul><p class="why">Three formats, three source stores; the target table must exist.</p></div>
+<details><summary>Deep dive: COPY INTO fine print, idempotent reloads</summary>
 <ul>
-<li>Copies <strong>only metadata</strong>; the clone references the same Parquet files → near-instant, minimal storage (extra storage only as the tables diverge).</li>
-<li>Clone and source are <strong>independent</strong>: later DML/DDL on either isn't reflected in the other. Either can be dropped freely.</li>
-<li>Within or across <strong>schemas</strong> of the same warehouse; groups of tables can be cloned at the same point in time. <strong>Not</strong> across warehouses or workspaces, <strong>not</strong> on the SQL analytics endpoint, and no warehouse/schema-level clone.</li>
-<li>Inherits object-level security, RLS, dynamic data masking and PK/unique constraints of the source.</li>
-<li>Permissions: Admin/Member/Contributor workspace role (Viewer can't), SELECT on all source rows/columns, CREATE TABLE in the target schema.</li>
-<li>Uses: dev/test copies of production, stable reporting snapshots, recovery after a bad release, archiving month-end state.</li>
-</ul>
+<li>Parquet: column names must match exactly (non-matching target columns get NULL); type errors fail regardless of MAXERRORS.</li>
+<li>Firewalled storage: Entra ID or Workspace Identity + resource instance rule (trusted workspace access). OneLake sources: Entra ID or workspace identity.</li>
+<li>A low-privileged loader doesn't need CONTROL on the warehouse.</li>
+<li>Idempotent day reload: <code>DELETE … WHERE DateKey = 20261103;</code> then <code>INSERT … SELECT … WHERE OrderDate = '2026-11-03'</code>.</li>
+</ul></details>
+</section>
 
-<h2>Time travel, retention and restore points</h2>
-<h3>Time travel with FOR TIMESTAMP AS OF</h3>
-<pre><code>SELECT c.Country, SUM(f.SalesAmount) AS Sales
-FROM dbo.FactSales AS f
-JOIN dbo.DimCustomer AS c ON c.CustomerKey = f.CustomerKey
-GROUP BY c.Country
-OPTION (FOR TIMESTAMP AS OF '2026-11-03T18:00:00.000');   -- UTC, max 3 fractional digits</code></pre>
-<ul>
-<li>Applies to the <strong>whole statement</strong> (all joined tables) and can appear only once; queries must begin with SELECT; results are read-only.</li>
-<li>Timestamps are <strong>UTC</strong> in format <code>yyyy-MM-ddTHH:mm:ss[.fff]</code>. Can be used inside stored procedures and to query a view as of a time, but a view definition can't contain it.</li>
-<li>Returns the <em>latest</em> schema; querying before a schema change only works for columns that existed then. Dropping and recreating a table loses its history.</li>
-<li>Any workspace role (Admin, Member, Contributor, Viewer) can time travel; RLS/CLS/DDM still apply.</li>
-<li>On a lakehouse SQL analytics endpoint, time travel is bounded by the Delta VACUUM retention (and requires the new metadata sync).</li>
-</ul>
-<h3>Data retention</h3>
-<p>Warehouse history is retained for a <strong>configurable 1–120 days, default 30 calendar days</strong>. This window bounds time travel, point-in-time clones and restore points.</p>
-<h3>Restore points and restore in-place</h3>
-<ul>
-<li><strong>System-created</strong> restore points every <strong>8 hours</strong> while the warehouse is active (RPO 8 h); can't be deleted. <strong>User-defined</strong> restore points can be created any time (e.g. before a big release) by Admin/Member/Contributor.</li>
-<li>Restore points copy metadata only; at least 20 are kept with ≥30-day retention.</li>
-<li><strong>Restore in-place</strong> replaces the <em>entire warehouse</em> (same name) with its state at the restore point – including objects, Query Insights and modelling. Only <strong>workspace Admins</strong> can restore. You can't restore to a new warehouse with a different name.</li>
-<li>Deleted warehouse items can be recovered with the tenant's item recovery (dropped item retention) feature.</li>
-</ul>
-
-<div class="sort" data-task="Which recovery feature fits each need?">
-<ul data-bucket="Time travel query"><li>Report on yesterday 18:00 UTC while ETL is running</li><li>Compare today's totals with last week's without creating objects</li></ul>
-<ul data-bucket="Zero-copy clone"><li>Testers need a modifiable copy of a 2 TB table in seconds</li><li>Keep a month-end snapshot table for auditors</li></ul>
-<ul data-bucket="Restore in-place"><li>A failed release corrupted many tables; roll back the whole warehouse</li><li>Reset a dev warehouse to its state before a migration test</li></ul>
+<section class="lesson">
+<h2>Time travel, clones &amp; restore points</h2>
+<p class="idea">The retention window (default 30 days) is your safety net: query it, clone it, or roll back to it.</p>
+<div class="sim">
+  <div class="wtitle">Recovery timeline</div>
+  <div class="p06-row">
+    <label>Retention <select id="p06-ret"><option value="1">1 day</option><option value="30" selected>30 days (default)</option><option value="120">120 days (max)</option></select></label>
+    <label>Go back <input type="range" id="p06-back" min="0" max="130" value="10"> <b id="p06-bv"></b></label>
+  </div>
+  <div class="p06-row"><label>I need to… <select id="p06-need">
+    <option value="q">read old numbers in a query</option><option value="c">give testers a modifiable copy of one table</option><option value="r">undo a bad release across many tables</option></select></label></div>
+  <svg class="p06-tl" id="p06-svg" viewBox="0 0 700 90" role="img" aria-label="Retention timeline"></svg>
+  <div class="p06-tools" id="p06-tools"></div>
 </div>
-
-<div class="check" data-answer="4">
-<p>Testers need a point-in-time copy of the 2 TB table <code>dbo.FactSales</code> in Warehouse1 that they can modify without affecting the original, with minimal storage and creation time. What should you use?</p>
-<ul><li><code>SELECT * INTO dbo.FactSales_Test FROM dbo.FactSales</code></li><li>A user-defined restore point</li><li>A pipeline Copy activity</li><li><code>CREATE TABLE dbo.FactSales_Test AS CLONE OF dbo.FactSales</code></li></ul>
-<p class="why">A zero-copy clone references the existing files and stores only later changes – created in seconds with almost no storage. SELECT INTO and Copy duplicate 2 TB; a restore point restores the whole warehouse.</p>
+<script>
+(function () {
+  var $ = function (id) { return document.getElementById(id); };
+  function x(d) { return 670 - d * 5; } // day 0 = right edge, 130 days = left
+  function upd() {
+    var ret = +$('p06-ret').value, back = +$('p06-back').value, need = $('p06-need').value, ok = back <= ret;
+    $('p06-bv').textContent = back === 0 ? 'now' : back + ' day' + (back > 1 ? 's' : '') + ' ago';
+    var g = '<line x1="20" y1="40" x2="670" y2="40" stroke="var(--line)" stroke-width="10" stroke-linecap="round"/>' +
+      '<rect x="' + x(Math.min(ret, 130)) + '" y="35" width="' + (670 - x(Math.min(ret, 130))) + '" height="10" rx="5" fill="var(--ok)" opacity=".7"/>';
+    for (var d = 0; d <= Math.min(ret, 130); d += (ret > 40 ? 4 : 1)) g += '<line x1="' + x(d) + '" y1="48" x2="' + x(d) + '" y2="56" stroke="var(--c1)" stroke-width="1.5"/>';
+    g += '<text x="670" y="20" text-anchor="end">today</text><text x="' + x(Math.min(ret, 130)) + '" y="20" text-anchor="middle">−' + ret + ' d</text>' +
+      '<text x="20" y="80">🔹 system restore points every 8 h (within retention)</text>' +
+      '<line x1="' + x(back) + '" y1="22" x2="' + x(back) + '" y2="60" stroke="' + (ok ? 'var(--dom)' : 'var(--bad)') + '" stroke-width="3"/><circle cx="' + x(back) + '" cy="40" r="7" fill="' + (ok ? 'var(--dom)' : 'var(--bad)') + '"/>';
+    $('p06-svg').innerHTML = g;
+    var tools = [
+      ['q', '⏪ Time travel', "SELECT … OPTION (FOR TIMESTAMP AS OF 'UTC')", 'Read-only, whole statement, any workspace role.'],
+      ['c', '🧬 Zero-copy clone', 'CREATE TABLE … AS CLONE OF … AT \'…\'', 'Metadata only, independent copy, same warehouse.'],
+      ['r', '♻️ Restore in-place', 'Restore point (system 8 h or user-defined)', 'Replaces the WHOLE warehouse. Admin only.']
+    ];
+    $('p06-tools').innerHTML = tools.map(function (t) {
+      return '<div class="' + (ok ? 'ok' : 'no') + (t[0] === need ? ' best' : '') + '"><b>' + t[1] + (t[0] === need ? ' ← best fit' : '') + '</b><code>' + t[2] + '</code><br>' +
+        (ok ? t[3] : '✗ Beyond retention: history is gone.') + '</div>';
+    }).join('');
+  }
+  ['p06-ret', 'p06-back', 'p06-need'].forEach(function (id) { $(id).addEventListener('input', upd); $(id).addEventListener('change', upd); });
+  upd();
+})();
+</script>
+<div class="flips">
+  <div class="flip"><div class="front">Clone: copy or reference?</div><div class="back">Reference. Only metadata is copied; storage grows only as the tables diverge.</div></div>
+  <div class="flip"><div class="front">Clone across warehouses?</div><div class="back">No. Within/across schemas of one warehouse only. Not on the SQL endpoint.</div></div>
+  <div class="flip"><div class="front">Who can restore in-place?</div><div class="back">Workspace Admins only. User-defined restore points: Admin, Member, Contributor.</div></div>
+  <div class="flip"><div class="front">Who can time travel?</div><div class="back">Any workspace role, including Viewer. RLS/CLS/masking still apply.</div></div>
+  <div class="flip"><div class="front">Time travel timestamp format?</div><div class="back">UTC, yyyy-MM-ddTHH:mm:ss[.fff], max 3 fractional digits, once per statement.</div></div>
 </div>
-
-<h2>Views, stored procedures, functions</h2>
-<pre><code>-- View: projection + friendly names; grant on the view, not the table
-CREATE VIEW rpt.vEmployee AS
-SELECT EmployeeName AS [Employee], Department, HireDate AS [Hire date]
-FROM dbo.Employees;
-GO
-GRANT SELECT ON rpt.vEmployee TO [ReportingTeam];   -- Entra group
-GO
-
--- Inline table-valued function
-CREATE FUNCTION dbo.fn_SalesByYear (@Year INT)
-RETURNS TABLE
-AS RETURN
-    SELECT ProductKey, SUM(SalesAmount) AS Sales
-    FROM dbo.FactSales WHERE YEAR(OrderDate) = @Year
-    GROUP BY ProductKey;
-GO
-
--- Stored procedure called by a pipeline Stored procedure activity
-CREATE PROCEDURE etl.usp_LoadSales @LoadDate DATE
-AS
-BEGIN
-    BEGIN TRY
-        BEGIN TRAN;
-        DELETE FROM dbo.FactSales WHERE OrderDate = @LoadDate;
-        INSERT INTO dbo.FactSales (OrderDate, ProductKey, CustomerKey, SalesAmount)
-        SELECT s.OrderDate, p.ProductKey, c.CustomerKey, s.Amount
-        FROM LH_Silver.dbo.sales AS s
-        JOIN dbo.DimProduct  AS p ON p.ProductID  = s.ProductID
-        JOIN dbo.DimCustomer AS c ON c.CustomerID = s.CustomerID AND c.IsCurrent = 1
-        WHERE s.OrderDate = @LoadDate;
-        UPDATE etl.Watermark SET LastLoaded = @LoadDate WHERE TableName = 'FactSales';
-        COMMIT;
-    END TRY
-    BEGIN CATCH
-        IF @@TRANCOUNT &gt; 0 ROLLBACK;
-        THROW;
-    END CATCH
-END;</code></pre>
-<ul>
-<li>Run procedures nightly from a pipeline <strong>Stored procedure activity</strong> chained <em>on success</em> after a Copy activity, mapping a pipeline expression (e.g. <code>@formatDateTime(pipeline().TriggerTime,'yyyy-MM-dd')</code>) to <code>@LoadDate</code>.</li>
-<li>Views are also created by the <strong>visual query editor</strong> (no-code: drag tables, join, filter, <em>Save as view</em>) – ideal for analysts who don't write T-SQL.</li>
-<li>Views over warehouse tables used in <strong>Direct Lake on SQL endpoint</strong> models cause DirectQuery fallback – materialise with CTAS instead for Direct Lake. See <a href="11-direct-lake.html">Direct Lake</a>.</li>
-</ul>
-
-<h2>Statistics</h2>
-<ul>
-<li>The optimizer uses statistics to estimate row counts. Fabric <strong>creates histogram statistics automatically</strong> at query time for columns used in JOIN, WHERE, GROUP BY, ORDER BY, DISTINCT (names start <code>_WA_Sys_</code>), plus average-column-length and table-cardinality stats.</li>
-<li>Stale stats are refreshed automatically (synchronously during the query, or by <strong>proactive</strong>/<strong>incremental</strong> statistics refresh in the background).</li>
-<li>Manual: <code>CREATE STATISTICS</code> / <code>UPDATE STATISTICS</code> / <code>DROP STATISTICS</code> – <strong>single-column histogram only</strong> (no multi-column). Inspect with <code>DBCC SHOW_STATISTICS</code>, <code>sys.stats</code>, <code>STATS_DATE</code>.</li>
-<li>After a large load, if a plan shows estimates far from actuals, <strong>UPDATE STATISTICS on join/filter columns first</strong> – the cheapest targeted fix.</li>
-</ul>
-<pre><code>CREATE STATISTICS st_FactSales_CustomerKey ON dbo.FactSales (CustomerKey) WITH FULLSCAN;
-UPDATE STATISTICS dbo.FactSales (st_FactSales_CustomerKey) WITH FULLSCAN;
-DBCC SHOW_STATISTICS ('dbo.FactSales', 'st_FactSales_CustomerKey');</code></pre>
-
-<h2>Transactions and concurrency</h2>
-<ul>
-<li>ACID transactions with <code>BEGIN TRAN / COMMIT / ROLLBACK</code>; can span tables, schemas and <strong>warehouses in the same workspace</strong> (reading SQL analytics endpoints too). DDL such as CREATE/DROP/TRUNCATE TABLE, CTAS and supported ALTER TABLE can run inside a transaction.</li>
-<li><strong>Snapshot isolation always</strong> – other isolation levels are ignored. Readers don't block writers and vice versa.</li>
-<li>Locking is <strong>table-level</strong>: two transactions that UPDATE/DELETE/MERGE the <em>same table</em> can conflict even on different rows → the later committer fails with an update-conflict error (24556/24706) and must <strong>retry</strong>. INSERTs create new files and rarely conflict. Avoid concurrent UPDATE/DELETE/MERGE on one table; add retry logic.</li>
-<li>DDL takes schema-modification locks that block concurrent reads – run DDL in maintenance windows. Inspect with <code>sys.dm_tran_locks</code>.</li>
-<li>Not supported: distributed transactions, savepoints, named and marked transactions.</li>
-</ul>
-
-<h2>Monitoring: query insights, DMVs, caching, workload management</h2>
-<h3>Query insights (<code>queryinsights</code> schema)</h3>
-<div class="tw"><table>
-<thead><tr><th>View</th><th>Use it to…</th></tr></thead>
-<tbody>
-<tr><td><code>queryinsights.exec_requests_history</code></td><td>Each completed request: duration, CPU, data scanned (memory/disk/remote), <code>result_cache_hit</code>, user, label, command → "10 slowest queries in the last 24 h"</td></tr>
-<tr><td><code>queryinsights.exec_sessions_history</code></td><td>Completed sessions</td></tr>
-<tr><td><code>queryinsights.long_running_queries</code></td><td>Query shapes ordered by median elapsed time</td></tr>
-<tr><td><code>queryinsights.frequently_run_queries</code></td><td>Most frequently executed query shapes</td></tr>
-<tr><td><code>queryinsights.sql_pool_insights</code></td><td>Pool-level resource allocation, configuration changes and pressure</td></tr>
-<tr><td><code>queryinsights.external_api_call_stats</code></td><td>Diagnostics for AI functions calling external APIs</td></tr>
-</tbody></table></div>
-<ul>
-<li>History kept for <strong>30 days</strong>; completed queries can take up to <strong>~15 minutes</strong> to appear. Similar queries are aggregated by <strong>query hash</strong> (same shape, different literals). Available in warehouses and SQL analytics endpoints; a cross-database query appears in the item you were connected to.</li>
-<li>Live activity: DMVs <code>sys.dm_exec_requests</code>, <code>sys.dm_exec_sessions</code>, <code>sys.dm_exec_connections</code> (kill a session with <code>KILL</code>, Admin required to see everyone's).</li>
-<li>Capacity-level consumption: Fabric Capacity Metrics app. Run history across items: Monitoring hub.</li>
-</ul>
-<pre><code>SELECT TOP 10 distributed_statement_id, login_name, total_elapsed_time_ms,
-       data_scanned_remote_storage_mb, result_cache_hit, command
-FROM queryinsights.exec_requests_history
-WHERE start_time &gt;= DATEADD(HOUR, -24, GETUTCDATE())
-ORDER BY total_elapsed_time_ms DESC;</code></pre>
-<h3>Caching</h3>
-<ul>
-<li><strong>In-memory and SSD (disk) cache</strong>: fully automatic and transparent; data read from OneLake is transcoded into a columnar in-memory format and also kept on SSD. Can't be cleared or disabled manually; consistent with DML.</li>
-<li><strong>Result set caching</strong>: persists final results of eligible <code>SELECT</code>s; <strong>enabled by default</strong> for warehouses and SQL analytics endpoints; disable per item with <code>ALTER DATABASE &lt;item&gt; SET RESULT_SET_CACHING OFF</code> or per query with <code>OPTION (USE HINT ('DISABLE_RESULT_SET_CACHE'))</code>. Not used for cross-database queries, time travel, RLS/DDM, non-deterministic functions, results over ~10,000 rows, or if a referenced table changed; unused caches expire after 24 h.</li>
-</ul>
-<h3>Workload management</h3>
-<ul>
-<li>The engine isolates workloads into separate <strong>SELECT</strong> and <strong>non-SELECT</strong> (ingestion/DML) pools so heavy loads don't starve reports; resources scale automatically with the capacity SKU and burst within capacity limits. <code>sql_pool_insights</code> shows pool pressure.</li>
-<li>Throttling and smoothing follow Fabric capacity rules – a busy capacity slows or delays warehouse queries (see <a href="01-fabric-platform.html">Fabric platform</a>).</li>
-<li>Performance hygiene: right-sized data types (no oversize varchar), integer keys, avoid many small trickle INSERTs (batch them), keep stats fresh, filter early, avoid SELECT *.</li>
-</ul>
-
-<div class="check" data-answer="1">
-<p>You need T-SQL to identify the 10 slowest queries that completed in Warehouse1 during the last 24 hours. Which object should you query?</p>
-<ul><li><code>queryinsights.exec_requests_history</code></li><li><code>sys.dm_exec_requests</code></li><li><code>queryinsights.frequently_run_queries</code></li><li><code>sys.dm_tran_locks</code></li></ul>
-<p class="why"><code>exec_requests_history</code> keeps completed requests (30 days) with elapsed time, so you can filter by start time and order by duration. <code>sys.dm_exec_requests</code> shows only currently running requests.</p>
+<div class="sort" data-task="Which recovery tool fits?">
+<ul data-bucket="⏪ Time travel"><li>Report on yesterday 18:00 UTC while ETL runs</li><li>Compare with last week without creating objects</li></ul>
+<ul data-bucket="🧬 Clone"><li>Testers need a modifiable 2 TB table in seconds</li><li>Month-end snapshot table for auditors</li></ul>
+<ul data-bucket="♻️ Restore point"><li>Bad release corrupted many tables</li><li>Reset a dev warehouse before a migration test</li></ul>
 </div>
-
-<div class="check" data-answer="3">
-<p>After loading several hundred million rows into FactSales, a join to DimCustomer became much slower and the plan's estimated row counts are far from the actuals. What should you do first?</p>
-<ul><li>Create a clustered columnstore index</li><li>Restore the warehouse from a restore point</li><li>Run UPDATE STATISTICS on the join and filter columns of FactSales</li><li>Disable result set caching</li></ul>
-<p class="why">Wrong estimates after a large change point to stale statistics; updating them is the cheapest targeted fix. Indexes aren't available in Fabric warehouse.</p>
-</div>
-
-<h2>Warehouse vs SQL analytics endpoint vs SQL database</h2>
-<div class="tw"><table>
-<thead><tr><th>Capability</th><th>Warehouse</th><th>Lakehouse SQL analytics endpoint</th><th>SQL database in Fabric</th></tr></thead>
-<tbody>
-<tr><td>Workload</td><td>Analytical (OLAP) data warehouse</td><td>Analytical read over lakehouse Delta</td><td>Operational (OLTP) app database</td></tr>
-<tr><td>Write with T-SQL</td><td>Yes (DML, DDL, MERGE, COPY INTO)</td><td><strong>No</strong> – data read-only</td><td>Yes (row-level OLTP)</td></tr>
-<tr><td>Who writes data</td><td>T-SQL, pipelines, Dataflow Gen2, Spark connector</td><td>Spark, pipelines, Dataflow Gen2 into the lakehouse</td><td>Applications</td></tr>
-<tr><td>Views, functions, procedures</td><td>Yes</td><td>Yes</td><td>Yes (full Azure SQL surface)</td></tr>
-<tr><td>Multi-table transactions</td><td>Yes</td><td>Read-only</td><td>Yes</td></tr>
-<tr><td>Zero-copy clone, restore points</td><td>Yes</td><td>No</td><td>Point-in-time restore</td></tr>
-<tr><td>Time travel</td><td>FOR TIMESTAMP AS OF (retention 1–120 d)</td><td>Bounded by Delta VACUUM retention</td><td>—</td></tr>
-<tr><td>Table maintenance</td><td>Automatic</td><td>You maintain Delta (OPTIMIZE/VACUUM)</td><td>Automatic</td></tr>
-<tr><td>Security</td><td colspan="2">GRANT/DENY, RLS, CLS, dynamic data masking (T-SQL); workspace roles; item sharing</td><td>Full SQL security</td></tr>
-<tr><td>Storage</td><td>Delta in OneLake</td><td>Delta in OneLake</td><td>SQL engine storage, <strong>auto-replicated to OneLake as Delta</strong> (near real time) with its own SQL analytics endpoint</td></tr>
-</tbody></table></div>
-<p><strong>SQL database in Fabric</strong> is built on the Azure SQL Database engine for transactional workloads (frequent single-row inserts/updates); its data is mirrored automatically into OneLake so Spark, the SQL endpoint and Direct Lake can analyse it without ETL.</p>
-<div class="note">Security for warehouses and endpoints (workspace roles, item permissions ReadData/ReadAll, GRANT/DENY, RLS with predicate functions and security policies, CLS, dynamic data masking, OneLake security) is covered in <a href="02-security-governance.html">Security &amp; governance</a>.</div>
-
-<div class="reveal"><p><strong>Scenario:</strong> A finance team migrates its SQL Server warehouse to Fabric. Requirements: (1) nightly load of Parquet extracts from ADLS Gen2 behind a firewall; (2) surrogate keys for dimensions; (3) audit trail previously implemented with triggers; (4) testers need a copy of production fact tables each sprint; (5) a bad release must be reversible within hours. Design the solution.</p>
-<div class="answer">(1) <strong>COPY INTO</strong> with <code>CREDENTIAL = (IDENTITY = 'Workspace Identity')</code>, the workspace identity granted Storage Blob Data Reader and the workspace added as a <strong>resource instance rule</strong> (trusted workspace access) – or a pipeline Copy activity. (2) <code>BIGINT IDENTITY</code> columns (values unique but not sequential) or keys computed in the load. (3) Triggers aren't supported – write audit rows inside the load <strong>stored procedures</strong> (in the same transaction) or from the pipeline. (4) <strong>Zero-copy clones</strong> (<code>CREATE TABLE … AS CLONE OF</code>, optionally <code>AT</code> a timestamp) – within the same warehouse; across workspaces they'd need deployment + reload instead. (5) Create a <strong>user-defined restore point</strong> before each release (system ones exist every 8 h); a workspace Admin can <strong>restore in-place</strong>. For single tables, use time travel or a point-in-time clone. Keep retention (default 30 days, up to 120) long enough. Orchestrate with a pipeline: Copy/COPY INTO → Stored procedure activity (MERGE/SCD) → semantic model refresh, with on-success dependencies.</div></div>
-
-<h2>Key takeaways &amp; exam tips</h2>
+<div class="check" data-answer="4"><p>Testers need a modifiable point-in-time copy of 2 TB dbo.FactSales with minimal storage and creation time. Use…</p><ul><li>SELECT * INTO dbo.FactSales_Test FROM dbo.FactSales</li><li>A user-defined restore point</li><li>A pipeline Copy activity</li><li>CREATE TABLE dbo.FactSales_Test AS CLONE OF dbo.FactSales</li></ul><p class="why">A zero-copy clone references existing files. SELECT INTO and Copy duplicate 2 TB; a restore point restores everything.</p></div>
+<details><summary>Deep dive: clone, time travel and restore rules</summary>
 <ul>
-<li>Warehouse = read-write T-SQL with multi-table ACID transactions over <strong>Delta Parquet in OneLake</strong>; SQL analytics endpoint = <strong>read-only</strong> data (views/functions/procs/security allowed).</li>
-<li>Cross-database queries: <strong>three-part names</strong> within the <strong>same workspace</strong>; no copying.</li>
-<li>Supported: <strong>IDENTITY BIGINT</strong>, <strong>MERGE (GA)</strong>, #temp tables, TRUNCATE, CTAS, sp_rename, PK/FK/UNIQUE only <strong>NOT ENFORCED</strong>. Unsupported: <strong>triggers</strong>, materialized views, synonyms, recursive CTEs, multi-column stats, CREATE USER, indexes.</li>
-<li>Types: datetime → datetime2(≤6), nvarchar → varchar (UTF-8), money → decimal, tinyint → smallint.</li>
-<li><strong>COPY INTO</strong> = CSV/Parquet/JSONL from ADLS Gen2, Blob, OneLake; Entra ID/SAS/key/workspace identity; target table must exist.</li>
-<li><strong>CTAS</strong> = most efficient way to create + fill a table from a query; also the fix for views that make Direct Lake fall back.</li>
-<li><strong>Clone</strong> = metadata-only, independent, same warehouse, Contributor+; point-in-time with <code>AT</code>.</li>
-<li><strong>Time travel</strong> = <code>OPTION (FOR TIMESTAMP AS OF 'UTC')</code>, whole statement, read-only; retention 1–120 days (default 30).</li>
-<li><strong>Restore points</strong>: system every 8 h + user-defined; restore in-place replaces the whole warehouse; Admin only.</li>
-<li>Stale estimates → UPDATE STATISTICS; slowest queries → <code>queryinsights.exec_requests_history</code>.</li>
-<li>Snapshot isolation; table-level write-write conflicts → avoid concurrent UPDATE/MERGE on one table, retry.</li>
-<li>Result set caching on by default; in-memory/SSD cache automatic.</li>
-<li>Choose <strong>SQL database in Fabric</strong> for OLTP app data that must also be analysed in OneLake without ETL.</li>
+<li>Clone inherits object-level security, RLS, DDM and PK/unique constraints. Needs Admin/Member/Contributor, SELECT on all source data, CREATE TABLE on the target schema. Groups of tables can be cloned at the same point. No warehouse/schema-level clone.</li>
+<li>Time travel queries must start with SELECT; usable in procedures and to query a view as of a time, but not inside a view definition. Returns the latest schema; dropping and recreating a table loses history.</li>
+<li>Restore points copy metadata only; ≥ 20 kept with ≥ 30-day retention; system ones (RPO 8 h) can't be deleted. Restore in-place keeps the same name (no restore to a new warehouse) and also rolls back Query Insights and modelling.</li>
+<li>Deleted warehouse items: tenant item recovery (dropped item retention).</li>
+</ul></details>
+</section>
+
+<section class="lesson">
+<h2>Programmability &amp; monitoring</h2>
+<p class="idea">Procedures load, statistics guide the optimizer, Query insights show what was slow.</p>
+<div class="tabset">
+  <section data-tab="🧩 Objects">
+    <ul><li><b>Views</b>: friendly names; GRANT on the view, not the table. Visual query editor can save one without code.</li>
+    <li><b>Inline TVFs</b> and <b>procedures</b>; call procedures from a pipeline <i>Stored procedure</i> activity.</li>
+    <li>Load pattern: <code>BEGIN TRY / BEGIN TRAN … COMMIT / CATCH ROLLBACK; THROW</code>.</li>
+    <li>Views in Direct Lake on SQL endpoint models → fallback. Materialise with CTAS.</li></ul>
+  </section>
+  <section data-tab="📈 Statistics">
+    <ul><li>Auto-created for JOIN/WHERE/GROUP BY columns (<code>_WA_Sys_…</code>), auto-refreshed.</li>
+    <li>Estimates far from actuals after a big load → <code>UPDATE STATISTICS</code> first.</li>
+    <li>Manual stats: single-column only. Inspect: <code>DBCC SHOW_STATISTICS</code>.</li></ul>
+  </section>
+  <section data-tab="🔒 Transactions">
+    <ul><li>Always <b>snapshot isolation</b>: readers and writers don't block.</li>
+    <li><b>Table-level</b> conflicts: two UPDATE/MERGE on one table → later commit fails, retry.</li>
+    <li>INSERTs rarely conflict. DDL blocks reads: run in maintenance windows.</li></ul>
+  </section>
+  <section data-tab="🔍 Monitoring">
+    <ul><li><code>queryinsights.exec_requests_history</code>: completed queries, 30 days, ~15 min delay.</li>
+    <li><code>long_running_queries</code>, <code>frequently_run_queries</code>, <code>sql_pool_insights</code>.</li>
+    <li>Live: <code>sys.dm_exec_requests</code> (+ KILL). Capacity: Metrics app.</li></ul>
+  </section>
+  <section data-tab="💾 Caching">
+    <ul><li>In-memory + SSD cache: automatic, can't be cleared.</li>
+    <li><b>Result set caching</b> on by default; off per item or per query hint.</li>
+    <li>Separate SELECT and ingestion pools isolate workloads.</li></ul>
+  </section>
+</div>
+<div class="stats">
+  <div><b>30 d</b><span>Query insights history</span></div>
+  <div><b>8 h</b><span>system restore points</span></div>
+  <div><b>1–120 d</b><span>retention (default 30)</span></div>
+  <div><b>24 h</b><span>unused result cache expiry</span></div>
+</div>
+<div class="check" data-answer="1"><p>T-SQL to find the 10 slowest queries completed in the last 24 h?</p><ul><li>queryinsights.exec_requests_history</li><li>sys.dm_exec_requests</li><li>queryinsights.frequently_run_queries</li><li>sys.dm_tran_locks</li></ul><p class="why">exec_requests_history keeps completed requests with elapsed time. dm_exec_requests shows only running ones.</p></div>
+<div class="check" data-answer="3"><p>After loading hundreds of millions of rows, a join got slow and estimates are far from actuals. First step?</p><ul><li>Create a clustered columnstore index</li><li>Restore from a restore point</li><li>UPDATE STATISTICS on join/filter columns</li><li>Disable result set caching</li></ul><p class="why">Stale statistics; indexes aren't available.</p></div>
+<details><summary>Deep dive: caching rules, query insights, hygiene</summary>
+<ul>
+<li>Result set caching skipped for: cross-database queries, time travel, RLS/DDM, non-deterministic functions, results &gt; ~10,000 rows, changed tables. Disable: <code>ALTER DATABASE … SET RESULT_SET_CACHING OFF</code> or <code>OPTION (USE HINT ('DISABLE_RESULT_SET_CACHE'))</code>.</li>
+<li>Query insights aggregates similar queries by query hash; works for warehouses and endpoints; cross-database queries appear in the item you connected to. Also <code>exec_sessions_history</code>, <code>external_api_call_stats</code>.</li>
+<li>Transactions can span warehouses in the same workspace; update-conflict errors 24556/24706. Not supported: distributed, named, marked transactions, savepoints. Locks: <code>sys.dm_tran_locks</code>.</li>
+<li>Hygiene: right-size types, integer keys, batch trickle INSERTs, avoid SELECT *, filter early.</li>
+</ul></details>
+<div class="reveal"><p>Finance migrates a SQL Server DW: (1) Parquet from firewalled ADLS, (2) surrogate keys, (3) trigger-based audit, (4) sprint test copies, (5) reversible releases. Design?</p>
+<div class="answer">(1) COPY INTO with Workspace Identity + trusted workspace access (or pipeline Copy). (2) BIGINT IDENTITY. (3) Audit rows in load procedures (same transaction). (4) Zero-copy clones. (5) User-defined restore point before each release; Admin restores in-place. Orchestrate: Copy → Stored procedure → model refresh.</div></div>
+</section>
+
+<section class="lesson">
+<h2>Exam traps</h2>
+<ul class="traps">
+  <li>"Analysts must UPDATE rows with T-SQL" → warehouse, not the SQL endpoint.</li>
+  <li>Triggers are unsupported; IDENTITY and MERGE are supported.</li>
+  <li>PK/FK/UNIQUE are NOT ENFORCED: duplicates get in.</li>
+  <li>COPY INTO needs an existing table; CTAS creates one.</li>
+  <li>Clones don't cross warehouses or workspaces.</li>
+  <li>Restore in-place replaces the whole warehouse; only Admins can do it.</li>
+  <li>sys.dm_exec_requests = running now; exec_requests_history = completed.</li>
 </ul>
-<p class="muted">Further reading (online): Microsoft Learn – "T-SQL surface area in Fabric Data Warehouse", "COPY INTO (Fabric)", "Clone table", "Time travel", "Restore in-place", "Statistics", "Transactions", "Query insights", "Result set caching".</p>
+</section>
+
+<section class="lesson">
+<h2>Cheat sheet</h2>
+<div class="cheat">
+  <div><h4>🏢 Warehouse</h4><ul><li>Read-write T-SQL, ACID</li><li>3-part names, same workspace</li><li>Auto maintenance, V-Order</li></ul></div>
+  <div><h4>✓ / ✗ T-SQL</h4><ul><li>✓ IDENTITY BIGINT, MERGE, #temp, CTAS</li><li>✗ triggers, indexes, MVs, synonyms, recursive CTE</li><li>datetime2, varchar, decimal, smallint</li></ul></div>
+  <div><h4>📥 Loading</h4><ul><li>COPY INTO: CSV/Parquet/JSONL</li><li>CTAS: new table from query</li><li>Pipeline: many sources; Dataflow: low-code</li></ul></div>
+  <div><h4>♻️ Recovery</h4><ul><li>FOR TIMESTAMP AS OF (UTC)</li><li>CLONE OF … AT: zero-copy</li><li>Restore points: 8 h + user, Admin restores</li></ul></div>
+  <div><h4>🔍 Tuning</h4><ul><li>UPDATE STATISTICS</li><li>queryinsights.exec_requests_history</li><li>Snapshot isolation, table-level conflicts</li></ul></div>
+</div>
+</section>
 </main>
 <script src="assets/app.js"></script>
 </body>

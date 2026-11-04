@@ -5,396 +5,401 @@
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>Query &amp; analyze – DP-600</title>
 <link rel="stylesheet" href="assets/style.css">
+<style>
+.wf-ctl { display: flex; flex-wrap: wrap; gap: 6px; margin: 8px 0; }
+.wf-ctl button.on { background: var(--accent); color: #fff; border-color: var(--accent); }
+.wf-sql { margin: 8px 0; padding: 8px 12px; border-radius: 8px; background: var(--soft); font-family: ui-monospace, Consolas, monospace; font-size: .88em; white-space: pre-wrap; }
+.wf-tab td.res { font-weight: 800; color: var(--accent); background: color-mix(in srgb, var(--accent) 10%, var(--bg)); text-align: center; }
+.wf-tab tr.tie td:nth-child(3) { background: var(--warn-soft); }
+.wf-tab tr.pstart td { border-top: 3px solid var(--dom); }
+</style>
 </head>
-<body>
+<body data-domain="2">
 <main>
-<h1>Query &amp; analyze: SQL, visual queries, DAX queries</h1>
-<p class="lead">How to query data once it is in Fabric: the SQL query editor and the no-code visual query editor of warehouses and SQL analytics endpoints, the T-SQL analytics patterns the exam uses (window functions, CTEs, PIVOT, cross-database queries), DAX queries in DAX query view, profiling data, exploring in notebooks, and choosing between SQL, KQL, DAX and Spark SQL. Maps to <em>Prepare data → Query and analyze data</em> (select, filter and aggregate data by using the visual query editor, SQL, KQL and DAX).</p>
 
-<h2>Query tools in Fabric — the map</h2>
-<div class="tw"><table>
-<thead><tr><th>Tool</th><th>Where</th><th>Language</th><th>Typical use</th></tr></thead>
-<tbody>
-<tr><td><strong>SQL query editor</strong></td><td>Warehouse, SQL analytics endpoint (lakehouse), mirrored database, SQL database</td><td>T-SQL</td><td>Ad-hoc analysis, DDL/DML in the warehouse, views, procedures</td></tr>
-<tr><td><strong>Visual query editor</strong></td><td>Warehouse, SQL analytics endpoint, mirrored database</td><td>No code (Power Query diagram → T-SQL)</td><td>Business users joining/filtering/aggregating; save as view or table</td></tr>
-<tr><td><strong>DAX query view</strong></td><td>Power BI Desktop; <em>Write DAX queries</em> in the service</td><td>DAX</td><td>Query and test a semantic model, edit measures</td></tr>
-<tr><td><strong>KQL queryset</strong></td><td>Eventhouse / KQL database</td><td>KQL (subset of T-SQL)</td><td>Time-series and log analytics — see <a href="08-kql-realtime.html">Eventhouse &amp; KQL</a></td></tr>
-<tr><td><strong>Notebook</strong></td><td>Lakehouse (any OneLake data)</td><td>PySpark, Spark SQL, Scala, R; Python</td><td>Exploration at scale, data science, profiling with <code>describe()</code>/<code>summary()</code></td></tr>
-<tr><td>External clients</td><td>SSMS, VS Code (mssql), Excel, Power BI Desktop via the SQL connection string</td><td>T-SQL</td><td>Developers' favourite tooling; TDS endpoint</td></tr>
-</tbody>
-</table></div>
+<header class="hero">
+  <div class="hi">🔎</div>
+  <div>
+    <h1>Query &amp; analyze</h1>
+    <p class="lead">Pick the right query tool and language, then read the answer straight from your data.</p>
+    <div class="meta"><span class="pill">Domain 2 · Prepare data</span><span class="pill">⏱ 35 min</span><span class="pill">7 lessons</span></div>
+    <ul class="goals">
+      <li>Choose between SQL, KQL, DAX and Spark SQL</li>
+      <li>Use the SQL query editor and the no-code visual query editor</li>
+      <li>Predict ROW_NUMBER, RANK, DENSE_RANK, LAG/LEAD and running totals</li>
+      <li>Write and save DAX queries in DAX query view</li>
+      <li>Profile data in Power Query and notebooks</li>
+    </ul>
+  </div>
+</header>
 
+<div class="tldr"><ul>
+  <li><b>T-SQL</b> for warehouses, <b>KQL</b> for streams and logs, <b>DAX</b> for the semantic model, <b>Spark</b> for big files.</li>
+  <li>The <b>visual query editor</b> is no-code and saves its result as a <b>view</b> or <b>table</b>.</li>
+  <li><b>RANK</b> leaves gaps after ties, <b>DENSE_RANK</b> doesn't, <b>ROW_NUMBER</b> never ties.</li>
+  <li>DAX queries need <b>EVALUATE</b>; <b>Update model with changes</b> saves DEFINE MEASUREs.</li>
+</ul></div>
+
+<!-- ===================== Lesson 1 ===================== -->
+<section class="lesson">
+<h2>Pick the right query tool</h2>
+<p class="idea">Each Fabric store has its own query tool; the data and the user decide which one you open.</p>
+<div class="icards">
+  <div class="icard" data-title="SQL query editor" data-info="Warehouse, SQL analytics endpoint, mirrored database, SQL database. T-SQL for ad-hoc analysis, views, procedures; DDL/DML in the warehouse."><div class="i">🏢</div><h4>SQL query editor</h4><p>T-SQL</p></div>
+  <div class="icard" data-title="Visual query editor" data-info="No-code Power Query diagram over a warehouse or SQL analytics endpoint; generates one T-SQL SELECT. Save as view or table."><div class="i">🧱</div><h4>Visual query editor</h4><p>No code</p></div>
+  <div class="icard" data-title="DAX query view" data-info="Power BI Desktop, or 'Write DAX queries' in the service. Query and test a semantic model; edit measures."><div class="i">🧠</div><h4>DAX query view</h4><p>DAX</p></div>
+  <div class="icard" data-title="KQL queryset" data-info="Eventhouse / KQL database. Time series and log analytics (also a subset of T-SQL)."><div class="i">🛰️</div><h4>KQL queryset</h4><p>KQL</p></div>
+  <div class="icard" data-title="Notebook" data-info="Any OneLake data. PySpark, Spark SQL, Scala, R or Python. Exploration at scale, data science, profiling with describe()/summary()."><div class="i">📓</div><h4>Notebook</h4><p>Spark / Python</p></div>
+  <div class="icard" data-title="External clients" data-info="SSMS, VS Code (mssql), Excel, Power BI Desktop through the SQL connection string (TDS endpoint)."><div class="i">🔌</div><h4>External clients</h4><p>SSMS, VS Code</p></div>
+</div>
+<div class="decide" data-task="Which language should you query with?">
+  <div data-node="start" data-q="Where does the data live?">
+    <button data-go="kql">Eventhouse (streaming, logs)</button>
+    <button data-go="model">Semantic model</button>
+    <button data-go="lake">Lakehouse files / Delta</button>
+    <button data-go="wh">Warehouse / SQL endpoint</button>
+  </div>
+  <div data-node="lake" data-q="Do you need files, JSON, ML or billions of rows?"><button data-go="spark">Yes</button><button data-go="ep">No, just relational SELECTs</button></div>
+  <div data-node="wh" data-q="Can the user write T-SQL?"><button data-go="sql">Yes</button><button data-go="vq">No</button></div>
+  <div data-node="kql" data-result>🛰️ <b>KQL</b>: time series, text search, <code>bin()</code>, anomalies, seconds-fresh data.</div>
+  <div data-node="model" data-result>🧠 <b>DAX</b>: governed measures, filter context, respects model RLS.</div>
+  <div data-node="spark" data-result>📓 <b>PySpark / Spark SQL</b> in a notebook: huge volumes, files, writes Delta.</div>
+  <div data-node="ep" data-result>🏢 <b>T-SQL</b> on the lakehouse's SQL analytics endpoint (read-only tables).</div>
+  <div data-node="sql" data-result>🏢 <b>T-SQL</b> in the SQL query editor: DML, views, procs, cross-database queries.</div>
+  <div data-node="vq" data-result>🧱 <b>Visual query editor</b>: drag, merge, filter, Save as view.</div>
+</div>
+<div class="sort" data-task="Which language fits each task?">
+  <ul data-bucket="T-SQL"><li>Update rows in a warehouse dimension</li><li>Create a view joining warehouse and lakehouse tables</li></ul>
+  <ul data-bucket="KQL"><li>Count error log lines per 5-minute bin</li><li>Detect anomalies with make-series</li></ul>
+  <ul data-bucket="DAX"><li>Check a measure per category under model RLS</li><li>Test a YoY measure before adding it to the model</li></ul>
+  <ul data-bucket="Spark"><li>Explode nested JSON files in Files</li><li>Summary statistics over 3 billion Delta rows</li></ul>
+</div>
+</section>
+
+<!-- ===================== Lesson 2 ===================== -->
+<section class="lesson">
 <h2>The SQL query editor</h2>
-<ul>
-<li>Opened with <strong>New SQL query</strong> (or SQL templates for CREATE TABLE/VIEW/PROC…). IntelliSense, syntax highlighting, autosave; queries live in <strong>My queries</strong> or <strong>Shared queries</strong> (viewers and shared recipients cannot move queries to Shared queries).</li>
-<li><strong>Warehouse:</strong> full DDL, DML (INSERT/UPDATE/DELETE/MERGE), DCL (GRANT/DENY). <strong>SQL analytics endpoint:</strong> read-only on tables (data is written by Spark/Delta), but you can create views, functions, procedures and security (GRANT, RLS, CLS).</li>
-<li>Results preview shows <strong>the first 10,000 rows</strong>; multiple result sets selectable from a dropdown.</li>
-<li>From the results bar (select the SELECT statement first): <strong>Save as view</strong>, <strong>Save as table</strong> (runs <code>CREATE TABLE AS SELECT</code>), <strong>Open in Excel</strong> (downloads a workbook that runs the query live), <strong>Explore this data</strong>, <strong>Visualize results</strong> (not supported with <code>ORDER BY</code>), Copy.</li>
-<li>Each <strong>Run is its own batch and session</strong>: <code>BEGIN TRAN</code> in one run and <code>COMMIT</code> in another fails; session <code>SET</code> options and <code>sp_set_session_context</code> don't persist; <code>GO</code> starts a new batch/session.</li>
-<li><strong>Cross-database queries</strong> with three-part names to other warehouses and SQL analytics endpoints <em>in the same workspace</em> (add them to the Explorer); data is read in place, nothing is copied.</li>
-<li>Copilot: inline code completion, <strong>Explain</strong> (Ctrl+Alt+E) and <strong>Fix</strong> query quick actions, and a chat pane that writes T-SQL from natural language.</li>
-</ul>
-
-<pre><code>-- Join a warehouse fact to a lakehouse dimension without copying data
-SELECT  c.Country,
-        SUM(f.SalesAmount) AS Sales
-FROM    dbo.FactSales            AS f          -- current warehouse (WH_Sales)
-JOIN    LH_Gold.dbo.DimCustomer  AS c          -- SQL analytics endpoint of a lakehouse
-        ON c.CustomerKey = f.CustomerKey
-GROUP BY c.Country
-ORDER BY Sales DESC;</code></pre>
-
-<div class="check" data-answer="3">
-<p>In <code>Warehouse1</code> you must join <code>dbo.FactSales</code> with the <code>Customer</code> table of <code>Lakehouse1</code> (same workspace) in one T-SQL query, without copying data. What should you do?</p>
-<ul><li>Create a linked server to the lakehouse SQL analytics endpoint</li><li>Use <code>OPENROWSET</code> with the lakehouse connection string</li><li>Add Lakehouse1 to the Explorer and reference <code>Lakehouse1.dbo.Customer</code></li><li>Load Customer into Warehouse1 with a Copy job first</li></ul>
-<p class="why">Fabric supports cross-database queries with three-part names between warehouses and SQL analytics endpoints in the same workspace. Linked servers do not exist in Fabric warehouse, and copying violates the requirement.</p>
+<p class="idea">Write T-SQL in the browser, then turn the result into a view, a table or an Excel file in one click.</p>
+<div class="stats">
+  <div><b>10,000</b><span>rows in the results preview</span></div>
+  <div><b>1 Run = 1 session</b><span>transactions can't span runs</span></div>
+  <div><b>3-part names</b><span>cross-database, same workspace</span></div>
 </div>
-
-<h2>The visual query editor (no code)</h2>
-<p>The visual query editor uses the <strong>Power Query diagram view</strong>: drag tables from the Explorer onto the canvas and apply steps (choose columns, filter, sort, group by, merge = join, append = union…). Behind the scenes the steps are translated (folded) into a single T-SQL <code>SELECT</code>.</p>
-<ul>
-<li><strong>Read-only:</strong> only DQL (<code>SELECT</code>); no DDL/DML.</li>
-<li>Only <strong>foldable</strong> Power Query operations are supported — if a step can't be translated to SQL, a banner says the query is not supported as a warehouse view.</li>
-<li><strong>View SQL</strong> shows the generated T-SQL; <strong>Edit SQL script</strong> opens it in the SQL query editor. With merges, only the query with <strong>Enable load</strong> appears in the script.</li>
-<li><strong>Save as view</strong> (choose schema, review SQL) and <strong>Save as table</strong> (CTAS into a warehouse) persist the result.</li>
-<li><strong>Download Excel file</strong> and <strong>Visualize results</strong> from the results pane.</li>
-<li>Cross-warehouse: drag tables from several added warehouses/endpoints and merge them.</li>
-</ul>
-
-<div class="check" data-answer="4">
-<p>A business analyst who doesn't know T-SQL must join two warehouse tables, filter the result and make it reusable for other analysts as a database object. What should the analyst use?</p>
-<ul><li>A Dataflow Gen2 writing to a new lakehouse</li><li>DAX query view with <code>SUMMARIZECOLUMNS</code></li><li>The SQL query editor with <code>CREATE VIEW</code></li><li>The visual query editor, then <strong>Save as view</strong></li></ul>
-<p class="why">The visual query editor is the no-code option and can save the result as a view (or as a table). The SQL editor needs T-SQL; DAX query view queries semantic models, not warehouses.</p>
+<div class="flow" data-hint="Click a results-bar action.">
+  <div data-title="Save as view" data-info="Select the SELECT statement, then Save as view (choose a schema)."><span class="fi">👁️</span>Save as view</div>
+  <div data-title="Save as table" data-info="Runs CREATE TABLE AS SELECT (CTAS) into the warehouse."><span class="fi">🗃️</span>Save as table<small>CTAS</small></div>
+  <div data-title="Open in Excel" data-info="Downloads a workbook that runs the query live against the endpoint."><span class="fi">📗</span>Open in Excel</div>
+  <div data-title="Visualize results" data-info="Quick Power BI visual of the result. Not supported when the query has ORDER BY."><span class="fi">📊</span>Visualize<small>no ORDER BY</small></div>
 </div>
+<div class="vs">
+  <div><h4>🏢 Warehouse</h4><ul><li>Full DDL, DML, DCL</li><li>INSERT / UPDATE / DELETE / MERGE</li></ul></div>
+  <div class="vsmark">VS</div>
+  <div><h4>🏞️ SQL analytics endpoint</h4><ul><li>Tables are <b>read-only</b> (Spark writes them)</li><li>Views, functions, procs, GRANT, RLS allowed</li></ul></div>
+</div>
+<pre><code>SELECT c.Country, SUM(f.SalesAmount) AS Sales
+FROM   dbo.FactSales           AS f      -- this warehouse
+JOIN   LH_Gold.dbo.DimCustomer AS c      -- lakehouse endpoint, no copy
+       ON c.CustomerKey = f.CustomerKey
+GROUP BY c.Country;</code></pre>
+<div class="check" data-answer="3"><p>In Warehouse1 you must join FactSales with the Customer table of Lakehouse1 (same workspace) without copying data. What do you do?</p><ul><li>Create a linked server to the lakehouse endpoint</li><li>Use OPENROWSET with the lakehouse connection string</li><li>Add Lakehouse1 to the Explorer and reference <code>Lakehouse1.dbo.Customer</code></li><li>Load Customer with a Copy job first</li></ul><p class="why">Cross-database queries use three-part names. Linked servers don't exist in Fabric.</p></div>
+<details><summary>Deep dive: editor details</summary>
+<ul>
+<li>Queries are saved in <b>My queries</b> or <b>Shared queries</b>; viewers and shared recipients can't move queries to Shared queries.</li>
+<li>Multiple result sets: pick one from a dropdown. <code>GO</code> starts a new batch; SET options and <code>sp_set_session_context</code> don't persist across runs.</li>
+<li>Copilot: inline completion, <b>Explain</b> (Ctrl+Alt+E), <b>Fix query</b>, chat that writes T-SQL.</li>
+<li>Add other warehouses / endpoints of the same workspace to the Explorer to query them with three-part names; data is read in place.</li>
+</ul></details>
+</section>
 
-<div class="match" data-task="Match each action to the tool that offers it.">
+<!-- ===================== Lesson 3 ===================== -->
+<section class="lesson">
+<h2>Visual query editor (no code)</h2>
+<p class="idea">Drag tables, click Power Query steps, and Fabric folds them into one T-SQL SELECT.</p>
+<div class="stepper" data-task="Build a reusable joined view without writing SQL">
+  <section data-step="Drag tables"><p>🧲 Drag tables from the Explorer onto the canvas, even from several added warehouses or endpoints.</p></section>
+  <section data-step="Apply steps"><p>🧱 Choose columns, filter, sort, group by, <b>merge</b> (= join), <b>append</b> (= union). Only <b>foldable</b> steps work; otherwise a banner says the query isn't supported.</p></section>
+  <section data-step="Check the SQL"><p>🔍 <b>View SQL</b> shows the generated SELECT; <b>Edit SQL script</b> opens it in the SQL editor. With merges, only the query with <i>Enable load</i> is scripted.</p></section>
+  <section data-step="Persist"><p>💾 <b>Save as view</b> (pick schema, review SQL) or <b>Save as table</b> (CTAS). Or Download Excel file / Visualize results.</p></section>
+</div>
+<div class="check" data-answer="4"><p>An analyst with no T-SQL skills must join two warehouse tables, filter, and make it reusable as a database object. What should they use?</p><ul><li>A Dataflow Gen2 writing to a new lakehouse</li><li>DAX query view with SUMMARIZECOLUMNS</li><li>The SQL query editor with CREATE VIEW</li><li>The visual query editor, then Save as view</li></ul><p class="why">No-code and it saves as a view. DAX query view targets semantic models.</p></div>
+</section>
+
+<!-- ===================== Lesson 4 ===================== -->
+<section class="lesson">
+<h2>Window functions</h2>
+<p class="idea">A window function adds a value to every row from related rows, without collapsing them like GROUP BY.</p>
+<div class="sim">
+  <div class="wtitle">Window function visualizer: watch the new column change</div>
+  <div class="wf-ctl" id="p09-fn"></div>
+  <label><input type="checkbox" id="p09-part"> PARTITION BY Region</label>
+  <label id="p09-framel"><input type="checkbox" id="p09-frame" checked> ROWS frame (uncheck = default RANGE)</label>
+  <div class="wf-sql" id="p09-sql"></div>
+  <div class="tw"><table class="wf-tab" id="p09-tab"></table></div>
+  <div class="out" id="p09-out"></div>
+</div>
+<script>
+(function () {
+  var ROWS = [['East','Ana',500],['East','Ben',400],['East','Cy',400],['East','Dee',300],['West','Eve',450],['West','Finn',450],['West','Gus',350],['West','Hal',200]]
+    .map(function (r) { return { Region: r[0], Rep: r[1], Sales: r[2] }; });
+  var FNS = [
+    { k: 'ROW_NUMBER', e: 'ROW_NUMBER()', note: 'Unique sequence: ties get different numbers (arbitrary unless you add a tie-breaker). Use it to keep the latest row per key.' },
+    { k: 'RANK', e: 'RANK()', note: 'Ties share a rank, then the next rank is skipped (gap).' },
+    { k: 'DENSE_RANK', e: 'DENSE_RANK()', note: 'Ties share a rank, no gap afterwards.' },
+    { k: 'LAG', e: 'LAG(Sales, 1, 0)', note: 'Value of the previous row (default 0 when there is none): period-over-period differences.' },
+    { k: 'LEAD', e: 'LEAD(Sales)', note: 'Value of the next row; NULL on the last row of each window.' },
+    { k: 'SUM', e: 'SUM(Sales)', note: 'Running total. ROWS counts row by row; the default RANGE frame adds all tied rows at once (and is slower).' },
+    { k: 'NTILE', e: 'NTILE(2)', note: 'Splits each window into 2 equally sized buckets.' }
+  ];
+  var cur = 0, ctl = document.getElementById('p09-fn');
+  FNS.forEach(function (f, i) { var b = document.createElement('button'); b.textContent = f.k; b.onclick = function () { cur = i; draw(); }; ctl.appendChild(b); });
+  ['p09-part', 'p09-frame'].forEach(function (id) { document.getElementById(id).addEventListener('change', draw); });
+  function draw() {
+    var part = document.getElementById('p09-part').checked, rowsFrame = document.getElementById('p09-frame').checked, f = FNS[cur];
+    [].forEach.call(ctl.children, function (b, i) { b.classList.toggle('on', i === cur); });
+    document.getElementById('p09-framel').style.display = f.k === 'SUM' ? '' : 'none';
+    var data = ROWS.slice().sort(function (a, b) { return (part ? a.Region.localeCompare(b.Region) : 0) || b.Sales - a.Sales || a.Rep.localeCompare(b.Rep); });
+    var res = [], i, j, start = 0;
+    for (i = 0; i < data.length; i++) {
+      if (i > 0 && part && data[i].Region !== data[i - 1].Region) start = i;
+      var end = i; while (end + 1 < data.length && !(part && data[end + 1].Region !== data[i].Region)) end++;
+      var pos = i - start, n = end - start + 1, v;
+      if (f.k === 'ROW_NUMBER') v = pos + 1;
+      else if (f.k === 'RANK') { v = 1; for (j = start; j < i; j++) if (data[j].Sales > data[i].Sales) v++; }
+      else if (f.k === 'DENSE_RANK') { var seen = {}; for (j = start; j < i; j++) if (data[j].Sales > data[i].Sales) seen[data[j].Sales] = 1; v = Object.keys(seen).length + 1; }
+      else if (f.k === 'LAG') v = pos === 0 ? 0 : data[i - 1].Sales;
+      else if (f.k === 'LEAD') v = i === end ? 'NULL' : data[i + 1].Sales;
+      else if (f.k === 'SUM') { v = 0; for (j = start; j <= end; j++) if (j <= i || (!rowsFrame && data[j].Sales === data[i].Sales)) v += data[j].Sales; }
+      else { v = pos < Math.ceil(n / 2) ? 1 : 2; }
+      res.push(v);
+    }
+    var over = (part ? 'PARTITION BY Region ' : '') + 'ORDER BY Sales DESC' + (f.k === 'SUM' && rowsFrame ? '\n        ROWS BETWEEN UNBOUNDED PRECEDING AND CURRENT ROW' : '');
+    document.getElementById('p09-sql').textContent = 'SELECT Region, Rep, Sales,\n       ' + f.e + ' OVER (' + over + ') AS Result\nFROM   dbo.SalesByRep;';
+    var h = '<tr><th>Region</th><th>Rep</th><th>Sales</th><th>Result</th></tr>';
+    data.forEach(function (r, i) {
+      var tie = data.some(function (o, k) { return k !== i && o.Sales === r.Sales && (!part || o.Region === r.Region); });
+      var cls = (tie ? 'tie ' : '') + (part && i > 0 && data[i - 1].Region !== r.Region ? 'pstart' : '');
+      h += '<tr class="' + cls + '"><td>' + r.Region + '</td><td>' + r.Rep + '</td><td>' + r.Sales + '</td><td class="res">' + res[i] + '</td></tr>';
+    });
+    document.getElementById('p09-tab').innerHTML = h;
+    document.getElementById('p09-out').innerHTML = '<span class="badge" style="background:var(--warn-soft);color:var(--warn)">ties highlighted</span> ' + f.note;
+  }
+  draw();
+})();
+</script>
+<div class="flips">
+  <div class="flip"><div class="front"><span>500, 400, 400, 300 with RANK?</span></div><div class="back"><span>1, 2, 2, <b>4</b> (gap)</span></div></div>
+  <div class="flip"><div class="front"><span>… with DENSE_RANK?</span></div><div class="back"><span>1, 2, 2, <b>3</b> (no gap)</span></div></div>
+  <div class="flip"><div class="front"><span>… with ROW_NUMBER?</span></div><div class="back"><span>1, 2, 3, 4 (tie order arbitrary)</span></div></div>
+  <div class="flip"><div class="front"><span>Can you use a window function in WHERE?</span></div><div class="back"><span>No. Wrap it in a CTE or subquery and filter outside.</span></div></div>
+</div>
+<div class="walk">
+<pre><code>WITH ranked AS (
+    SELECT *,
+           ROW_NUMBER() OVER (PARTITION BY CustomerID
+                              ORDER BY ModifiedDate DESC, LoadId DESC) AS rn
+    FROM   stg.CustomerChanges
+)
+SELECT * FROM ranked
+WHERE  rn = 1;</code></pre>
+<ol>
+  <li data-lines="1,6">A CTE names a query-scoped result set you can reference (and chain).</li>
+  <li data-lines="3">One window per customer.</li>
+  <li data-lines="4">Newest first; LoadId breaks ties so the result is deterministic.</li>
+  <li data-lines="7-8">Filter outside the CTE: keep row 1 = latest version per customer.</li>
+</ol>
+</div>
+<div class="check" data-answer="4"><p>Which ranking function returns 1, 2, 2, 3 for 500, 400, 400, 300 (descending)?</p><ul><li>ROW_NUMBER()</li><li>RANK()</li><li>NTILE(3)</li><li>DENSE_RANK()</li></ul><p class="why">DENSE_RANK has no gaps; RANK gives 1, 2, 2, 4.</p></div>
+<details><summary>Deep dive: more window patterns</summary>
+<pre><code>AVG(SalesAmount) OVER (ORDER BY OrderDate ROWS BETWEEN 6 PRECEDING AND CURRENT ROW) AS MovingAvg7,
+SalesAmount * 1.0 / SUM(SalesAmount) OVER (PARTITION BY CustomerKey)              AS ShareOfCustomer,
+NTILE(4) OVER (ORDER BY SalesAmount DESC)                                          AS Quartile</code></pre>
+<p><code>LAG/LEAD(col, offset, default)</code>. Without an explicit frame, a window with ORDER BY uses <code>RANGE … CURRENT ROW</code>, which groups ties: specify <code>ROWS</code> for running totals.</p>
+</details>
+</section>
+
+<!-- ===================== Lesson 5 ===================== -->
+<section class="lesson">
+<h2>More T-SQL patterns</h2>
+<p class="idea">SQL runs in a logical order that differs from how you write it; that order explains WHERE vs HAVING.</p>
+<div class="order" data-task="Put the logical processing order of a SELECT in order.">
+<ol>
+<li>FROM / JOIN</li>
+<li>WHERE</li>
+<li>GROUP BY</li>
+<li>HAVING</li>
+<li>SELECT</li>
+<li>ORDER BY</li>
+<li>TOP / OFFSET</li>
+</ol>
+</div>
+<div class="remember"><b>"SELECT runs late."</b> That's why a SELECT alias works in ORDER BY but not in WHERE.</div>
+<div class="match" data-task="Match each requirement to the T-SQL construct.">
 <dl>
-<dt>Save as view from a no-code diagram</dt><dd>Visual query editor</dd>
-<dt>Run MERGE into a warehouse table</dt><dd>SQL query editor (warehouse)</dd>
-<dt>Update model with changes</dt><dd>DAX query view</dd>
-<dt>Pin a query result to a Real-Time dashboard</dt><dd>KQL queryset</dd>
-<dt>Column quality, distribution and profile</dt><dd>Power Query editor (Dataflow Gen2 / Desktop)</dd>
-<dt><code>df.summary()</code> statistics over billions of rows</dt><dd>Spark notebook</dd>
+<dt>Running total per customer</dt><dd><code>SUM() OVER (… ROWS BETWEEN UNBOUNDED PRECEDING AND CURRENT ROW)</code></dd>
+<dt>Difference to the previous month</dt><dd><code>LAG()</code></dd>
+<dt>Categories above 1 M only</dt><dd><code>GROUP BY … HAVING</code></dd>
+<dt>One column per category</dt><dd><code>PIVOT</code></dd>
+<dt>Comma-separated products per customer</dt><dd><code>STRING_AGG</code></dd>
+<dt>Fast estimated distinct count</dt><dd><code>APPROX_COUNT_DISTINCT</code></dd>
 </dl>
 </div>
-
-<h2>T-SQL analytics patterns for the exam</h2>
-<h3>Aggregation, filtering groups, CASE</h3>
-<pre><code>SELECT  d.CalendarYear,
-        p.Category,
-        COUNT(*)                         AS Orders,
-        SUM(f.SalesAmount)               AS Sales,
-        AVG(f.SalesAmount)               AS AvgOrder,
-        SUM(CASE WHEN f.IsReturn = 1 THEN 1 ELSE 0 END) AS Returns
-FROM    dbo.FactSales  AS f
-JOIN    dbo.DimDate    AS d ON d.DateKey    = f.OrderDateKey
-JOIN    dbo.DimProduct AS p ON p.ProductKey = f.ProductKey
-WHERE   d.CalendarYear &gt;= 2025                 -- filters rows (before grouping)
-GROUP BY d.CalendarYear, p.Category
-HAVING  SUM(f.SalesAmount) &gt; 100000            -- filters groups (after grouping)
-ORDER BY d.CalendarYear, Sales DESC;</code></pre>
-<p>Logical processing order: <code>FROM/JOIN → WHERE → GROUP BY → HAVING → SELECT → ORDER BY → TOP/OFFSET</code>. That's why a column alias from SELECT can be used in ORDER BY but not in WHERE.</p>
-
-<h3>Window functions (<code>OVER</code>)</h3>
-<p>A window function computes a value per row over a set of related rows <em>without collapsing</em> them (unlike GROUP BY). <code>PARTITION BY</code> = the groups, <code>ORDER BY</code> = order inside each group, frame (<code>ROWS BETWEEN …</code>) = which rows count.</p>
-<pre><code>SELECT  CustomerKey, OrderDate, SalesAmount,
-        ROW_NUMBER() OVER (PARTITION BY CustomerKey ORDER BY OrderDate DESC) AS rn,
-        RANK()       OVER (ORDER BY SalesAmount DESC)                       AS rnk,
-        DENSE_RANK() OVER (ORDER BY SalesAmount DESC)                       AS drnk,
-        LAG(SalesAmount, 1, 0) OVER (PARTITION BY CustomerKey ORDER BY OrderDate) AS PrevAmount,
-        LEAD(OrderDate)        OVER (PARTITION BY CustomerKey ORDER BY OrderDate) AS NextOrderDate,
-        SUM(SalesAmount) OVER (PARTITION BY CustomerKey ORDER BY OrderDate
-                               ROWS BETWEEN UNBOUNDED PRECEDING AND CURRENT ROW) AS RunningTotal,
-        AVG(SalesAmount) OVER (ORDER BY OrderDate
-                               ROWS BETWEEN 6 PRECEDING AND CURRENT ROW)         AS MovingAvg7,
-        SalesAmount * 1.0 / SUM(SalesAmount) OVER (PARTITION BY CustomerKey)     AS ShareOfCustomer,
-        NTILE(4) OVER (ORDER BY SalesAmount DESC)                                AS Quartile
-FROM    dbo.FactSales;</code></pre>
-<div class="tw"><table>
-<thead><tr><th>SalesAmount (desc)</th><th>ROW_NUMBER</th><th>RANK</th><th>DENSE_RANK</th></tr></thead>
-<tbody>
-<tr><td>500</td><td>1</td><td>1</td><td>1</td></tr>
-<tr><td>400</td><td>2</td><td>2</td><td>2</td></tr>
-<tr><td>400</td><td>3</td><td>2</td><td>2</td></tr>
-<tr><td>300</td><td>4</td><td><strong>4</strong> (gap)</td><td><strong>3</strong> (no gap)</td></tr>
-</tbody>
-</table></div>
-<ul>
-<li><strong>ROW_NUMBER</strong>: unique sequence, ties broken arbitrarily (add a tie-breaker column to be deterministic). Use for dedup / "latest row per key".</li>
-<li><strong>RANK</strong>: ties share a rank, then gaps. <strong>DENSE_RANK</strong>: ties share a rank, no gaps.</li>
-<li><strong>LAG/LEAD</strong>(col, offset, default): previous/next row's value — period-over-period differences.</li>
-<li>Running total: <code>SUM() OVER (ORDER BY … ROWS BETWEEN UNBOUNDED PRECEDING AND CURRENT ROW)</code>. Without an explicit frame, an ORDER BY in the window defaults to <code>RANGE … CURRENT ROW</code>, which treats ties together (and is slower) — specify <code>ROWS</code>.</li>
-<li>Window functions can't be used in WHERE; wrap them in a CTE or subquery and filter outside.</li>
-</ul>
-
-<h3>CTEs: latest row per key (dedup)</h3>
-<pre><code>WITH ranked AS (
-    SELECT  *,
-            ROW_NUMBER() OVER (PARTITION BY CustomerID
-                               ORDER BY ModifiedDate DESC, LoadId DESC) AS rn
-    FROM    stg.CustomerChanges
-)
-SELECT  *
-FROM    ranked
-WHERE   rn = 1;          -- one row per customer: the most recent version</code></pre>
-<p>A <strong>CTE</strong> (<code>WITH name AS (...)</code>) is a named, query-scoped result set: improves readability, can be referenced several times in the statement, and can chain (<code>WITH a AS (...), b AS (SELECT ... FROM a)</code>).</p>
-
-<div class="check" data-answer="2">
-<p>A change-history table holds several rows per customer. You need exactly the latest row per customer with all its columns. Which construct is MOST appropriate?</p>
-<ul><li><code>SELECT DISTINCT *</code></li><li>A CTE with <code>ROW_NUMBER() OVER (PARTITION BY CustomerID ORDER BY ModifiedDate DESC)</code>, filtered to <code>rn = 1</code></li><li><code>GROUP BY CustomerID</code> with <code>MAX()</code> on every column</li><li><code>TOP 1</code> without <code>ORDER BY</code></li></ul>
-<p class="why">Ranking within each customer and keeping row 1 is deterministic and keeps the row's columns consistent. MAX per column can mix values from different rows; DISTINCT doesn't remove versions; TOP 1 returns a single arbitrary row.</p>
+<div class="flips">
+  <div class="flip"><div class="front"><span>WHERE vs HAVING?</span></div><div class="back"><span>WHERE filters rows before grouping; HAVING filters groups after.</span></div></div>
+  <div class="flip"><div class="front"><span>APPROX_COUNT_DISTINCT?</span></div><div class="back"><span>HyperLogLog estimate (≈ 2% error), much cheaper. KQL equivalent: dcount().</span></div></div>
+  <div class="flip"><div class="front"><span>TOP (10) WITH TIES?</span></div><div class="back"><span>Returns extra rows that tie with the 10th. TOP without ORDER BY is arbitrary.</span></div></div>
+  <div class="flip"><div class="front"><span>Paging?</span></div><div class="back"><span>ORDER BY … OFFSET 20 ROWS FETCH NEXT 10 ROWS ONLY</span></div></div>
 </div>
-
-<h3>PIVOT, TOP, OFFSET/FETCH</h3>
-<pre><code>-- Sales per category as columns per year
-SELECT  CalendarYear, [Bikes], [Accessories], [Clothing]
-FROM (
-    SELECT d.CalendarYear, p.Category, f.SalesAmount
-    FROM   dbo.FactSales f
-    JOIN   dbo.DimDate d    ON d.DateKey = f.OrderDateKey
-    JOIN   dbo.DimProduct p ON p.ProductKey = f.ProductKey
-) AS src
+<details><summary>Deep dive: PIVOT, dates and strings</summary>
+<pre><code>SELECT CalendarYear, [Bikes], [Accessories], [Clothing]
+FROM ( SELECT d.CalendarYear, p.Category, f.SalesAmount FROM … ) AS src
 PIVOT ( SUM(SalesAmount) FOR Category IN ([Bikes], [Accessories], [Clothing]) ) AS pvt;
 
--- Top 10 products, with ties
-SELECT TOP (10) WITH TIES ProductKey, SUM(SalesAmount) AS Sales
-FROM dbo.FactSales GROUP BY ProductKey ORDER BY Sales DESC;
+STRING_AGG(ProductName, ', ') WITHIN GROUP (ORDER BY ProductName)</code></pre>
+<p>UNPIVOT reverses PIVOT. Date/string helpers: <code>DATEFROMPARTS</code>, <code>EOMONTH</code>, <code>DATEADD</code>, <code>DATEDIFF</code>, <code>DATEPART</code>, <code>DATENAME</code>, <code>CONCAT</code>, <code>TRIM</code>, <code>COALESCE</code>, <code>SUM(CASE WHEN … THEN 1 ELSE 0 END)</code>. APPROX_COUNT_DISTINCT is fine for dashboards, not for financial reconciliation.</p>
+</details>
+</section>
 
--- Paging
-SELECT ProductKey, ProductName FROM dbo.DimProduct
-ORDER BY ProductName OFFSET 20 ROWS FETCH NEXT 10 ROWS ONLY;</code></pre>
-<p><code>UNPIVOT</code> does the reverse (columns → rows). <code>TOP</code> without <code>ORDER BY</code> returns arbitrary rows.</p>
-
-<h3>Dates, strings, approximate counts</h3>
-<pre><code>SELECT  DATEFROMPARTS(YEAR(OrderDate), MONTH(OrderDate), 1) AS MonthStart,
-        EOMONTH(OrderDate)                                   AS MonthEnd,
-        DATEADD(day, -30, CAST(GETDATE() AS date))           AS Minus30,
-        DATEDIFF(day, OrderDate, ShipDate)                   AS DaysToShip,
-        DATEPART(weekday, OrderDate)                         AS Weekday,
-        DATENAME(month, OrderDate)                           AS MonthName,
-        CONCAT(FirstName, ' ', LastName)                     AS FullName,
-        UPPER(TRIM(City))                                    AS CityClean,
-        COALESCE(Region, 'Unknown')                          AS RegionClean
-FROM dbo.FactOrders;
-
--- comma-separated list per group
-SELECT CustomerKey,
-       STRING_AGG(ProductName, ', ') WITHIN GROUP (ORDER BY ProductName) AS Products
-FROM   dbo.vOrderLines GROUP BY CustomerKey;
-
--- fast distinct count on huge tables (≈ 2% error, HyperLogLog)
-SELECT APPROX_COUNT_DISTINCT(CustomerKey) AS ApproxCustomers FROM dbo.FactSales;</code></pre>
-<div class="tip"><code>APPROX_COUNT_DISTINCT</code> trades a small error for much less memory/time than <code>COUNT(DISTINCT ...)</code> — good for dashboards and exploration on billions of rows, not for financial reconciliation. KQL's equivalent is <code>dcount()</code>.</div>
-
-<div class="sort" data-task="Which T-SQL construct fits each requirement?">
-<ul data-bucket="Window function"><li>Running total of sales per customer</li><li>Difference to the previous month's value</li><li>Rank products by sales, no gaps after ties</li></ul>
-<ul data-bucket="GROUP BY / HAVING"><li>Total sales per category, only categories above 1 M</li><li>Number of orders per year</li></ul>
-<ul data-bucket="PIVOT"><li>One column per category, one row per year</li></ul>
-<ul data-bucket="STRING_AGG"><li>Comma-separated list of products per customer</li></ul>
-</div>
-
-<h2>DAX queries and DAX query view</h2>
-<p>DAX <em>formulas</em> define measures/columns; DAX <em>queries</em> return a table from a semantic model (they are what every Power BI visual sends). A query has an optional <code>DEFINE</code> block and one or more <code>EVALUATE</code> statements, each optionally followed by <code>ORDER BY</code> (and <code>START AT</code>).</p>
+<!-- ===================== Lesson 6 ===================== -->
+<section class="lesson">
+<h2>DAX queries &amp; DAX query view</h2>
+<p class="idea">A DAX query returns a table from a semantic model: exactly what every Power BI visual sends.</p>
+<div class="walk">
 <pre><code>DEFINE
     VAR _Year = 2026
-    MEASURE Sales[Total Sales]  = SUM ( Sales[SalesAmount] )
-    MEASURE Sales[Margin %]     =
+    MEASURE Sales[Total Sales] = SUM ( Sales[SalesAmount] )
+    MEASURE Sales[Margin %] =
         DIVIDE ( [Total Sales] - SUM ( Sales[TotalCost] ), [Total Sales] )
 EVALUATE
     SUMMARIZECOLUMNS (
         'Date'[Year],
         Product[Category],
-        TREATAS ( { _Year }, 'Date'[Year] ),          -- filter argument
-        "Sales",    [Total Sales],
+        TREATAS ( { _Year }, 'Date'[Year] ),
+        "Sales", [Total Sales],
         "Margin %", [Margin %]
     )
 ORDER BY [Sales] DESC</code></pre>
-<div class="tw"><table>
-<thead><tr><th>Function / keyword</th><th>Use in a query</th><th>SQL analogy</th></tr></thead>
-<tbody>
-<tr><td><code>EVALUATE 'Table'</code></td><td>Return a whole table</td><td><code>SELECT *</code></td></tr>
-<tr><td><code>SUMMARIZECOLUMNS(groupBy…, filter…, "Name", expr…)</code></td><td>The workhorse: group-by columns + measures; removes rows where all measures are blank</td><td><code>GROUP BY</code></td></tr>
-<tr><td><code>SELECTCOLUMNS</code> / <code>ADDCOLUMNS</code></td><td>Choose/rename columns / add computed columns</td><td>column list / computed column</td></tr>
-<tr><td><code>FILTER(table, condition)</code></td><td>Row filter (also for HAVING on a summarized table)</td><td><code>WHERE</code> / <code>HAVING</code></td></tr>
-<tr><td><code>CALCULATETABLE(table, filters…)</code></td><td>Evaluate a table expression in a modified filter context</td><td>WHERE applied via filter context</td></tr>
-<tr><td><code>TOPN(n, table, orderBy, DESC)</code></td><td>Top N rows (may return more on ties; doesn't sort the output)</td><td><code>TOP n</code> — add <code>ORDER BY</code></td></tr>
-<tr><td><code>ROW("Name", expr)</code></td><td>One-row table with a scalar result</td><td><code>SELECT expr</code></td></tr>
-<tr><td><code>DISTINCT / VALUES(col)</code></td><td>Distinct values of a column</td><td><code>SELECT DISTINCT</code></td></tr>
-<tr><td><code>DEFINE MEASURE / VAR / TABLE / COLUMN</code></td><td>Query-scoped objects</td><td>CTE / variables</td></tr>
-<tr><td><code>ORDER BY … START AT</code></td><td>Sort output / start position</td><td><code>ORDER BY</code> / paging</td></tr>
-</tbody>
+<ol>
+  <li data-lines="1-5">DEFINE (optional): query-scoped VAR, MEASURE, TABLE, COLUMN. Nothing is saved yet.</li>
+  <li data-lines="6">EVALUATE (required) returns a table. Several EVALUATEs = several result sets.</li>
+  <li data-lines="7-9">SUMMARIZECOLUMNS = GROUP BY. Rows where all measures are blank are removed.</li>
+  <li data-lines="10">A filter argument: like WHERE, applied as filter context.</li>
+  <li data-lines="11-12">Named measure columns.</li>
+  <li data-lines="14">ORDER BY (optional) sorts the output; START AT pages.</li>
+</ol>
+</div>
+<div class="tw"><table class="matrix">
+<tr><th>DAX</th><th>SQL analogy</th></tr>
+<tr><td><code>EVALUATE 'Table'</code></td><td>SELECT *</td></tr>
+<tr><td><code>SUMMARIZECOLUMNS</code></td><td>GROUP BY</td></tr>
+<tr><td><code>FILTER(table, cond)</code></td><td>WHERE / HAVING</td></tr>
+<tr><td><code>CALCULATETABLE(table, filters)</code></td><td>WHERE via filter context</td></tr>
+<tr><td><code>TOPN(n, table, expr, DESC)</code></td><td>TOP n (output unsorted: add ORDER BY)</td></tr>
+<tr><td><code>SELECTCOLUMNS / ADDCOLUMNS</code></td><td>column list / computed column</td></tr>
+<tr><td><code>ROW("Name", expr)</code></td><td>SELECT expr</td></tr>
 </table></div>
-<pre><code>-- Top 5 customers by sales in 2026, sorted
-EVALUATE
-    TOPN (
-        5,
-        CALCULATETABLE (
-            SUMMARIZECOLUMNS ( Customer[CustomerName], "Sales", [Total Sales] ),
-            'Date'[Year] = 2026
-        ),
-        [Sales], DESC
-    )
-ORDER BY [Sales] DESC
-
--- HAVING: categories above 1 M
-EVALUATE
-    FILTER (
-        SUMMARIZECOLUMNS ( Product[Category], "Sales", [Total Sales] ),
-        [Sales] &gt; 1000000
-    )
-
--- Several EVALUATEs = several result sets (pick in the Result dropdown)
-EVALUATE ROW ( "Rows", COUNTROWS ( Sales ), "Sales", [Total Sales] )
-EVALUATE FILTER ( Sales, Sales[Quantity] &gt;= 10 &amp;&amp; Sales[SalesAmount] &gt; 100 )</code></pre>
-
-<h3>DAX query view features</h3>
-<ul>
-<li><strong>Where:</strong> Power BI Desktop (left rail icon) and in the service/Fabric portal via <strong>Write DAX queries</strong> on a semantic model. Works for Import, DirectQuery, Direct Lake and composite models.</li>
-<li><strong>Quick queries</strong> (Data pane context menu): <em>Show top 100 rows</em> (SELECTCOLUMNS + TOPN), <em>Show column statistics</em> (MIN/MAX/AVERAGE/COUNT/distinct…), <em>Show data preview</em> of a column (DISTINCT), <em>Evaluate</em> a measure (SUMMARIZECOLUMNS), <em>Define and evaluate</em>, <em>Define with references and evaluate</em>, <em>Define all measures in this table / in the model</em>, <em>Define new measure</em>.</li>
-<li><strong>Update model with changes</strong> (command bar) adds or overwrites model measures from the query's <code>DEFINE MEASURE</code> blocks; per measure, <strong>CodeLens</strong> shows <em>Update model: Add new measure</em> or <em>Update model: Overwrite measure</em>. <code>///</code> comments above a MEASURE become its description.</li>
-<li>Light-bulb quick actions <em>Define</em> / <em>Define with references</em> on a measure in EVALUATE (only when the tab has no DEFINE yet).</li>
-<li><strong>Performance Analyzer</strong> → <em>Run in DAX query view</em> to open the exact query a visual sent.</li>
-<li>Query tabs are saved in the .pbix; in a <strong>PBIP</strong> project each tab is a <code>.dax</code> file in the <code>DAXQueries</code> folder. In the web, tabs are <strong>discarded on close</strong>.</li>
-<li>Limits: 15 MB / 1,000,000 values per query in Desktop; web: max <strong>99,999 rows</strong>, requires <strong>write permission</strong> on the model and the workspace setting <em>Users can edit data models in the Power BI service</em>. Viewers with <strong>Build</strong> permission use Desktop with a live connection instead.</li>
-<li>Live connection in Desktop: model measures can't be edited, quick queries are limited to <em>Evaluate</em>, report measures must be defined in DEFINE to run and can't be pushed with Update model.</li>
-<li><strong>Copilot in DAX query view</strong> writes and explains DAX queries from natural language ("top 10 products by margin in 2026") and can explain query results; review before <em>Update model</em>.</li>
-</ul>
-
-<div class="order" data-task="Order the measure-editing workflow in DAX query view.">
+<div class="icards">
+  <div class="icard" data-title="Quick queries" data-info="Data pane context menu: Show top 100 rows, Show column statistics, Show data preview, Evaluate a measure, Define and evaluate, Define with references and evaluate, Define all measures, Define new measure."><div class="i">⚡</div><h4>Quick queries</h4><p>Right-click → query</p></div>
+  <div class="icard" data-title="Update model with changes" data-info="Writes DEFINE MEASURE blocks into the model. Per measure, CodeLens offers 'Update model: Add new measure' or 'Overwrite measure'. /// comments become the description."><div class="i">💾</div><h4>Update model</h4><p>Save DEFINE MEASUREs</p></div>
+  <div class="icard" data-title="Performance Analyzer" data-info="Run in DAX query view opens the exact query a visual sent."><div class="i">⏱</div><h4>Perf Analyzer</h4><p>Run in DAX query view</p></div>
+  <div class="icard" data-title="Copilot" data-info="Writes and explains DAX queries from natural language and explains results. Review before Update model."><div class="i">✨</div><h4>Copilot</h4><p>English → DAX query</p></div>
+</div>
+<div class="order" data-task="Fix a wrong measure with DAX query view.">
 <ol>
 <li>Right-click the measure → Quick queries → Evaluate</li>
 <li>Select the measure in the query and choose Define with references</li>
 <li>Edit the formula in the DEFINE MEASURE block</li>
-<li>Run the query and check the results by the group-by columns</li>
+<li>Run the query and check results by the group-by columns</li>
 <li>Click the CodeLens "Update model: Overwrite measure"</li>
 </ol>
 </div>
-
-<div class="check" data-answer="1">
-<p>You edit <code>Model1</code> in Power BI Desktop. You wrote a new measure in a <code>DEFINE MEASURE</code> block, validated it with <code>EVALUATE SUMMARIZECOLUMNS</code>, and now want it saved in the model. What should you do?</p>
-<ul><li>Select <strong>Update model with changes</strong> (or the CodeLens "Add new measure")</li><li>Copy the query into Performance Analyzer</li><li>Save the file; DEFINE MEASURE blocks are added to the model automatically</li><li>Publish the query tab to the service</li></ul>
-<p class="why">DEFINE MEASURE creates query-scoped measures only. Update model with changes / CodeLens writes them into the model. Saving keeps the query tab, not a model measure.</p>
-</div>
-
-<div class="check" data-answer="3">
-<p>A workspace Viewer with Build permission on a semantic model wants to run DAX queries against it. The <strong>Write DAX queries</strong> option in the service is unavailable to them. What should they do?</p>
-<ul><li>Ask for the Contributor role only to run queries</li><li>Use the visual query editor of the model</li><li>Live connect to the model from Power BI Desktop and use DAX query view</li><li>Use the SQL analytics endpoint of the model</li></ul>
-<p class="why">Writing DAX queries in the web requires write permission on the model. With Build permission a user can live connect from Desktop and run queries there. Semantic models have neither a visual query editor nor a SQL endpoint.</p>
-</div>
-
-<h2>SQL vs KQL vs DAX vs Spark SQL — choosing</h2>
-<div class="tw"><table>
-<thead><tr><th>Language</th><th>Runs against</th><th>Strengths</th><th>Choose it when…</th></tr></thead>
-<tbody>
-<tr><td><strong>T-SQL</strong></td><td>Warehouse, SQL analytics endpoints, SQL database, mirrored DBs</td><td>Set-based transforms, DML/transactions (warehouse), views, procs, security; cross-database queries</td><td>Relational data, analysts who know SQL, ELT inside the warehouse</td></tr>
-<tr><td><strong>KQL</strong></td><td>Eventhouse / KQL database</td><td>Time-series, logs, text search (term index), <code>bin</code>, <code>make-series</code>, anomaly detection; seconds-fresh streaming data</td><td>Telemetry, IoT, logs, near-real-time questions</td></tr>
-<tr><td><strong>DAX</strong></td><td>Semantic models</td><td>Business logic in measures, filter context, time intelligence; respects model RLS</td><td>Validating measures, querying the governed model, what reports see</td></tr>
-<tr><td><strong>Spark SQL / PySpark</strong></td><td>Lakehouse Delta tables, files in OneLake</td><td>Huge volumes, files (JSON/CSV/Parquet), ML, complex transformations, writing Delta</td><td>Data engineering, data science, semi-structured files, exploration at scale</td></tr>
-</tbody>
-</table></div>
-
-<div class="sort" data-task="Pick the best query language for each task.">
-<ul data-bucket="T-SQL"><li>Update rows in a warehouse dimension table</li><li>Create a view joining warehouse and lakehouse tables</li></ul>
-<ul data-bucket="KQL"><li>Count error log lines per 5-minute bin in the last hour</li><li>Detect anomalies in sensor readings with make-series</li></ul>
-<ul data-bucket="DAX"><li>Check a measure's result per category against the model's RLS</li><li>Test a year-over-year measure before adding it to the model</li></ul>
-<ul data-bucket="Spark SQL / PySpark"><li>Explode nested JSON files in the lakehouse Files area</li><li>Compute summary statistics over 3 billion Delta rows for a data scientist</li></ul>
-</div>
-
-<h2>Profiling data</h2>
-<h3>Power Query (Dataflow Gen2, Desktop, semantic model web editing)</h3>
+<div class="check" data-answer="1"><p>You validated a new DEFINE MEASURE with EVALUATE in Desktop and want it saved in the model. What do you do?</p><ul><li>Select Update model with changes (or the CodeLens)</li><li>Copy the query into Performance Analyzer</li><li>Save the file: DEFINE MEASUREs are added automatically</li><li>Publish the query tab to the service</li></ul><p class="why">DEFINE MEASURE is query-scoped. Saving keeps only the query tab.</p></div>
+<div class="check" data-answer="3"><p>A Viewer with Build permission can't use <i>Write DAX queries</i> in the service. What should they do?</p><ul><li>Ask for the Contributor role</li><li>Use the model's visual query editor</li><li>Live connect from Power BI Desktop and use DAX query view</li><li>Use the model's SQL analytics endpoint</li></ul><p class="why">Web DAX queries need write permission. Models have no visual query editor or SQL endpoint.</p></div>
+<details><summary>Deep dive: limits and storage of query tabs</summary>
 <ul>
-<li><strong>Column quality</strong>: % <em>Valid</em>, <em>Error</em>, <em>Empty</em> under each header.</li>
-<li><strong>Column distribution</strong>: mini histogram with <em>distinct</em> and <em>unique</em> counts (distinct = number of different values; unique = values that appear exactly once).</li>
-<li><strong>Column profile</strong>: pane with statistics (count, error, empty, distinct, unique, min, max, average, std dev, NaN, zero…) and the value distribution for the selected column.</li>
-<li>By default profiling is based on the <strong>top 1,000 rows</strong>; switch to <em>Column profiling based on entire data set</em> in the status bar (slower).</li>
-<li>Enable the three options on the <strong>View</strong> ribbon. Use Keep/Remove errors, Replace values, Change type to fix what you find.</li>
-</ul>
+<li>Works on Import, DirectQuery, Direct Lake and composite models.</li>
+<li>Tabs are saved in the .pbix; in a PBIP project each tab is a <code>.dax</code> file in the DAXQueries folder. In the web, tabs are discarded on close.</li>
+<li>Desktop: 15 MB / 1,000,000 values per query. Web: max 99,999 rows, needs write permission and the workspace setting <i>Users can edit data models in the Power BI service</i>.</li>
+<li>Live connection: model measures can't be edited; quick queries limited to Evaluate; report measures must be in DEFINE and can't be pushed with Update model.</li>
+<li>Define / Define with references light-bulb actions only appear when the tab has no DEFINE yet. TOPN may return more rows on ties.</li>
+</ul></details>
+</section>
 
-<div class="check" data-answer="2">
-<p>Column quality shows <code>CustomerEmail</code> as 100% valid, but you suspect errors further down the 2-million-row table. Why might the profile miss them, and what should you do?</p>
-<ul><li>Column quality ignores text columns; use column distribution</li><li>Profiling uses the top 1,000 rows by default; switch to profiling the entire data set</li><li>Errors are only shown after the dataflow is published</li><li>Errors appear only in the Diagram view</li></ul>
-<p class="why">Power Query profiles the first 1,000 rows unless you choose "Column profiling based on entire data set" in the status bar.</p>
+<!-- ===================== Lesson 7 ===================== -->
+<section class="lesson">
+<h2>Profile &amp; explore data</h2>
+<p class="idea">Look at your data's quality before you trust it: Power Query shows it, notebooks compute it.</p>
+<div class="icards">
+  <div class="icard" data-title="Column quality" data-info="% Valid, Error and Empty under each column header."><div class="i">✅</div><h4>Column quality</h4><p>Valid · Error · Empty</p></div>
+  <div class="icard" data-title="Column distribution" data-info="Mini histogram with distinct count (different values) and unique count (values that appear exactly once)."><div class="i">📊</div><h4>Column distribution</h4><p>Distinct vs unique</p></div>
+  <div class="icard" data-title="Column profile" data-info="Pane with count, error, empty, distinct, unique, min, max, average, std dev, NaN, zero and the value distribution."><div class="i">📋</div><h4>Column profile</h4><p>Full statistics</p></div>
+  <div class="icard" data-title="Data Wrangler" data-info="Notebook grid with per-column statistics and visuals for pandas or Spark DataFrames; cleaning steps generate Python code."><div class="i">🧹</div><h4>Data Wrangler</h4><p>Clean → code</p></div>
 </div>
-
-<h3>Other profiling options</h3>
-<div class="tw"><table>
-<thead><tr><th>Where</th><th>How</th></tr></thead>
-<tbody>
-<tr><td>Notebook (Spark)</td><td><code>df.describe()</code> (count, mean, stddev, min, max), <code>df.summary()</code> (adds 25/50/75% percentiles; you can pass the stats you want), <code>display(df, summary=True)</code> for a per-column summary view, <code>df.printSchema()</code></td></tr>
-<tr><td>Notebook (pandas)</td><td><code>pdf.describe(include="all")</code>, <code>pdf.info()</code>, <code>pdf.isna().sum()</code></td></tr>
-<tr><td>Data Wrangler (in notebooks)</td><td>Grid with per-column statistics and visuals for pandas or Spark DataFrames; cleaning operations generate Python code you add back to the notebook</td></tr>
-<tr><td>DAX query view</td><td>Quick query <em>Show column statistics</em> for a table or column</td></tr>
-<tr><td>T-SQL</td><td><code>COUNT(*)</code>, <code>COUNT(DISTINCT x)</code>, <code>SUM(CASE WHEN x IS NULL THEN 1 ELSE 0 END)</code>, <code>MIN/MAX</code>, <code>APPROX_COUNT_DISTINCT</code></td></tr>
-<tr><td>KQL</td><td><code>T | summarize count(), dcount(x), countif(isempty(x)), min(ts), max(ts)</code>; <code>T | getschema</code></td></tr>
-</tbody>
-</table></div>
-
-<h2>Exploring data in notebooks</h2>
-<pre><code># PySpark cell in a Fabric notebook attached to lakehouse LH_Gold
-df = spark.read.table("LH_Gold.fact_sales")          # or spark.sql("SELECT ...")
-df.printSchema()
-df.describe("SalesAmount", "Quantity").show()
-df.summary("count", "min", "25%", "50%", "75%", "max").show()
-display(df.limit(1000))                               # rich grid + chart view
-
-from pyspark.sql import functions as F
-(df.groupBy("Region")
-   .agg(F.sum("SalesAmount").alias("Sales"),
-        F.approx_count_distinct("CustomerKey").alias("Customers"))
-   .orderBy(F.desc("Sales"))
-   .show())</code></pre>
+<div class="stats">
+  <div><b>1,000</b><span>rows profiled by default in Power Query</span></div>
+  <div><b>Entire data set</b><span>switch in the status bar (slower)</span></div>
+</div>
+<div class="tabset">
+  <section data-tab="PySpark">
+<pre><code>df = spark.read.table("LH_Gold.fact_sales")
+df.describe("SalesAmount").show()        # count, mean, stddev, min, max
+df.summary("count", "25%", "50%", "75%").show()   # adds percentiles
+display(df, summary=True)                # per-column summary view</code></pre>
+  </section>
+  <section data-tab="Spark SQL">
 <pre><code>%%sql
--- Spark SQL cell: same Delta table, SQL syntax
 SELECT Region, SUM(SalesAmount) AS Sales
 FROM   LH_Gold.fact_sales
-GROUP BY Region
-ORDER BY Sales DESC</code></pre>
-<pre><code># Semantic link (SemPy): query a semantic model from a notebook with DAX
-import sempy.fabric as fabric
-fabric.evaluate_dax(
-    dataset="Sales Model",
-    dax_string="EVALUATE SUMMARIZECOLUMNS('Date'[Year], \"Sales\", [Total Sales])"
-)
-fabric.read_table("Sales Model", "Customer")    # read a model table into a DataFrame</code></pre>
-<p>Spark SQL in notebooks reads/writes Delta directly; the SQL analytics endpoint over the same tables is read-only T-SQL. <strong>Semantic link</strong> lets data scientists reuse governed measures (with the model's logic) instead of re-implementing them in Python.</p>
-
+GROUP BY Region</code></pre>
+  <p>Spark SQL reads and writes Delta; the SQL analytics endpoint over the same tables is read-only.</p>
+  </section>
+  <section data-tab="Semantic link">
+<pre><code>import sempy.fabric as fabric
+fabric.evaluate_dax(dataset="Sales Model",
+    dax_string="EVALUATE SUMMARIZECOLUMNS('Date'[Year], \"Sales\", [Total Sales])")
+fabric.read_table("Sales Model", "Customer")</code></pre>
+  <p>Reuse governed measures in Python instead of re-implementing them.</p>
+  </section>
+  <section data-tab="Other">
+  <ul><li>pandas: <code>describe(include="all")</code>, <code>info()</code>, <code>isna().sum()</code></li><li>DAX query view: <i>Show column statistics</i></li><li>T-SQL: <code>COUNT(DISTINCT)</code>, null counts, <code>APPROX_COUNT_DISTINCT</code></li><li>KQL: <code>summarize count(), dcount(x)</code>, <code>getschema</code></li></ul>
+  </section>
+</div>
+<div class="check" data-answer="2"><p>Column quality shows CustomerEmail as 100% valid, but you suspect errors further down a 2-million-row table. Why?</p><ul><li>Column quality ignores text columns</li><li>Profiling uses the top 1,000 rows by default; switch to the entire data set</li><li>Errors only show after publishing</li><li>Errors only appear in Diagram view</li></ul><p class="why">Change it in the status bar: <i>Column profiling based on entire data set</i>.</p></div>
 <div class="reveal">
-<p><strong>Scenario.</strong> A retail company has: a warehouse <code>WH_Sales</code> (facts), a lakehouse <code>LH_Ref</code> (product master as Delta), an eventhouse with web clickstream, and a certified semantic model <code>Sales Model</code>. Requests: (a) a marketing analyst with no SQL skills wants a reusable joined "orders with product category" object; (b) finance wants to check why a <em>Gross Margin %</em> measure shows 41% for Bikes; (c) the web team wants page views per minute for the last 2 hours; (d) a data scientist needs the distribution of order values across 4 billion rows, and to reuse the model's <em>Total Sales</em> measure in Python. Which tool for each?</p>
-<div class="answer">
-<ul>
-<li>(a) <strong>Visual query editor</strong> in <code>WH_Sales</code>: drag FactSales and the lakehouse product table (added to the Explorer — cross-database), merge, filter, <strong>Save as view</strong>.</li>
-<li>(b) <strong>DAX query view</strong>: Quick query <em>Define with references and evaluate</em> on the measure, add <code>Product[Category]</code> to SUMMARIZECOLUMNS, inspect intermediate measures; or Performance Analyzer → Run in DAX query view for the exact visual query.</li>
-<li>(c) <strong>KQL</strong> in a queryset: <code>Clicks | where Timestamp &gt; ago(2h) | summarize Views = count() by bin(Timestamp, 1m) | render timechart</code>.</li>
-<li>(d) <strong>Notebook</strong>: <code>df.summary()</code> / <code>approx_count_distinct</code> in Spark for the distribution; <strong>semantic link</strong> <code>evaluate_dax</code> to reuse <em>Total Sales</em>.</li>
+<p><b>Scenario.</b> (a) A marketing analyst without SQL needs a reusable "orders with category" object. (b) Finance asks why Margin % shows 41% for Bikes. (c) Web team wants page views per minute for 2 hours. (d) A data scientist needs order-value distribution over 4 billion rows and the model's Total Sales in Python. Which tool for each?</p>
+<div class="answer"><ul>
+<li>(a) Visual query editor, merge with the lakehouse table, <b>Save as view</b>.</li>
+<li>(b) DAX query view: <i>Define with references</i>, group by Product[Category]; or Performance Analyzer → Run in DAX query view.</li>
+<li>(c) KQL: <code>Clicks | where Timestamp &gt; ago(2h) | summarize count() by bin(Timestamp, 1m)</code>.</li>
+<li>(d) Notebook <code>df.summary()</code> + semantic link <code>evaluate_dax</code>.</li>
+</ul></div>
+</div>
+</section>
+
+<section class="lesson">
+<h2>Exam traps</h2>
+<ul class="traps">
+  <li>The SQL analytics endpoint is <b>read-only</b> for tables, but views, functions and security work.</li>
+  <li>Each Run is its own session: no BEGIN TRAN in one run and COMMIT in the next.</li>
+  <li>No linked servers: use <b>three-part names</b> within the workspace.</li>
+  <li>The visual query editor only supports <b>foldable</b> steps and is read-only.</li>
+  <li>RANK has gaps; DENSE_RANK doesn't; window functions can't go in WHERE.</li>
+  <li>DEFINE MEASURE is query-scoped until you choose <b>Update model with changes</b>.</li>
+  <li>Power Query profiles only the <b>top 1,000 rows</b> by default.</li>
+  <li>Visualize results isn't available when the query has ORDER BY.</li>
 </ul>
-</div>
-</div>
+</section>
 
-<div class="check" data-answer="4">
-<p>Which T-SQL ranking function returns 1, 2, 2, 3 for the sales values 500, 400, 400, 300 ordered descending?</p>
-<ul><li><code>ROW_NUMBER()</code></li><li><code>RANK()</code></li><li><code>NTILE(3)</code></li><li><code>DENSE_RANK()</code></li></ul>
-<p class="why">DENSE_RANK gives ties the same rank without gaps. RANK returns 1, 2, 2, 4; ROW_NUMBER returns 1, 2, 3, 4.</p>
+<section class="lesson">
+<h2>Cheat sheet</h2>
+<div class="cheat">
+  <div><h4>🏢 SQL editor</h4><ul><li>Preview: 10,000 rows</li><li>Save as view / table (CTAS)</li><li>Open in Excel, Visualize</li><li>Three-part names</li></ul></div>
+  <div><h4>🧱 Visual query</h4><ul><li>No code, foldable steps</li><li>View SQL</li><li>Save as view / table</li></ul></div>
+  <div><h4>🪟 Windows</h4><ul><li>ROW_NUMBER → dedup (CTE, rn = 1)</li><li>RANK gaps, DENSE_RANK none</li><li>LAG / LEAD</li><li>Running total: ROWS frame</li></ul></div>
+  <div><h4>🧠 DAX queries</h4><ul><li>EVALUATE required</li><li>SUMMARIZECOLUMNS = GROUP BY</li><li>Update model with changes</li><li>Web needs write permission</li></ul></div>
+  <div><h4>📋 Profiling</h4><ul><li>Quality, distribution, profile</li><li>Top 1,000 rows default</li><li>describe(), summary(), Data Wrangler</li></ul></div>
 </div>
+</section>
 
-<div class="check" data-answer="3">
-<p>In the SQL query editor you run <code>BEGIN TRAN; UPDATE ...</code> and then, in a second run, <code>COMMIT</code>. The commit fails. Why?</p>
-<ul><li>Fabric warehouses do not support transactions</li><li>UPDATE statements are auto-committed and cannot be in a transaction</li><li>Each Run is a separate batch and session, so the second run has no open transaction</li><li>COMMIT requires the Admin workspace role</li></ul>
-<p class="why">Fabric warehouses support transactions, but the portal editor runs each execution in its own session. Put BEGIN TRAN ... COMMIT in one batch (or use SSMS/VS Code).</p>
-</div>
-
-<h2>Key takeaways &amp; exam tips</h2>
-<ul>
-<li><strong>SQL query editor</strong>: full T-SQL in a warehouse (DDL/DML/DCL); read-only tables in a SQL analytics endpoint (but views/functions/security allowed). Results preview = first 10,000 rows. Save as view / Save as table (CTAS) / Open in Excel / Visualize results. Each Run = new session.</li>
-<li><strong>Cross-database queries</strong>: three-part names (<code>Lakehouse1.dbo.Customer</code>) within the workspace, no copy, no linked servers.</li>
-<li><strong>Visual query editor</strong>: no-code Power Query diagram that generates one <code>SELECT</code>; only foldable steps; read-only; View SQL; Save as view or table.</li>
-<li>Window functions: ROW_NUMBER (dedup / latest row with a CTE), RANK (gaps), DENSE_RANK (no gaps), LAG/LEAD (previous/next), SUM OVER with <code>ROWS BETWEEN UNBOUNDED PRECEDING AND CURRENT ROW</code> (running total). Filter window results in an outer query.</li>
-<li>HAVING filters groups; WHERE filters rows. <code>APPROX_COUNT_DISTINCT</code> = fast estimated distinct count. <code>STRING_AGG</code> concatenates per group. PIVOT turns rows into columns.</li>
-<li><strong>DAX queries</strong>: <code>EVALUATE</code> required, <code>DEFINE</code> (MEASURE/VAR/TABLE/COLUMN) optional, <code>ORDER BY</code> optional. <code>SUMMARIZECOLUMNS</code> = group by; <code>TOPN</code> needs <code>ORDER BY</code> for a sorted output; <code>CALCULATETABLE</code> applies filters.</li>
-<li><strong>DAX query view</strong>: quick queries, CodeLens / <strong>Update model with changes</strong> to save DEFINE MEASUREs, Performance Analyzer → Run in DAX query view, saved as .dax in PBIP. Web: needs write permission; viewers with Build use Desktop live connect.</li>
-<li>Choose <strong>T-SQL</strong> for relational/warehouse, <strong>KQL</strong> for streaming/time-series/logs, <strong>DAX</strong> for the semantic model's logic, <strong>Spark</strong> for big files, JSON and data science.</li>
-<li>Power Query profiling = column quality / distribution / profile, <strong>top 1,000 rows by default</strong>. In notebooks: <code>describe()</code>, <code>summary()</code>, <code>display(df, summary=True)</code>, Data Wrangler. Semantic link evaluates DAX from Python.</li>
-</ul>
-<p>Next: <a href="10-semantic-model-design.html">Semantic model design &amp; storage modes</a>. Related: <a href="06-warehouse-tsql.html">Warehouse &amp; T-SQL</a>, <a href="12-dax.html">DAX for the exam</a>.</p>
 </main>
 <script src="assets/app.js"></script>
 </body>

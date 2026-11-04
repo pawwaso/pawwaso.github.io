@@ -3,412 +3,461 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
-<title>Transform data: star schema, SCD, cleansing – DP-600</title>
+<title>Transform data – DP-600</title>
 <link rel="stylesheet" href="assets/style.css">
+<style>
+/* page-specific visuals (p07) */
+.sim .wtitle { font-size: .78em; text-transform: uppercase; letter-spacing: .05em; color: var(--dom); font-weight: 700; margin-bottom: 8px; }
+.p07-svg { color: var(--fg); }
+.p07-svg text { fill: currentColor; font-size: 13px; }
+.p07-svg text.t { font-weight: 700; font-size: 14px; }
+.p07-svg text.s { fill: var(--muted); font-size: 11.5px; }
+.p07-svg .tb rect { fill: color-mix(in srgb, var(--k) 12%, var(--bg)); stroke: var(--k); stroke-width: 2; }
+.p07-svg .tb.sel rect { stroke-width: 5; }
+.p07-svg line.rel { stroke: var(--muted); stroke-width: 2; }
+.p07-btns { display: flex; flex-wrap: wrap; gap: 6px; margin: 6px 0 10px; align-items: center; }
+.p07-btns button.on { border-color: var(--dom); background: color-mix(in srgb, var(--dom) 16%, var(--bg)); font-weight: 700; }
+.p07-panels { display: grid; grid-template-columns: repeat(auto-fit, minmax(260px, 1fr)); gap: 10px; }
+.p07-panels > div { border: 1px solid var(--line); border-radius: 8px; padding: 8px 10px; background: var(--bg); overflow-x: auto; }
+.p07-panels h5 { margin: 0 0 4px; font-size: .95em; color: var(--dom); }
+.p07-panels p { margin: 4px 0 0; font-size: .82em; color: var(--muted); }
+table.p07-t { font-size: .78em; width: 100%; }
+table.p07-t th, table.p07-t td { padding: 3px 6px; white-space: nowrap; }
+table.p07-t tr.new td { background: var(--ok-soft); }
+table.p07-t tr.old td { color: var(--muted); }
+table.p07-t tr.drop td { text-decoration: line-through; color: var(--muted); }
+table.p07-t tr.bad td { background: var(--bad-soft); }
+.p07-venn { width: 230px; height: auto; flex: none; }
+.p07-jwrap { display: flex; gap: 16px; flex-wrap: wrap; align-items: flex-start; }
+.p07-jwrap > div { flex: 1 1 260px; }
+</style>
 </head>
-<body>
+<body data-domain="2">
 <main>
-<h1>Transform data: star schema, SCD, cleansing</h1>
-<p class="lead">How to turn silver data into a gold star schema in a lakehouse or warehouse: fact and dimension design, surrogate keys, slowly changing dimensions (types 0/1/2/3/6) in T-SQL and PySpark, denormalisation, and the data-quality toolbox (deduplication, nulls, type conversion, filtering, joins, aggregation, enrichment), plus Power Query operations and how to choose between T-SQL, PySpark and Dataflow Gen2. Maps to <em>Prepare data → Transform data</em>.</p>
+<header class="hero">
+  <div class="hi">🔧</div>
+  <div>
+    <h1>Transform data</h1>
+    <p class="lead">Turn silver data into a clean gold star schema with history, quality checks and the right tool.</p>
+    <div class="meta"><span class="pill">Domain 2 · Prepare data</span><span class="pill">⏱ 35 min</span><span class="pill">6 lessons</span></div>
+    <ul class="goals"><li>Design facts, dimensions and surrogate keys</li><li>Implement SCD types 1, 2, 3</li><li>Deduplicate and join correctly</li><li>Use Power Query merges, unpivots and folding</li></ul>
+  </div>
+</header>
+<div class="tldr"><ul>
+  <li><b>Star schema</b>: one fact (grain, measures, keys) + denormalised dimensions.</li>
+  <li><b>SCD2</b> = expire old row + insert new version (ValidFrom, ValidTo, IsCurrent, new surrogate key).</li>
+  <li>Latest row per key = <code>ROW_NUMBER() … = 1</code>, not dropDuplicates or MAX().</li>
+  <li><b>Left anti</b> join finds orphans. <b>Unpivot other columns</b> survives new columns.</li>
+  <li>One non-folding Power Query step stops folding for all later steps.</li>
+</ul></div>
 
+<section class="lesson">
 <h2>Star schema building blocks</h2>
-<p>A <strong>star schema</strong> has a central <strong>fact table</strong> (events/measurements, many rows, numeric measures + foreign keys) surrounded by <strong>dimension tables</strong> (descriptive attributes used to filter and group). It is the recommended shape for Power BI semantic models: simpler DAX, better compression, fewer and cheaper joins, easier for users. Relationships go one-to-many from dimension to fact, single direction by default.</p>
-<h3>Fact table types</h3>
-<div class="tw"><table>
-<thead><tr><th>Type</th><th>Grain</th><th>Example</th><th>Behaviour</th></tr></thead>
-<tbody>
-<tr><td><strong>Transactional</strong></td><td>One row per event/line</td><td>Order line, payment, web click</td><td>Insert-only; fully additive measures; largest tables</td></tr>
-<tr><td><strong>Periodic snapshot</strong></td><td>One row per entity per period</td><td>Daily stock level per product/warehouse, month-end account balance</td><td>Semi-additive measures (don't sum balances over time – use last/average)</td></tr>
-<tr><td><strong>Accumulating snapshot</strong></td><td>One row per process instance, updated as it progresses</td><td>Order with OrderDate, ShipDate, DeliveryDate, lag columns</td><td>Rows are <strong>updated</strong> (MERGE); several date keys (role-playing date dimension)</td></tr>
-<tr><td><strong>Factless fact</strong></td><td>One row per occurrence/coverage, no measures</td><td>Student attendance, product on promotion</td><td>Analysed by counting rows</td></tr>
-</tbody></table></div>
-<p><strong>Declare the grain first</strong> ("one row per order line"), then pick dimensions and measures consistent with it. Store data at the grain the business actually needs – if users only analyse by month, summarising a 400-million-row table to monthly grain in gold dramatically cuts cost.</p>
-<h3>Dimension design</h3>
-<ul>
-<li><strong>Surrogate key</strong>: a narrow, meaningless integer (<code>int</code>/<code>bigint</code>) key owned by the warehouse. Needed for SCD type 2 (several versions of one business key), shields you from source key changes, merges keys from several sources, and integers compress and join best. Relationships on text or floating-point keys are allowed but slower and risk matching problems.</li>
-<li><strong>Business (natural) key</strong>: the source identifier (CustomerID) – kept as an attribute for lookups and MERGE matching.</li>
-<li><strong>Unknown member</strong>: a row such as key <code>-1</code> "Unknown" so facts with missing/late dimension values still join (no blank row in reports, no lost facts).</li>
-<li><strong>Degenerate dimension</strong>: an identifier with no attributes (OrderNumber, InvoiceNo) kept directly in the fact.</li>
-<li><strong>Conformed dimension</strong>: one shared dimension (Date, Customer, Product) used by several facts/models with identical keys and attributes → consistent drill-across. Build it <strong>once physically</strong> in the lakehouse/warehouse and reuse it everywhere.</li>
-<li><strong>Date dimension</strong>: one row per day, integer key <code>yyyymmdd</code>, attributes (year, quarter, month name/number, week, fiscal periods, holidays, IsWorkingDay). Generate it once (T-SQL, Spark or Power Query) and mark it as a date table in the model.</li>
-<li><strong>Role-playing dimension</strong>: one physical dimension used in several roles (Order Date, Ship Date, Due Date). In the model: one active and other inactive relationships activated with <code>USERELATIONSHIP</code>, or separate role views/tables.</li>
-<li><strong>Junk dimension</strong>: combines several low-cardinality flags/indicators (IsOnline, PaymentType, GiftWrap) into one small dimension with one row per combination – keeps the fact narrow.</li>
-<li><strong>Bridge table</strong>: resolves many-to-many (a customer owns many accounts; an account has many owners). Bridge <code>CustomerAccount(CustomerKey, AccountKey)</code> with one-to-many relationships from both dimensions; let filters flow from the bridge to DimAccount (bidirectional on that relationship or <code>CROSSFILTER</code> in measures). Totals across customers are non-additive.</li>
-<li><strong>Snowflake vs star</strong>: normalised dimension hierarchies (Product → Subcategory → Category) are <strong>denormalised</strong> into a single wide dimension for the model.</li>
-</ul>
-
-<div class="match" data-task="Match each dimensional-modelling term to its description.">
-<dl>
-<dt>Conformed dimension</dt><dd>Shared, identical dimension reused by several fact tables and models</dd>
-<dt>Role-playing dimension</dt><dd>One physical dimension used as Order Date, Ship Date and Due Date</dd>
-<dt>Junk dimension</dt><dd>Combines several low-cardinality flags into one small table</dd>
-<dt>Bridge table</dt><dd>Resolves a many-to-many relationship between two dimensions</dd>
-<dt>Degenerate dimension</dt><dd>Order number stored in the fact with no dimension table</dd>
-<dt>Accumulating snapshot</dt><dd>Fact row updated as a process passes milestones</dd>
-<dt>Periodic snapshot</dt><dd>One row per entity per period, such as a daily stock level</dd>
-</dl>
+<p class="idea">A fact table of events in the middle, descriptive dimensions around it, one-to-many from each dimension.</p>
+<div class="diagram" data-infopanel data-hint="Click a table to see its role.">
+<svg class="p07-svg" viewBox="0 0 720 330" width="720" role="img" aria-label="Star schema">
+  <line class="rel" x1="360" y1="165" x2="130" y2="60"/><line class="rel" x1="360" y1="165" x2="590" y2="60"/>
+  <line class="rel" x1="360" y1="165" x2="130" y2="270"/><line class="rel" x1="360" y1="165" x2="590" y2="270"/>
+  <g class="tb" style="--k:var(--c4)" data-title="FactSales (fact)" data-info="One row per order line (declare the grain first!). Narrow: integer surrogate foreign keys + numeric measures (Quantity, SalesAmount) + degenerate dimension OrderNumber. Many rows, insert-only for transactional facts.">
+    <rect x="270" y="110" width="180" height="110" rx="10"/><text class="t" x="284" y="134">📈 FactSales</text>
+    <text class="s" x="284" y="156">DateKey · CustomerKey</text><text class="s" x="284" y="174">ProductKey · StoreKey</text><text class="s" x="284" y="192">OrderNumber</text><text class="s" x="284" y="210">Quantity · SalesAmount</text>
+  </g>
+  <g class="tb" style="--k:var(--c1)" data-title="DimDate (conformed, role-playing)" data-info="One row per day, integer key yyyymmdd, year/quarter/month/week/fiscal/holiday columns. Built once and shared (conformed). Role-playing: Order Date, Ship Date, Due Date via inactive relationships + USERELATIONSHIP. Mark as date table.">
+    <rect x="40" y="20" width="180" height="80" rx="10"/><text class="t" x="54" y="44">📅 DimDate</text><text class="s" x="54" y="66">DateKey 20261104</text><text class="s" x="54" y="84">Year · Month · Fiscal</text>
+  </g>
+  <g class="tb" style="--k:var(--c2)" data-title="DimCustomer (SCD2)" data-info="Surrogate key CustomerKey (int) + business key CustomerID. Several versions per customer for SCD type 2 (ValidFrom, ValidTo, IsCurrent). Contains an Unknown member (-1) so facts with missing customers still join.">
+    <rect x="500" y="20" width="180" height="80" rx="10"/><text class="t" x="514" y="44">👤 DimCustomer</text><text class="s" x="514" y="66">CustomerKey · CustomerID</text><text class="s" x="514" y="84">City · IsCurrent</text>
+  </g>
+  <g class="tb" style="--k:var(--c3)" data-title="DimProduct (denormalised)" data-info="Snowflaked Product → Subcategory → Category flattened into ONE wide dimension. Fewer joins, simpler DAX, better compression.">
+    <rect x="40" y="230" width="180" height="80" rx="10"/><text class="t" x="54" y="254">📦 DimProduct</text><text class="s" x="54" y="276">ProductKey · Name</text><text class="s" x="54" y="294">Subcategory · Category</text>
+  </g>
+  <g class="tb" style="--k:var(--c5)" data-title="DimStore" data-info="Descriptive attributes used to filter and group (region, size). Low-cardinality flags (IsOnline, PaymentType) could go into a separate junk dimension instead of widening the fact.">
+    <rect x="500" y="230" width="180" height="80" rx="10"/><text class="t" x="514" y="254">🏬 DimStore</text><text class="s" x="514" y="276">StoreKey · Region</text><text class="s" x="514" y="294">Size · Channel</text>
+  </g>
+</svg>
+<p class="muted">Every line: one dimension row → many fact rows (1:*), single direction.</p>
 </div>
-
-<h3>Generating surrogate keys</h3>
+<div class="icards" data-hint="Click a fact table type.">
+  <div class="icard" data-title="Transactional" data-info="One row per event or line (order line, payment, click). Insert-only, fully additive, largest tables."><div class="i">🧾</div><h4>Transactional</h4><p>One row per event</p></div>
+  <div class="icard" data-title="Periodic snapshot" data-info="One row per entity per period (daily stock level, month-end balance). Semi-additive: don't sum balances over time; use last/average."><div class="i">📸</div><h4>Periodic snapshot</h4><p>One row per period</p></div>
+  <div class="icard" data-title="Accumulating snapshot" data-info="One row per process instance, updated (MERGE) as it passes milestones: OrderDate, ShipDate, DeliveryDate + lag columns. Several role-playing date keys."><div class="i">⏳</div><h4>Accumulating</h4><p>Row updated per milestone</p></div>
+  <div class="icard" data-title="Factless fact" data-info="No measures; one row per occurrence or coverage (attendance, product on promotion). Analysed by counting rows."><div class="i">✔️</div><h4>Factless</h4><p>Count the rows</p></div>
+</div>
+<div class="match" data-task="Match the dimension pattern.">
+<dl>
+<dt>Conformed dimension</dt><dd>Identical dimension shared by several facts and models</dd>
+<dt>Role-playing dimension</dt><dd>One date table used as Order, Ship and Due date</dd>
+<dt>Junk dimension</dt><dd>Several low-cardinality flags in one small table</dd>
+<dt>Bridge table</dt><dd>Resolves many-to-many between two dimensions</dd>
+<dt>Degenerate dimension</dt><dd>Order number stored in the fact, no table</dd>
+<dt>Unknown member</dt><dd>Key -1 so facts with missing references still join</dd>
+</dl></div>
+<details><summary>Deep dive: surrogate keys, grain, bridge tables</summary>
 <div class="tw"><table>
-<thead><tr><th>Engine</th><th>Technique</th><th>Notes</th></tr></thead>
-<tbody>
-<tr><td>Warehouse</td><td><code>BIGINT IDENTITY</code> column</td><td>Least effort; unique, not sequential, no seed/increment</td></tr>
-<tr><td>Warehouse / Spark SQL</td><td><code>MAX(existing key) + ROW_NUMBER() OVER (ORDER BY BusinessKey)</code></td><td>Deterministic, sequential; single writer at a time</td></tr>
-<tr><td>Spark</td><td><code>monotonically_increasing_id()</code></td><td>Unique but large, non-consecutive values; can collide across runs unless offset by the current max</td></tr>
-<tr><td>Any</td><td>Hash of business key (e.g. <code>xxhash64</code>, SHA-256)</td><td>Stable across reloads, no lookup needed; wide (string) hashes compress poorly – prefer 64-bit integer hashes</td></tr>
-</tbody></table></div>
-<h3>Loading facts: key lookup</h3>
-<pre><code>-- T-SQL: replace business keys with surrogate keys; unknown member for misses
-INSERT INTO gold.FactSales (DateKey, CustomerKey, ProductKey, OrderNumber, Quantity, SalesAmount)
-SELECT  CONVERT(int, CONVERT(char(8), s.OrderDate, 112))      AS DateKey,
-        COALESCE(c.CustomerKey, -1)                           AS CustomerKey,
-        COALESCE(p.ProductKey,  -1)                           AS ProductKey,
-        s.OrderNumber,                                        -- degenerate dimension
-        s.Quantity,
-        s.Quantity * s.UnitPrice                              AS SalesAmount
-FROM    silver.Sales AS s
-LEFT JOIN gold.DimCustomer AS c
-       ON c.CustomerID = s.CustomerID
-      AND s.OrderDate &gt;= c.ValidFrom AND s.OrderDate &lt; COALESCE(c.ValidTo, '9999-12-31')   -- SCD2: version valid at order time
-LEFT JOIN gold.DimProduct AS p
-       ON p.ProductID = s.ProductID AND p.IsCurrent = 1;</code></pre>
-<div class="exam">Row-level calculated values used as axis/slicer (Margin = SalesAmount − TotalCost, profit bands) belong in the <strong>gold table</strong>, computed during transformation – especially for Direct Lake models, which should get such columns from the Delta table rather than from DAX calculated columns (calculated columns aren't supported on Direct Lake on SQL endpoint tables, and are only in preview with limitations on Direct Lake on OneLake). Materialise once upstream; every consumer gets the same definition.</div>
-
-<h2>Slowly changing dimensions</h2>
-<div class="tw"><table>
-<thead><tr><th>Type</th><th>Behaviour on change</th><th>History?</th><th>Implementation</th></tr></thead>
-<tbody>
-<tr><td><strong>0</strong> – retain original</td><td>Attribute never changes (e.g. original credit score, DateOfBirth)</td><td>Original only</td><td>Insert new members; ignore updates</td></tr>
-<tr><td><strong>1</strong> – overwrite</td><td>Update the attribute in place</td><td>No</td><td>MERGE … WHEN MATCHED THEN UPDATE</td></tr>
-<tr><td><strong>2</strong> – add row</td><td>Expire the current row (ValidTo, IsCurrent = 0) and insert a new version with a new surrogate key</td><td>Full</td><td>MERGE/UPDATE + INSERT; columns ValidFrom, ValidTo, IsCurrent</td></tr>
-<tr><td><strong>3</strong> – add column</td><td>Keep current and <em>previous</em> value in separate columns (City, PreviousCity)</td><td>Limited (one prior value)</td><td>UPDATE shifting current → previous</td></tr>
-<tr><td><strong>4</strong> – history table / mini-dimension</td><td>Rapidly changing attributes moved to a separate table</td><td>In separate table</td><td>Extra dimension/history table</td></tr>
-<tr><td><strong>6</strong> – hybrid (1+2+3)</td><td>Type 2 rows <strong>plus</strong> a "current value" column overwritten on all versions</td><td>Full + current view</td><td>Type 2 load followed by type 1 update of CurrentCity for the business key</td></tr>
-</tbody></table></div>
-<p>Change detection: compare tracked columns directly, or compare a <strong>row hash</strong> (e.g. <code>sha2(concat_ws('||', Name, City, Segment), 256)</code>) stored on each version – one comparison instead of many, and NULL-safe if you coalesce first.</p>
-
-<h3>SCD type 2 in T-SQL (warehouse)</h3>
-<pre><code>-- Staging: stg.Customer (CustomerID, CustomerName, City, Segment) = today's full extract
-BEGIN TRAN;
-
--- 1) Expire current rows whose tracked attributes changed
-UPDATE d
-SET    d.ValidTo   = SYSUTCDATETIME(),
-       d.IsCurrent = 0
-FROM   gold.DimCustomer AS d
-JOIN   stg.Customer     AS s ON s.CustomerID = d.CustomerID
-WHERE  d.IsCurrent = 1
-  AND (   ISNULL(d.City, '')    &lt;&gt; ISNULL(s.City, '')
-       OR ISNULL(d.Segment, '') &lt;&gt; ISNULL(s.Segment, ''));
-
--- 2) Insert new versions (changed rows) and brand-new customers
-INSERT INTO gold.DimCustomer (CustomerID, CustomerName, City, Segment, ValidFrom, ValidTo, IsCurrent)
-SELECT s.CustomerID, s.CustomerName, s.City, s.Segment, SYSUTCDATETIME(), NULL, 1
-FROM   stg.Customer AS s
-LEFT JOIN gold.DimCustomer AS d
-       ON d.CustomerID = s.CustomerID AND d.IsCurrent = 1
-WHERE  d.CustomerID IS NULL;      -- no current row: new customer or just expired
-
--- 3) Type 1 attribute (name corrections) overwrite on all versions
-UPDATE d SET d.CustomerName = s.CustomerName
-FROM gold.DimCustomer AS d JOIN stg.Customer AS s ON s.CustomerID = d.CustomerID
-WHERE d.CustomerName &lt;&gt; s.CustomerName;
-
-COMMIT;
--- CustomerKey is BIGINT IDENTITY, so new versions get new surrogate keys automatically</code></pre>
-<p>Type 1 with MERGE (GA in Fabric warehouse):</p>
-<pre><code>MERGE gold.DimProduct AS t
-USING stg.Product AS s
-   ON t.ProductID = s.ProductID
-WHEN MATCHED AND (t.ProductName &lt;&gt; s.ProductName OR t.ListPrice &lt;&gt; s.ListPrice) THEN
-     UPDATE SET t.ProductName = s.ProductName, t.ListPrice = s.ListPrice
-WHEN NOT MATCHED BY TARGET THEN
-     INSERT (ProductID, ProductName, ListPrice) VALUES (s.ProductID, s.ProductName, s.ListPrice)
-WHEN NOT MATCHED BY SOURCE THEN
-     UPDATE SET t.IsActive = 0;    -- soft delete for products no longer in the full extract</code></pre>
-
-<h3>SCD type 2 in PySpark (Delta MERGE, single statement)</h3>
-<p>A single MERGE can't both update the current row and insert its new version for the same key – so the classic trick stages changed rows <strong>twice</strong>: once with a real merge key (to expire the old row) and once with a <code>NULL</code> merge key (which never matches, so it is inserted).</p>
-<pre><code>from pyspark.sql import functions as F
-from delta.tables import DeltaTable
-
-tracked = ["City", "Segment"]
-src = (spark.read.table("silver.customers_extract")
-         .withColumn("RowHash", F.sha2(F.concat_ws("||", *[F.coalesce(F.col(c), F.lit("")) for c in tracked]), 256)))
-
-dim = DeltaTable.forName(spark, "gold.dim_customer")
-cur = dim.toDF().filter("IsCurrent = true")
-
-# rows whose hash changed -&gt; need a NEW version inserted
-changed = (src.alias("s").join(cur.alias("d"), "CustomerID")
-              .filter("s.RowHash &lt;&gt; d.RowHash")
-              .select("s.*"))
-
-staged = (changed.withColumn("MergeKey", F.lit(None).cast("string"))      # will INSERT
-          .unionByName(src.withColumn("MergeKey", F.col("CustomerID"))))  # will match / insert new
-
-(dim.alias("d")
-   .merge(staged.alias("s"), "d.CustomerID = s.MergeKey AND d.IsCurrent = true")
-   .whenMatchedUpdate(
-        condition="d.RowHash &lt;&gt; s.RowHash",
-        set={"IsCurrent": "false", "ValidTo": "current_timestamp()"})
-   .whenNotMatchedInsert(values={
-        "CustomerKey": "xxhash64(s.CustomerID, current_timestamp())",   # or max+row_number
-        "CustomerID": "s.CustomerID", "City": "s.City", "Segment": "s.Segment",
-        "RowHash": "s.RowHash", "ValidFrom": "current_timestamp()",
-        "ValidTo": "CAST(NULL AS TIMESTAMP)", "IsCurrent": "true"})
-   .execute())</code></pre>
+<tr><th>Technique</th><th>Notes</th></tr>
+<tr><td>Warehouse <code>BIGINT IDENTITY</code></td><td>Least effort; unique, not sequential</td></tr>
+<tr><td><code>MAX(key) + ROW_NUMBER()</code></td><td>Deterministic, sequential; one writer at a time</td></tr>
+<tr><td>Spark <code>monotonically_increasing_id()</code></td><td>Unique, large gaps; can collide across runs unless offset by max</td></tr>
+<tr><td>Hash of business key (xxhash64)</td><td>Stable, no lookup; wide string hashes compress poorly</td></tr>
+</table></div>
 <ul>
-<li>Unchanged rows match but fail the <code>RowHash &lt;&gt;</code> condition → no-op. New customers have no current row → inserted via the real-key copy. Changed customers: real-key copy expires the old row; NULL-key copy inserts the new version.</li>
-<li>Alternative: two steps (UPDATE to expire, then append new versions) inside one notebook – simpler, but not one atomic commit.</li>
-<li>Rebuild-from-history alternative: when you have every change event with an effective date, compute ValidTo with <code>lead(EffectiveDate) OVER (PARTITION BY CustomerID ORDER BY EffectiveDate)</code> and IsCurrent where the lead is NULL.</li>
-<li>Facts join to the version valid at the event date (<code>OrderDate BETWEEN ValidFrom AND ValidTo</code>) to get the historically correct surrogate key.</li>
-</ul>
+<li>Surrogate keys: needed for SCD2, shield from source key changes, merge multiple sources, integers compress and join best. Text/float keys work but are slower.</li>
+<li>Store data at the grain the business needs: monthly analysis of a 400M-row table → summarise to monthly grain in gold.</li>
+<li>Bridge CustomerAccount(CustomerKey, AccountKey): one-to-many from both dimensions; filter flows bridge → DimAccount (bidirectional or CROSSFILTER); totals are non-additive.</li>
+<li>Star schema benefits: simpler DAX, better compression, fewer joins. Relationships one-to-many, single direction by default.</li>
+</ul></details>
+</section>
 
-<div class="order" data-task="Order the steps of a type 2 SCD load.">
+<section class="lesson">
+<h2>Slowly changing dimensions</h2>
+<p class="idea">When an attribute changes: keep it (0), overwrite (1), add a row (2) or add a column (3).</p>
+<div class="sim">
+  <div class="wtitle">SCD simulator: customer C042 moves</div>
+  <div class="p07-btns"><button id="p07-move" class="primary">🚚 Ana moves city</button><button id="p07-rst">↺ Reset</button><span id="p07-ev" class="muted"></span></div>
+  <div class="p07-panels" id="p07-scd"></div>
+  <div class="out" id="p07-fact"></div>
+</div>
+<script>
+(function () {
+  var $ = function (id) { return document.getElementById(id); };
+  var moves = [['2026-03-01', 'Lyon'], ['2026-09-01', 'Porto'], ['2027-02-01', 'Graz']];
+  var ev;
+  function t(head, rows) {
+    return '<table class="p07-t"><tr>' + head.map(function (h) { return '<th>' + h + '</th>'; }).join('') + '</tr>' +
+      rows.map(function (r) { return '<tr class="' + (r.cls || '') + '">' + r.v.map(function (c) { return '<td>' + (c === null ? '<i>NULL</i>' : c) + '</td>'; }).join('') + '</tr>'; }).join('') + '</table>';
+  }
+  function render() {
+    var n = ev.length, last = ev[n - 1], prev = n > 1 ? ev[n - 2] : null, changed = n > 1;
+    var h = '';
+    h += '<div><h5>Type 0 · retain original</h5>' + t(['SK', 'ID', 'City'], [{ v: [101, 'C042', ev[0][1]] }]) + '<p>Change ignored (e.g. DateOfBirth).</p></div>';
+    h += '<div><h5>Type 1 · overwrite</h5>' + t(['SK', 'ID', 'City'], [{ v: [101, 'C042', last[1]], cls: changed ? 'new' : '' }]) + '<p>Updated in place: history lost.</p></div>';
+    var r2 = ev.map(function (e, i) {
+      return { v: [101 + i, 'C042', e[1], e[0], i < n - 1 ? ev[i + 1][0] : null, i === n - 1 ? 1 : 0], cls: i === n - 1 && changed ? 'new' : (i < n - 1 ? 'old' : '') };
+    });
+    h += '<div><h5>Type 2 · add row</h5>' + t(['SK', 'ID', 'City', 'ValidFrom', 'ValidTo', 'IsCurrent'], r2) + '<p>Old row expired, new version + new surrogate key. Full history.</p></div>';
+    h += '<div><h5>Type 3 · add column</h5>' + t(['SK', 'ID', 'City', 'PreviousCity'], [{ v: [101, 'C042', last[1], prev ? prev[1] : null], cls: changed ? 'new' : '' }]) + '<p>Only one prior value kept.</p></div>';
+    var r6 = ev.map(function (e, i) { return { v: [101 + i, e[1], last[1], i === n - 1 ? 1 : 0], cls: i < n - 1 ? 'old' : (changed ? 'new' : '') }; });
+    h += '<div><h5>Type 6 · hybrid (1+2+3)</h5>' + t(['SK', 'City', 'CurrentCity', 'IsCurrent'], r6) + '<p>Type 2 rows + CurrentCity overwritten on all versions.</p></div>';
+    $('p07-scd').innerHTML = h;
+    var sale = '2026-05-10', sk = 101;
+    ev.forEach(function (e, i) { if (e[0] <= sale) sk = 101 + i; });
+    $('p07-fact').innerHTML = '🧾 A sale dated <b>' + sale + '</b> joins (Type 2) to <b>SK ' + sk + '</b> (' + ev[sk - 101][1] + '): the version valid on the order date.';
+    $('p07-ev').textContent = changed ? 'Latest: moved to ' + last[1] + ' on ' + last[0] : 'Since 2024-01-01 in Oslo';
+    $('p07-move').disabled = n > moves.length;
+  }
+  $('p07-move').onclick = function () { if (ev.length <= moves.length) { ev.push(moves[ev.length - 1]); render(); } };
+  $('p07-rst').onclick = function () { ev = [['2024-01-01', 'Oslo']]; render(); };
+  ev = [['2024-01-01', 'Oslo']]; render();
+})();
+</script>
+<div class="walk">
+<pre><code>MERGE INTO gold.dim_customer AS d
+USING (
+  SELECT s.CustomerID AS MergeKey, s.* FROM stg AS s
+  UNION ALL
+  SELECT NULL AS MergeKey, s.* FROM stg AS s
+  JOIN gold.dim_customer AS c
+    ON c.CustomerID = s.CustomerID AND c.IsCurrent = true
+  WHERE c.RowHash &lt;&gt; s.RowHash
+) AS u
+ON d.CustomerID = u.MergeKey AND d.IsCurrent = true
+WHEN MATCHED AND d.RowHash &lt;&gt; u.RowHash THEN
+  UPDATE SET d.IsCurrent = false, d.ValidTo = current_timestamp()
+WHEN NOT MATCHED THEN
+  INSERT (CustomerKey, CustomerID, City, RowHash, ValidFrom, ValidTo, IsCurrent)
+  VALUES (xxhash64(u.CustomerID, current_timestamp()), u.CustomerID, u.City,
+          u.RowHash, current_timestamp(), NULL, true);</code></pre>
+<ol>
+  <li data-lines="3">Copy 1 of every staged row, keyed by the real business key: it can match the current row.</li>
+  <li data-lines="5-8">Copy 2 only for <b>changed</b> rows (row hash differs), with a NULL key: it never matches.</li>
+  <li data-lines="10">Match only the current version of each customer.</li>
+  <li data-lines="11-12">Changed: <b>expire</b> the old row. Unchanged rows match but fail the hash test → no-op.</li>
+  <li data-lines="13-16">NULL-key copies and brand-new customers are <b>inserted</b> as current versions with a new surrogate key.</li>
+</ol>
+</div>
+<div class="order" data-task="Order the SCD2 load.">
 <ol>
 <li>Land today's full customer extract in staging</li>
 <li>Compute a row hash of the tracked attributes</li>
-<li>Compare staging with current dimension rows on the business key</li>
-<li>Expire changed current rows by setting ValidTo and IsCurrent = 0</li>
-<li>Insert new versions and brand-new customers with new surrogate keys</li>
-<li>Load facts by looking up the version valid at the transaction date</li>
-</ol>
-</div>
-
-<div class="check" data-answer="2">
-<p>A daily full extract of all customers arrives. <code>dim_customer</code> (Delta, lakehouse) must preserve the history of City and Segment changes. What should you implement in a notebook?</p>
-<ul><li><code>mode("overwrite")</code> of the extract into dim_customer</li><li>A MERGE that compares the extract with current rows, expires changed rows and inserts new versions</li><li><code>mode("append")</code> of the full extract every day</li><li>Enable Delta time travel and query old versions</li></ul>
-<p class="why">That is SCD type 2: expire + insert new versions with validity dates and a current flag. Overwrite is type 1 (history lost), appending duplicates every unchanged row, and time travel is limited by retention and isn't a dimensional history.</p>
-</div>
-
-<div class="check" data-answer="4">
-<p>A silver table must keep the history of changed customer attributes with validity dates and a current flag. Which pattern is this?</p>
-<ul><li>SCD type 1</li><li>SCD type 3</li><li>SCD type 0</li><li>SCD type 2</li></ul>
-<p class="why">Type 2 adds a new row per change with ValidFrom/ValidTo and a current indicator. Type 1 overwrites, type 3 keeps one previous value in an extra column, type 0 never changes.</p>
-</div>
-
-<h2>Denormalisation &amp; shaping for analytics</h2>
+<li>Compare staging with current rows on the business key</li>
+<li>Expire changed rows: ValidTo + IsCurrent = 0</li>
+<li>Insert new versions and new customers with new surrogate keys</li>
+<li>Load facts using the version valid at the transaction date</li>
+</ol></div>
+<div class="check" data-answer="4"><p>A table must keep the history of changed customer attributes with validity dates and a current flag. Which pattern?</p><ul><li>SCD type 1</li><li>SCD type 3</li><li>SCD type 0</li><li>SCD type 2</li></ul><p class="why">Type 2 adds a row per change with ValidFrom/ValidTo/IsCurrent.</p></div>
+<div class="check" data-answer="2"><p>A daily full customer extract arrives; dim_customer (Delta) must keep City history. What do you implement in a notebook?</p><ul><li>mode("overwrite") of the extract</li><li>MERGE that expires changed rows and inserts new versions</li><li>mode("append") of the full extract daily</li><li>Rely on Delta time travel</li></ul><p class="why">Overwrite = type 1; append duplicates unchanged rows; time travel is limited by retention.</p></div>
+<details><summary>Deep dive: T-SQL version, type 4, rebuild from history</summary>
+<pre><code>BEGIN TRAN;
+UPDATE d SET d.ValidTo = SYSUTCDATETIME(), d.IsCurrent = 0
+FROM gold.DimCustomer AS d JOIN stg.Customer AS s ON s.CustomerID = d.CustomerID
+WHERE d.IsCurrent = 1 AND ISNULL(d.City, '') &lt;&gt; ISNULL(s.City, '');
+INSERT INTO gold.DimCustomer (CustomerID, CustomerName, City, ValidFrom, ValidTo, IsCurrent)
+SELECT s.CustomerID, s.CustomerName, s.City, SYSUTCDATETIME(), NULL, 1
+FROM stg.Customer AS s
+LEFT JOIN gold.DimCustomer AS d ON d.CustomerID = s.CustomerID AND d.IsCurrent = 1
+WHERE d.CustomerID IS NULL;              -- new customer or just expired
+UPDATE d SET d.CustomerName = s.CustomerName   -- type 1 attribute on all versions
+FROM gold.DimCustomer AS d JOIN stg.Customer AS s ON s.CustomerID = d.CustomerID
+WHERE d.CustomerName &lt;&gt; s.CustomerName;
+COMMIT;   -- CustomerKey is BIGINT IDENTITY</code></pre>
 <ul>
-<li>Flatten snowflaked hierarchies (Product–Subcategory–Category) into one dimension with joins in the transformation layer.</li>
-<li>Move descriptive attributes from header tables into dimensions; header/line structures become one fact at line grain (allocate header-level amounts like freight if needed).</li>
-<li>Split high-cardinality <code>datetime</code> into a <strong>date key</strong> and a separate <strong>time</strong> (or time key) column – drastically better compression in semantic models.</li>
-<li>Remove columns nobody uses; keep data types narrow; pre-aggregate to the required grain; materialise calculated columns and summary tables as Delta tables (Direct Lake can only use Delta tables – a summary table must exist in OneLake).</li>
-<li>Expose friendly names through views or in the semantic model; hide technical keys there.</li>
-</ul>
+<li>Type 1 with MERGE (GA in warehouse): <code>WHEN MATCHED AND (…changed…) THEN UPDATE</code>, <code>WHEN NOT MATCHED BY TARGET THEN INSERT</code>, <code>WHEN NOT MATCHED BY SOURCE THEN UPDATE SET IsActive = 0</code> (soft delete).</li>
+<li>Type 4: rapidly changing attributes in a separate history table / mini-dimension.</li>
+<li>Row hash: <code>sha2(concat_ws('||', coalesce(City,''), …), 256)</code>: one comparison, NULL-safe.</li>
+<li>Two-step alternative in a notebook: UPDATE to expire, then append: simpler, but not one atomic commit.</li>
+<li>Rebuild from change events: <code>ValidTo = lead(EffectiveDate) OVER (PARTITION BY CustomerID ORDER BY EffectiveDate)</code>; IsCurrent where lead is NULL.</li>
+</ul></details>
+</section>
 
-<h2>Data quality and cleansing toolbox</h2>
-<h3>Deduplication</h3>
-<pre><code>-- T-SQL: keep the latest row per business key (deterministic, keeps all columns consistent)
-WITH ranked AS (
-    SELECT *, ROW_NUMBER() OVER (PARTITION BY CustomerID ORDER BY ModifiedDate DESC, LoadId DESC) AS rn
-    FROM silver.CustomerChanges
-)
-SELECT * FROM ranked WHERE rn = 1;
-
--- Same with QUALIFY (supported in Fabric warehouse / SQL endpoint)
+<section class="lesson">
+<h2>Deduplicate &amp; cleanse</h2>
+<p class="idea">"Latest row per key" needs ROW_NUMBER over a window, nothing else is deterministic and consistent.</p>
+<div class="sim">
+  <div class="wtitle">Dedup lab: keep the latest address per customer</div>
+  <div class="p07-btns"><button id="p07-d1">🥇 ROW_NUMBER() … = 1</button><button id="p07-d2">🎲 dropDuplicates(["CustomerID"])</button><button id="p07-d3">📊 GROUP BY + MAX()</button></div>
+  <div class="p07-panels"><div id="p07-din"></div><div id="p07-dout"></div></div>
+  <div class="out" id="p07-dmsg"></div>
+</div>
+<script>
+(function () {
+  var $ = function (id) { return document.getElementById(id); };
+  var rows = [['C1', 'Oslo', 'Main St 1', '2026-01-05'], ['C1', 'Lyon', 'Rue A 9', '2026-03-01'], ['C1', 'Bern', 'Weg 3', '2026-02-10'], ['C2', 'Graz', 'Ring 5', '2026-01-20'], ['C2', 'Ghent', 'Kaai 2', '2025-12-01']];
+  var H = ['CustomerID', 'City', 'Street', 'ModifiedDate'];
+  function tbl(head, data) {
+    return '<table class="p07-t"><tr>' + head.map(function (x) { return '<th>' + x + '</th>'; }).join('') + '</tr>' +
+      data.map(function (r) { return '<tr class="' + (r.cls || '') + '">' + r.v.map(function (c) { return '<td>' + c + '</td>'; }).join('') + '</tr>'; }).join('') + '</table>';
+  }
+  function rn() { // rank within key by date desc
+    return rows.map(function (r) { var k = 1; rows.forEach(function (o) { if (o[0] === r[0] && o[3] > r[3]) k++; }); return k; });
+  }
+  function show(mode) {
+    ['p07-d1', 'p07-d2', 'p07-d3'].forEach(function (id, i) { $(id).classList.toggle('on', i + 1 === mode); });
+    var ranks = rn(), out = [], msg = '';
+    if (mode === 1) {
+      $('p07-din').innerHTML = '<h5>Input + rn</h5>' + tbl(H.concat('rn'), rows.map(function (r, i) { return { v: r.concat(ranks[i]), cls: ranks[i] > 1 ? 'drop' : 'new' }; }));
+      out = rows.filter(function (r, i) { return ranks[i] === 1; }).map(function (r) { return { v: r, cls: 'new' }; });
+      msg = '<span class="badge ok">Correct</span> PARTITION BY CustomerID ORDER BY ModifiedDate DESC → keep rn = 1. Deterministic, whole rows. (Warehouse: also QUALIFY.)';
+    } else if (mode === 2) {
+      $('p07-din').innerHTML = '<h5>Input</h5>' + tbl(H, rows.map(function (r) { return { v: r }; }));
+      ['C1', 'C2'].forEach(function (k) { var c = rows.filter(function (r) { return r[0] === k; }); var pick = c[Math.floor(Math.random() * c.length)]; out.push({ v: pick, cls: pick[3] === c.map(function (x) { return x[3]; }).sort().pop() ? 'new' : 'bad' }); });
+      msg = '<span class="badge warn">Arbitrary</span> keeps ANY row per key: click again, the result can change. Fine for exact duplicates only.';
+    } else {
+      $('p07-din').innerHTML = '<h5>Input</h5>' + tbl(H, rows.map(function (r) { return { v: r }; }));
+      ['C1', 'C2'].forEach(function (k) {
+        var c = rows.filter(function (r) { return r[0] === k; }), m = [k];
+        for (var j = 1; j < 4; j++) m.push(c.map(function (x) { return x[j]; }).sort().pop());
+        var real = c.some(function (x) { return x[1] === m[1] && x[2] === m[2] && x[3] === m[3]; });
+        out.push({ v: m, cls: real ? 'new' : 'bad' });
+      });
+      msg = '<span class="badge bad">Wrong</span> MAX per column mixes values from different rows: "Oslo, Weg 3, 2026-03-01" never existed.';
+    }
+    $('p07-dout').innerHTML = '<h5>Result</h5>' + tbl(H, out);
+    $('p07-dmsg').innerHTML = msg;
+  }
+  $('p07-d1').onclick = function () { show(1); }; $('p07-d2').onclick = function () { show(2); }; $('p07-d3').onclick = function () { show(3); };
+  show(1);
+})();
+</script>
+<div class="icards" data-hint="Click a cleansing tool.">
+  <div class="icard" data-title="Nulls" data-info="Per column: reject (mandatory keys: dropna), default ('Unknown' for attributes; 0 only if business-correct), derive (COALESCE(City, BillingCity)), or keep NULL for unknown measures so averages aren't distorted. NULLIF(TRIM(Email), '') turns empty strings into NULL."><div class="i">🕳️</div><h4>Nulls</h4><p>Reject, default, derive, keep</p></div>
+  <div class="icard" data-title="Type conversion" data-info="Cast early and explicitly: CSV columns arrive as strings. PySpark .cast('int'), to_date(col, 'dd/MM/yyyy'). T-SQL TRY_CAST / TRY_CONVERT(date, x, 103) return NULL instead of failing: non-NULL source + NULL result = conversion error."><div class="i">🔢</div><h4>Types</h4><p>cast, TRY_CAST, to_date</p></div>
+  <div class="icard" data-title="Quarantine" data-info="Route invalid rows (e.g. NULL CustomerID) to a separate table, count them and fail the pipeline above a threshold. Don't silently lose rows."><div class="i">🚧</div><h4>Quarantine</h4><p>Park bad rows, alert</p></div>
+  <div class="icard" data-title="Unknown member" data-info="Missing dimension reference → COALESCE(key, -1). Facts are kept and show as 'Unknown' instead of disappearing."><div class="i">❓</div><h4>Unknown member</h4><p>Map misses to -1</p></div>
+  <div class="icard" data-title="Enrichment" data-info="Derived columns (Margin, age/price bands, fiscal period), lookups, UPPER(TRIM()) standardisation, split/merge columns. Materialise row-level calculated columns in the gold Delta table, especially for Direct Lake."><div class="i">✨</div><h4>Enrich</h4><p>Margin, bands, lookups</p></div>
+</div>
+<div class="sort" data-task="Which technique fixes it?">
+<ul data-bucket="🥇 Dedup"><li>Source resends yesterday's orders</li><li>Keep the most recent address per customer</li></ul>
+<ul data-bucket="🕳️ Nulls / unknown"><li>Country is empty for some customers</li><li>Missing ProductID → Unknown member</li></ul>
+<ul data-bucket="🔢 Type conversion"><li>OrderDate arrives as text dd/MM/yyyy</li><li>Quantity read from CSV as string</li></ul>
+<ul data-bucket="🚫 Anti join"><li>Orders whose CustomerID has no customer</li><li>Staging rows not yet in silver</li></ul>
+</div>
+<div class="check" data-answer="1"><p>Silver has one row per address change; gold needs one row per customer with the latest address. Which logic?</p><ul><li>Rank per customer by change date desc, keep rank 1</li><li>GROUP BY CustomerID with MAX() on each column</li><li>SELECT DISTINCT CustomerID, Street, City</li><li>dropDuplicates(["CustomerID"])</li></ul><p class="why">ROW_NUMBER picks the latest complete row. MAX mixes rows, DISTINCT keeps all versions, dropDuplicates is arbitrary.</p></div>
+<div class="check" data-answer="3"><p>A dataflow appends to a lakehouse table; the source sometimes resends yesterday's rows. Result and fix?</p><ul><li>Delta rejects duplicates automatically</li><li>Rows are overwritten: no fix needed</li><li>Duplicates accumulate: replace the window or MERGE on keys</li><li>Use a warehouse: it enforces primary keys</li></ul><p class="why">Neither Delta nor NOT ENFORCED warehouse keys reject duplicates. Make the load idempotent.</p></div>
+<details><summary>Deep dive: code snippets</summary>
+<pre><code># PySpark
+w = Window.partitionBy("CustomerID").orderBy(F.col("LoadTimestamp").desc())
+latest = df.withColumn("rn", F.row_number().over(w)).filter("rn = 1").drop("rn")
+df = (df.fillna({"Country": "Unknown", "Discount": 0})
+        .dropna(subset=["OrderID", "OrderDate"])
+        .withColumn("OrderDate", F.to_date("OrderDate", "dd/MM/yyyy")))
+-- T-SQL
 SELECT * FROM silver.CustomerChanges
 QUALIFY ROW_NUMBER() OVER (PARTITION BY CustomerID ORDER BY ModifiedDate DESC) = 1;</code></pre>
-<pre><code># PySpark
-from pyspark.sql import Window, functions as F
+<p><code>dropDuplicates()</code> without columns removes exact duplicate rows only.</p></details>
+</section>
 
-exact_dupes_removed = df.dropDuplicates()                  # identical rows
-one_per_key_any     = df.dropDuplicates(["OrderID"])       # ANY one row per key – non-deterministic!
-
-w = Window.partitionBy("CustomerID").orderBy(F.col("LoadTimestamp").desc())
-latest = (df.withColumn("rn", F.row_number().over(w))
-            .filter("rn = 1").drop("rn"))                  # latest row per key – deterministic</code></pre>
-<div class="warn"><code>dropDuplicates(["key"])</code> keeps an arbitrary row per key. When "latest" matters, use <code>row_number()</code> over a window ordered by the change timestamp. <code>GROUP BY</code> with <code>MAX()</code> per column is wrong too – it can mix values from different rows.</div>
-<h3>Missing data and nulls</h3>
-<pre><code># PySpark
-df = (df.fillna({"Country": "Unknown", "Discount": 0})     # replace nulls per column
-        .dropna(subset=["OrderID", "OrderDate"])           # drop rows missing mandatory fields
-        .withColumn("City", F.coalesce("City", "BillingCity", F.lit("Unknown"))))
-bad = df.filter(F.col("CustomerID").isNull())              # route to a quarantine table instead of losing them</code></pre>
-<pre><code>-- T-SQL
-SELECT COALESCE(City, BillingCity, 'Unknown') AS City,
-       ISNULL(Discount, 0)                    AS Discount,
-       NULLIF(TRIM(Email), '')                AS Email      -- empty string -&gt; NULL
-FROM   silver.Customer;</code></pre>
-<ul>
-<li>Decide per column: <strong>reject</strong> (mandatory keys), <strong>default</strong> (0 for additive measures only if business-correct; "Unknown" for attributes), <strong>derive</strong> (from other columns), or <strong>keep NULL</strong> (unknown measure values should usually stay NULL so averages aren't distorted).</li>
-<li>Map missing dimension references to the <strong>unknown member</strong> (-1) rather than dropping facts.</li>
-<li>Quarantine invalid rows in a separate table for investigation; count them and fail the pipeline if a threshold is exceeded.</li>
-</ul>
-<h3>Data type conversion</h3>
-<pre><code># PySpark
-df = (df.withColumn("Quantity",  F.col("Quantity").cast("int"))
-        .withColumn("UnitPrice", F.col("UnitPrice").cast("decimal(18,2)"))
-        .withColumn("OrderDate", F.to_date("OrderDate", "dd/MM/yyyy"))
-        .withColumn("EventTs",   F.to_timestamp("EventTs", "yyyy-MM-dd HH:mm:ss")))</code></pre>
-<pre><code>-- T-SQL: TRY_CAST / TRY_CONVERT return NULL instead of failing
-SELECT TRY_CAST(Quantity AS int)                 AS Quantity,
-       TRY_CONVERT(date, OrderDateText, 103)     AS OrderDate,   -- dd/mm/yyyy
-       CAST(Amount AS decimal(18,2))             AS Amount
-FROM   bronze.SalesText;
--- rows where TRY_CAST returned NULL but the source wasn't NULL = conversion errors to quarantine</code></pre>
-<p>Set types explicitly and early (in Power Query, as early as folding allows): correct types drive storage size, compression, sort order, relationships and DAX behaviour. CSV-sourced columns arrive as strings.</p>
-<h3>Filtering, joining, aggregating, enriching</h3>
-<div class="tw"><table>
-<thead><tr><th>Join type</th><th>Returns</th><th>Typical use</th></tr></thead>
-<tbody>
-<tr><td>Inner</td><td>Only matching rows from both sides</td><td>Facts with valid dimension members (beware silently losing rows)</td></tr>
-<tr><td>Left outer</td><td>All left rows + matches (NULL when none)</td><td>Fact-to-dimension lookups, enrichment</td></tr>
-<tr><td>Right outer</td><td>All right rows + matches</td><td>Rare; same as swapped left join</td></tr>
-<tr><td>Full outer</td><td>All rows from both sides</td><td>Reconciliation between two systems</td></tr>
-<tr><td><strong>Left anti</strong></td><td>Left rows with <strong>no</strong> match on the right</td><td>Orphaned orders whose CustomerID doesn't exist; new rows not yet loaded</td></tr>
-<tr><td>Right anti</td><td>Right rows with no match on the left</td><td>Dimension members never used</td></tr>
-<tr><td>Left semi</td><td>Left rows that have a match (no right columns)</td><td>Filter by existence (<code>EXISTS</code>)</td></tr>
-<tr><td>Cross</td><td>Cartesian product</td><td>Generating date × product scaffolds</td></tr>
-</tbody></table></div>
-<pre><code># PySpark joins, aggregation and enrichment
-orphans = orders.join(customers, "CustomerID", "left_anti")
-enriched = (orders.join(F.broadcast(products), "ProductID", "left")
-                  .withColumn("Margin", F.col("SalesAmount") - F.col("TotalCost"))
-                  .withColumn("PriceBand",
-                              F.when(F.col("UnitPrice") &lt; 10, "Low")
-                               .when(F.col("UnitPrice") &lt; 100, "Medium")
-                               .otherwise("High")))
-monthly = (enriched.groupBy(F.date_trunc("month", "OrderDate").alias("Month"), "Category")
-                   .agg(F.sum("SalesAmount").alias("Sales"),
-                        F.countDistinct("CustomerID").alias("Customers")))</code></pre>
-<pre><code>-- T-SQL equivalents
+<section class="lesson">
+<h2>Join types</h2>
+<p class="idea">Pick the join by which rows you need to keep: matches, everything on one side, or the misses.</p>
+<div class="sim">
+  <div class="wtitle">Join explorer: Orders ⋈ Customers</div>
+  <div class="p07-btns" id="p07-jb"></div>
+  <div class="p07-jwrap">
+    <svg class="p07-venn" viewBox="0 0 230 150" role="img" aria-label="Venn diagram">
+      <defs><clipPath id="p07-clipL"><circle cx="85" cy="75" r="60"/></clipPath></defs>
+      <circle id="p07-vl" cx="85" cy="75" r="60" stroke="var(--fg)" stroke-width="2"/>
+      <circle id="p07-vr" cx="145" cy="75" r="60" stroke="var(--fg)" stroke-width="2"/>
+      <circle id="p07-vb" cx="145" cy="75" r="60" clip-path="url(#p07-clipL)" stroke="var(--fg)" stroke-width="2"/>
+      <text x="40" y="80" style="fill:var(--fg);font-size:12px;font-weight:700">Orders</text>
+      <text x="155" y="80" style="fill:var(--fg);font-size:12px;font-weight:700">Customers</text>
+    </svg>
+    <div><div id="p07-jres"></div><div class="out" id="p07-jmsg"></div></div>
+  </div>
+</div>
+<script>
+(function () {
+  var $ = function (id) { return document.getElementById(id); };
+  var O = [['O1', 'C1'], ['O2', 'C2'], ['O3', 'C9']], C = { C1: 'Ana', C2: 'Ben', C3: 'Cy' };
+  var J = {
+    'Inner': [0, 1, 0, 'Only matches. Beware: silently drops orphan O3.'],
+    'Left outer': [1, 1, 0, 'All orders + matches (NULL when none): fact-to-dimension lookups.'],
+    'Right outer': [0, 1, 1, 'All customers + matches. Same as a swapped left join.'],
+    'Full outer': [1, 1, 1, 'Everything from both sides: reconcile two systems.'],
+    'Left anti': [1, 0, 0, 'Orders with NO customer: orphans, or new rows not yet loaded.'],
+    'Right anti': [0, 0, 1, 'Customers who never ordered: unused dimension members.'],
+    'Left semi': [0, 1, 0, 'Orders that HAVE a match, order columns only (like EXISTS).']
+  };
+  var names = Object.keys(J), cur = 'Left anti';
+  $('p07-jb').innerHTML = names.map(function (n) { return '<button data-j="' + n + '">' + n + '</button>'; }).join('');
+  function fill(id, on) { $(id).style.fill = on ? 'color-mix(in srgb, var(--dom) 55%, var(--bg))' : 'var(--soft)'; }
+  function show(n) {
+    cur = n; var j = J[n];
+    [].forEach.call($('p07-jb').children, function (b) { b.classList.toggle('on', b.getAttribute('data-j') === n); });
+    fill('p07-vl', j[0]); fill('p07-vr', j[2]); fill('p07-vb', j[1]);
+    var res = [];
+    O.forEach(function (o) {
+      var m = !!C[o[1]];
+      if (m && j[1]) res.push(n === 'Left semi' ? [o[0], o[1], '', ''] : [o[0], o[1], o[1], C[o[1]]]);
+      if (!m && j[0]) res.push([o[0], o[1], n === 'Left anti' ? '' : 'NULL', n === 'Left anti' ? '' : 'NULL']);
+    });
+    if (j[2]) Object.keys(C).forEach(function (k) { if (!O.some(function (o) { return o[1] === k; })) res.push([n === 'Right anti' ? '' : 'NULL', n === 'Right anti' ? '' : 'NULL', k, C[k]]); });
+    $('p07-jres').innerHTML = '<table class="p07-t"><tr><th>OrderID</th><th>o.CustomerID</th><th>c.CustomerID</th><th>Name</th></tr>' +
+      res.map(function (r) { return '<tr class="new">' + r.map(function (c) { return '<td>' + (c === 'NULL' ? '<i>NULL</i>' : c) + '</td>'; }).join('') + '</tr>'; }).join('') + '</table>';
+    $('p07-jmsg').innerHTML = '<b>' + n + '</b> → ' + res.length + ' row(s). ' + j[3];
+  }
+  $('p07-jb').addEventListener('click', function (e) { var b = e.target.closest('button[data-j]'); if (b) show(b.getAttribute('data-j')); });
+  show(cur);
+})();
+</script>
+<p class="muted">Data: Orders O1→C1, O2→C2, O3→C9 (no such customer). Customers C1 Ana, C2 Ben, C3 Cy (never ordered). Cross join = every combination (date × product scaffolds).</p>
+<div class="remember"><b>"Anti finds the Absent."</b> Left anti = left rows with no partner: orphans and not-yet-loaded rows.</div>
+<details><summary>Deep dive: join code, fan-out</summary>
+<pre><code>orphans  = orders.join(customers, "CustomerID", "left_anti")
+enriched = orders.join(F.broadcast(products), "ProductID", "left")
+-- T-SQL anti join
 SELECT o.* FROM silver.Orders AS o
-WHERE NOT EXISTS (SELECT 1 FROM silver.Customers AS c WHERE c.CustomerID = o.CustomerID);   -- anti join
+WHERE NOT EXISTS (SELECT 1 FROM silver.Customers AS c WHERE c.CustomerID = o.CustomerID);</code></pre>
+<ul><li><b>Fan-out</b>: joining to a table that isn't unique on the key multiplies fact rows: validate dimension key uniqueness first.</li>
+<li>Filter early (on partition/cluster columns) so less data flows through joins.</li></ul></details>
+</section>
 
-SELECT DATEFROMPARTS(YEAR(OrderDate), MONTH(OrderDate), 1) AS [Month], Category,
-       SUM(SalesAmount) AS Sales, COUNT(DISTINCT CustomerID) AS Customers
-FROM   gold.SalesEnriched
-GROUP BY DATEFROMPARTS(YEAR(OrderDate), MONTH(OrderDate), 1), Category;</code></pre>
+<section class="lesson">
+<h2>From silver to gold, step by step</h2>
+<p class="idea">Clean once in silver, then shape gold: dimensions first, facts with key lookups last.</p>
+<div class="stepper" data-task="A CRM customer feed becomes a gold star schema">
+  <section data-step="Bronze: land raw"><p>🥉 Append every CRM row as received, including <code>IsDeleted = 1</code> rows. Bronze = audit trail + rebuild source.</p></section>
+  <section data-step="Dedupe the batch"><p>🥇 <code>row_number()</code> per CustomerID by change timestamp, keep 1. Required anyway: MERGE fails on duplicate source keys.</p></section>
+  <section data-step="Cleanse"><p>🧼 Cast types, <code>UPPER(TRIM())</code> codes, default missing attributes to "Unknown", quarantine bad rows.</p></section>
+  <section data-step="MERGE into silver"><p>🔁 Deletes → expire or soft-delete; City change → SCD2 new version; new customers → insert; name fixes → type 1.</p></section>
+  <section data-step="Build gold dimensions"><p>⭐ DimCustomer filtered to non-deleted members + Unknown row (-1). Flatten snowflakes. Tables, not views, for Direct Lake.</p></section>
+  <section data-step="Load facts"><p>🔑 Swap business keys for surrogate keys; SCD2 version valid at the order date; misses → -1.</p></section>
+  <section data-step="Shape for analytics"><p>📐 Materialise Margin and bands in gold, split datetime into date key + time, drop unused columns, pre-aggregate to the needed grain.</p></section>
+</div>
+<div class="walk">
+<pre><code>INSERT INTO gold.FactSales (DateKey, CustomerKey, ProductKey, OrderNumber, SalesAmount)
+SELECT CONVERT(int, CONVERT(char(8), s.OrderDate, 112)),
+       COALESCE(c.CustomerKey, -1),
+       COALESCE(p.ProductKey, -1),
+       s.OrderNumber,
+       s.Quantity * s.UnitPrice
+FROM   silver.Sales AS s
+LEFT JOIN gold.DimCustomer AS c
+       ON c.CustomerID = s.CustomerID
+      AND s.OrderDate &gt;= c.ValidFrom AND s.OrderDate &lt; COALESCE(c.ValidTo, '9999-12-31')
+LEFT JOIN gold.DimProduct AS p
+       ON p.ProductID = s.ProductID AND p.IsCurrent = 1;</code></pre>
+<ol>
+  <li data-lines="2">Date → integer key yyyymmdd.</li>
+  <li data-lines="3-4">No match? Use the Unknown member -1 instead of losing the fact.</li>
+  <li data-lines="5">Order number stays in the fact: a degenerate dimension.</li>
+  <li data-lines="8-10">SCD2 lookup: the customer version valid on the order date.</li>
+  <li data-lines="11-12">Type 1 product dimension: just the current row.</li>
+</ol>
+</div>
+<details><summary>Deep dive: why materialise in gold</summary>
+<ul><li>Row-level calculated values used on axes/slicers (Margin, profit bands) belong in gold Delta tables. Calculated columns aren't supported on Direct Lake on SQL endpoint tables and are preview-only on Direct Lake on OneLake.</li>
+<li>Summary tables must exist in OneLake as Delta for Direct Lake. Header/line → one fact at line grain (allocate freight if needed).</li>
+<li>Expose friendly names via views or the semantic model; hide technical keys.</li></ul></details>
+</section>
+
+<section class="lesson">
+<h2>Power Query &amp; choosing the tool</h2>
+<p class="idea">Dataflow Gen2 = low-code Power Query; keep it folding so the source does the work.</p>
+<div class="flow" data-hint="Click a step: where does folding stop?">
+  <div data-title="Source" data-info="Azure SQL table with 500 million rows."><span class="fi">🛢️</span>Source<small>Azure SQL</small></div>
+  <div data-title="Remove columns ✓ folds" data-info="Becomes SELECT col1, col2 … in the native query."><span class="fi">✂️</span>Remove cols<small>✓ folds</small></div>
+  <div data-title="Custom function ✗ breaks folding" data-info="Custom M functions, Table.Buffer, index columns, some type changes, merging different sources: folding stops here. File sources (CSV, Excel) never fold."><span class="fi">🧩</span>Custom function<small>✗ breaks</small></div>
+  <div data-title="Filter last 30 days (local!)" data-info="Runs in the mashup engine AFTER all 500M rows were pulled. Fix: move the filter before the breaking step. Check with folding indicators / View data source query."><span class="fi">🐢</span>Filter 30 days<small>runs locally</small></div>
+</div>
+<div class="flips">
+  <div class="flip"><div class="front">🔗 Merge vs ➕ Append</div><div class="back">Merge = JOIN (adds columns; left anti, fuzzy). Append = UNION ALL (adds rows; matched by name).</div></div>
+  <div class="flip"><div class="front">↕️ Unpivot other columns</div><div class="back">Select key columns, unpivot the rest: new month columns are picked up automatically.</div></div>
+  <div class="flip"><div class="front">🗂️ Combine files</div><div class="back">Appends every file in a folder via a sample-file function; new files load on refresh.</div></div>
+  <div class="flip"><div class="front">🔍 Fuzzy merge</div><div class="back">Matches "Acme Ltd" with "ACME Limited": similarity threshold, ignore case, transformation table.</div></div>
+  <div class="flip"><div class="front">📦 Staging</div><div class="back">Materialises a shared query once so referencing queries don't re-hit the source.</div></div>
+  <div class="flip"><div class="front">📊 Column profiling</div><div class="back">Based on top 1,000 rows by default; switch to entire data set in the status bar.</div></div>
+</div>
+<div class="tw"><table class="matrix">
+<tr><th>Need</th><th>T-SQL (warehouse)</th><th>PySpark notebook</th><th>Dataflow Gen2</th></tr>
+<tr><td>Low-code, 150+ connectors</td><td>✗</td><td>✗</td><td>✓</td></tr>
+<tr><td>Hundreds of millions of rows, custom logic</td><td>✓ set-based</td><td>✓ distributed</td><td>~ only if folding / fast copy</td></tr>
+<tr><td>Nested JSON, APIs, ML, libraries</td><td>~ OPENROWSET</td><td>✓</td><td>~</td></tr>
+<tr><td>Multi-table transactions, procedures</td><td>✓</td><td>✗</td><td>✗</td></tr>
+<tr><td>Pipeline activity</td><td>~ Stored procedure</td><td>~ Notebook</td><td>~ Dataflow</td></tr>
+</table></div>
+<div class="sort" data-task="Which tool fits?">
+<ul data-bucket="🏢 T-SQL"><li>SQL team builds gold with CTAS</li><li>Transactional load with stored procedures</li></ul>
+<ul data-bucket="🐍 PySpark"><li>Parse nested JSON from a paginated API</li><li>SCD2 MERGE into lakehouse Delta</li></ul>
+<ul data-bucket="🧪 Dataflow Gen2"><li>Merge a SharePoint list with Excel, no code</li><li>Unpivot monthly Excel columns, 200,000 rows</li></ul>
+</div>
+<div class="check" data-answer="2"><p>A Dataflow Gen2 filters a 500M-row Azure SQL table to 30 days; refresh takes hours and "View data source query" is unavailable on the filter. Cause?</p><ul><li>Destination needs V-Order</li><li>Folding broke before the filter, so all rows are pulled</li><li>Staging is enabled</li><li>The gateway is too small</li></ul><p class="why">After a non-folding step, everything runs locally. Move the filter earlier or remove the breaker.</p></div>
+<div class="check" data-answer="4"><p>Excel: ProductID, ProductName, one column per month; a new month column appears monthly. One row per product per month that keeps working?</p><ul><li>Select month columns → Unpivot columns</li><li>Pivot ProductName</li><li>Transpose</li><li>Select ProductID + ProductName → Unpivot other columns</li></ul><p class="why">UnpivotOtherColumns lists only key columns; new months are unpivoted automatically.</p></div>
+<details><summary>Deep dive: more Power Query and Dataflow Gen2</summary>
 <ul>
-<li><strong>Filter early</strong> (and on partition/cluster columns) so less data flows through joins.</li>
-<li>Check for <strong>fan-out</strong>: joining to a table that isn't unique on the join key multiplies fact rows – validate uniqueness of dimension keys first.</li>
-<li><strong>Enrichment</strong>: derived columns (Margin, age bands, fiscal period), lookups to reference data, standardising codes (<code>UPPER(TRIM())</code>), splitting/merging columns, geocoding.</li>
+<li>Other operations: Pivot (with aggregation), Group by (basic/advanced incl. All rows), Remove duplicates, Keep/Remove rows, Replace values, Fill down/up, Split/Merge columns, Expand list → rows then record → columns (nested JSON), Change type, Remove other columns (renamed source column fails early), conditional/custom/index columns.</li>
+<li>Join kinds in Merge: left/right/full outer, inner, left anti, right anti.</li>
+<li>Staging: enable for shared expensive queries (uses SQL compute), disable for simple single-use queries. Fast copy: pipeline copy engine for large simple loads.</li>
+<li>Destinations: Lakehouse, Warehouse, KQL DB, Azure SQL…; Append or Replace; auto/manual mapping. Public parameters (from pipelines) replace hard-coded server names across environments.</li>
+<li>Incremental refresh in Dataflow Gen2 needs a Date/DateTime column and a fully folding query.</li>
+<li>Non-foldable sorts/joins/buffering use lots of mashup memory. Apply cleansing once (silver); don't duplicate logic in dataflow and notebook.</li>
+</ul></details>
+<div class="reveal"><p>A CRM flags deleted customers with IsDeleted = 1, sometimes resends rows, and needs SCD2 on City. Deleted customers must vanish from a Direct Lake report but bronze keeps everything. Outline?</p>
+<div class="answer">Bronze append-only. Silver: dedupe with row_number, cast/standardise, MERGE (deleted → expire/soft-delete, City change → new version, new → insert, name → type 1). Gold DimCustomer as a table filtered to non-deleted + Unknown (-1). Facts look up the version valid at order date.</div></div>
+</section>
+
+<section class="lesson">
+<h2>Exam traps</h2>
+<ul class="traps">
+  <li>dropDuplicates(["key"]) keeps an <i>arbitrary</i> row; GROUP BY + MAX mixes rows.</li>
+  <li>Overwrite = SCD1 (history lost); append of a full extract = duplicates.</li>
+  <li>Type 3 keeps only ONE previous value.</li>
+  <li>Inner join silently drops facts with missing dimension keys: use left join + Unknown member.</li>
+  <li>Unpivot <i>columns</i> hard-codes names; Unpivot <i>other columns</i> doesn't.</li>
+  <li>CSV and Excel sources never fold.</li>
+  <li>Direct Lake needs tables: materialise views and calculated columns in gold.</li>
 </ul>
+</section>
 
-<div class="sort" data-task="Which cleansing operation fits each problem?">
-<ul data-bucket="Deduplicate (ROW_NUMBER / dropDuplicates)"><li>Source resends yesterday's orders</li><li>Keep the most recent address per customer</li></ul>
-<ul data-bucket="Handle nulls (COALESCE / fillna)"><li>Country is empty for some customers</li><li>Missing ProductID should map to the Unknown member</li></ul>
-<ul data-bucket="Type conversion (CAST / TRY_CAST)"><li>OrderDate arrives as text dd/MM/yyyy</li><li>Quantity column read from CSV as string</li></ul>
-<ul data-bucket="Anti join"><li>Find orders whose CustomerID has no customer record</li><li>Detect rows in staging not yet in silver</li></ul>
+<section class="lesson">
+<h2>Cheat sheet</h2>
+<div class="cheat">
+  <div><h4>⭐ Star schema</h4><ul><li>Declare grain first</li><li>Integer surrogate keys + business key</li><li>Unknown member -1</li><li>Conformed, role-playing, junk, bridge</li></ul></div>
+  <div><h4>🕰️ SCD</h4><ul><li>0 keep · 1 overwrite</li><li>2 new row: ValidFrom/To, IsCurrent</li><li>3 PreviousX column · 6 = 2 + current</li><li>Row hash for change detection</li></ul></div>
+  <div><h4>🧼 Quality</h4><ul><li>ROW_NUMBER … = 1 / QUALIFY</li><li>COALESCE, TRY_CAST, quarantine</li><li>Idempotent: window replace or MERGE</li></ul></div>
+  <div><h4>🔗 Joins</h4><ul><li>Left: lookups · Anti: orphans</li><li>Semi: EXISTS · Full: reconcile</li><li>Check fan-out</li></ul></div>
+  <div><h4>🧪 Power Query</h4><ul><li>Merge = join, Append = union</li><li>Unpivot other columns</li><li>Keep folding; staging for shared queries</li></ul></div>
 </div>
-
-<div class="check" data-answer="1">
-<p>The silver table has one row per address change; the gold table needs one row per customer with the latest address. Which logic is required?</p>
-<ul><li>Rank rows per customer by change date descending and keep rank 1</li><li><code>GROUP BY CustomerID</code> with <code>MAX()</code> on each address column</li><li><code>SELECT DISTINCT CustomerID, Street, City</code></li><li><code>dropDuplicates(["CustomerID"])</code></li></ul>
-<p class="why">ROW_NUMBER over CustomerID ordered by change date descending deterministically picks the latest complete row. MAX per column can mix values from different rows, DISTINCT keeps all versions, and dropDuplicates keeps an arbitrary row.</p>
-</div>
-
-<div class="check" data-answer="3">
-<p>A dataflow appends to a lakehouse table, and the source occasionally resends yesterday's rows. What happens and how do you fix it?</p>
-<ul><li>Delta rejects duplicates automatically</li><li>Rows are silently overwritten – no fix needed</li><li>Duplicates accumulate; make the load idempotent by replacing the affected window or merging on keys</li><li>Switch the destination to a warehouse, which enforces primary keys</li></ul>
-<p class="why">Neither Delta nor warehouse constraints (NOT ENFORCED) reject duplicates. Replace the window (delete/insert or replaceWhere) or MERGE on business keys downstream.</p>
-</div>
-
-<h2>Power Query (Dataflow Gen2) transformations</h2>
-<div class="tw"><table>
-<thead><tr><th>Operation</th><th>What it does</th><th>Exam cues</th></tr></thead>
-<tbody>
-<tr><td><strong>Merge queries</strong></td><td>Join two queries on key columns (like SQL JOIN). Join kinds: left outer, right outer, full outer, inner, <strong>left anti</strong>, <strong>right anti</strong>; optional <strong>fuzzy matching</strong> (similarity threshold, ignore case, transformation table)</td><td>"Add columns from another table", "find orphans" (left anti), "Acme Ltd vs ACME Limited" (fuzzy merge)</td></tr>
-<tr><td><strong>Append queries</strong></td><td>Stack rows of two or more queries (like UNION ALL); columns matched by name, missing ones get null</td><td>"Combine 2025 and 2026 sales tables"</td></tr>
-<tr><td><strong>Combine files</strong> (folder source)</td><td>Appends every file in a folder using a generated <em>sample file</em> transform function; new files are picked up on refresh</td><td>"Monthly CSVs added to a folder must load automatically"; changing the sample transform changes all files</td></tr>
-<tr><td><strong>Unpivot columns</strong></td><td>Turns column headers into rows (Attribute/Value)</td><td>Jan…Dec columns → one row per month</td></tr>
-<tr><td><strong>Unpivot other columns</strong></td><td>Select the <em>key</em> columns, unpivot everything else (<code>Table.UnpivotOtherColumns</code>)</td><td>Robust when <strong>new month columns appear</strong> – they're unpivoted automatically</td></tr>
-<tr><td>Pivot column</td><td>Rows → columns with an aggregation</td><td>Opposite of unpivot</td></tr>
-<tr><td><strong>Group by</strong></td><td>Basic (one grouping, one aggregate) or Advanced (several keys/aggregates, incl. All rows)</td><td>Pre-aggregate to monthly grain</td></tr>
-<tr><td>Remove duplicates / Keep rows / Remove rows</td><td>Dedup on selected columns; keep top/bottom/range; remove errors/blank rows</td><td>Data cleansing</td></tr>
-<tr><td>Replace values / Fill down / Fill up</td><td>Standardise values, propagate values into nulls</td><td>Report-style exports with merged cells</td></tr>
-<tr><td>Split / Merge columns, Extract</td><td>Split by delimiter/positions; concatenate; extract text before/after delimiter</td><td>"Full name" → first/last</td></tr>
-<tr><td>Expand (list/record)</td><td>Expand a list column to <strong>new rows</strong>, then expand records to columns</td><td>Flatten nested JSON order lines</td></tr>
-<tr><td>Change type, <strong>Remove other columns</strong></td><td>Explicit types; keep only declared columns</td><td>Makes required columns explicit – a renamed source column fails early and clearly</td></tr>
-<tr><td>Conditional / custom / index columns</td><td>Derived columns, row numbers</td><td>Enrichment, surrogate-like index</td></tr>
-<tr><td>Column quality / distribution / profile</td><td>Valid/error/empty %, distinct/unique counts, value distribution</td><td>Profiling is based on the <strong>top 1,000 rows</strong> by default; switch to <em>entire data set</em> in the status bar</td></tr>
-</tbody></table></div>
-
-<div class="match" data-task="Match each Power Query operation to the requirement it solves.">
-<dl>
-<dt>Merge queries (left anti)</dt><dd>Return only orders whose CustomerID does not exist in Customers</dd>
-<dt>Append queries</dt><dd>Stack two tables with the same columns into one</dd>
-<dt>Unpivot other columns</dt><dd>One row per product per month, even when new month columns appear</dd>
-<dt>Combine files</dt><dd>Load every CSV in a folder, including files added later</dd>
-<dt>Fuzzy merge</dt><dd>Match 'Acme Ltd' with 'ACME Limited'</dd>
-<dt>Group by</dt><dd>Summarise sales to one row per month and category</dd>
-<dt>Expand list to new rows</dt><dd>Flatten a nested JSON array of order lines</dd>
-</dl>
-</div>
-
-<h3>Query folding</h3>
-<ul>
-<li><strong>Query folding</strong> = Power Query translates steps into the source's native query (e.g. one SQL <code>SELECT … WHERE</code>), so the <strong>source</strong> does the work and only the result is transferred.</li>
-<li>Check with <strong>step folding indicators</strong> in Power Query Online and <strong>View data source query</strong> (greyed out = that step doesn't fold).</li>
-<li>Once a step breaks folding, <strong>all later steps</strong> run in the mashup engine – e.g. a 30-day filter after a non-folding step means the whole 500-million-row table is pulled first. Put foldable steps (filters, column removal, simple joins, group by) <strong>before</strong> non-foldable ones.</li>
-<li>Typical folding breakers: custom M functions / complex custom columns, <code>Table.Buffer</code>, some type conversions, merging queries from <strong>different</strong> sources, index columns, operations on file sources (CSV/Excel never fold).</li>
-<li>Non-foldable sorts, joins and buffering can use a lot of mashup-engine memory and slow refresh.</li>
-<li><strong>Incremental refresh</strong> in Dataflow Gen2 needs a Date/DateTime/DateTimeZone column to filter on, and the query should fully fold so bucket filters are pushed to the source.</li>
-</ul>
-<h3>Dataflow Gen2 features that matter for transformations</h3>
-<ul>
-<li><strong>Staging</strong>: materialises a query's result in Fabric staging storage (lakehouse/warehouse) so referencing queries read it once and can use the SQL compute engine. Without staging, a referenced query (e.g. <code>BaseOrders</code> used by three other queries) is <strong>re-evaluated against the source for each reference</strong>. Enable staging on shared, expensive queries; disable it for simple single-use queries to save time.</li>
-<li><strong>Fast copy</strong>: uses the pipeline copy engine for large volumes when source, transformations (e.g. column selection/rename) and destination are supported.</li>
-<li><strong>Data destinations</strong>: Lakehouse, Warehouse, KQL database, Azure SQL database (and others); update method <strong>Append</strong> or <strong>Replace</strong>; automatic or manual column mapping.</li>
-<li><strong>Parameters</strong> (public parameters can be passed from pipelines) replace hard-coded server/database names across dev/test/prod.</li>
-</ul>
-
-<div class="check" data-answer="2">
-<p>A Dataflow Gen2 reads a 500-million-row Azure SQL table and filters to the last 30 days, but refresh takes hours. The filter step isn't folded and <em>View data source query</em> is unavailable. What is the cause?</p>
-<ul><li>The destination lakehouse needs V-Order</li><li>Folding broke before the filter, so all rows are pulled into the mashup engine</li><li>Staging is enabled</li><li>The gateway is too small</li></ul>
-<p class="why">When folding stops, later steps (including the filter) execute locally after the whole table is transferred. Reorder steps so the filter folds, or remove the folding breaker.</p>
-</div>
-
-<div class="check" data-answer="4">
-<p>An Excel source has ProductID, ProductName and one column per month (Jan2026, Feb2026, …); a new month column appears monthly. You need one row per product per month that keeps working. What should you do?</p>
-<ul><li>Select all month columns and Unpivot columns</li><li>Pivot the ProductName column</li><li>Transpose the table</li><li>Select ProductID and ProductName, then Unpivot other columns</li></ul>
-<p class="why"><code>Table.UnpivotOtherColumns</code> lists only the key columns, so any new month column is unpivoted automatically. Unpivoting the selected month columns hard-codes their names.</p>
-</div>
-
-<h2>Choosing T-SQL vs PySpark vs Dataflow Gen2</h2>
-<div class="tw"><table>
-<thead><tr><th>Criterion</th><th>T-SQL (warehouse)</th><th>PySpark / Spark SQL (notebook)</th><th>Dataflow Gen2 (Power Query)</th></tr></thead>
-<tbody>
-<tr><td>Skills</td><td>SQL developers</td><td>Data engineers (Python/Scala/SQL)</td><td>Analysts, low-code, Power Query users</td></tr>
-<tr><td>Volume</td><td>Large – distributed set-based engine</td><td>Very large – distributed, custom logic</td><td>Small–medium; large only with folding/fast copy</td></tr>
-<tr><td>Destination</td><td>Warehouse tables (reads endpoints cross-database)</td><td>Lakehouse Delta (or warehouse via synapsesql)</td><td>Lakehouse, warehouse, KQL DB, Azure SQL…</td></tr>
-<tr><td>Strengths</td><td>CTAS, MERGE, multi-table transactions, stored procedures; processing where the data lives (no data movement through another engine)</td><td>Semi-structured/unstructured data, APIs, complex logic, ML, streaming, libraries, full control of Delta (MERGE, OPTIMIZE)</td><td>150+ connectors, visual transformations, merges/unpivots, profiling, no code</td></tr>
-<tr><td>Weaknesses</td><td>No Spark libraries; limited for files/JSON beyond OPENROWSET</td><td>Code to write, test and maintain</td><td>Mashup-engine limits when folding breaks; less suited to hundreds of millions of rows with custom logic</td></tr>
-<tr><td>Orchestration</td><td>Stored procedure activity</td><td>Notebook activity</td><td>Dataflow activity</td></tr>
-</tbody></table></div>
-<ul>
-<li>Move a transformation <strong>out of a dataflow into Spark</strong> when it spans hundreds of millions of rows and needs custom, distributed logic.</li>
-<li>If the curated layer is in a warehouse and the team writes SQL, set-based <strong>CTAS/MERGE</strong> in the warehouse avoids round trips through the mashup engine.</li>
-<li>Avoid implementing the <strong>same cleansing logic twice</strong> (dataflow and notebook): apply it once when producing the silver table and have every consumer read that table.</li>
-</ul>
-
-<div class="sort" data-task="Which transformation tool fits each scenario best?">
-<ul data-bucket="T-SQL"><li>SQL team builds gold tables with CTAS in a warehouse</li><li>Multi-table transactional load with stored procedures</li></ul>
-<ul data-bucket="PySpark notebook"><li>Parse nested JSON from a paginated API with Python</li><li>Hundreds of millions of rows with custom distributed logic</li><li>SCD2 MERGE into lakehouse Delta tables</li></ul>
-<ul data-bucket="Dataflow Gen2"><li>Analysts merge a SharePoint list with an Excel file without code</li><li>Unpivot monthly columns from Excel and load 200,000 rows daily</li></ul>
-</div>
-
-<div class="reveal"><p><strong>Scenario:</strong> A CRM signals deleted customers by sending rows with <code>IsDeleted = 1</code>. Rows land in bronze; <code>DimCustomer</code> in gold feeds a Direct Lake model. Deleted customers must disappear from reports, but bronze must keep everything for audit. The CRM also occasionally resends rows, and the team wants SCD type 2 on City. Outline the transformation.</p>
-<div class="answer">Keep bronze <strong>append-only</strong> (all raw rows, including deletes). In the silver step: (1) <strong>deduplicate</strong> the batch with <code>row_number()</code> per CustomerID ordered by the change timestamp (keep 1) – required anyway because MERGE fails when several source rows match one target row; (2) cast types, trim/standardise, default missing attributes to "Unknown"; (3) apply a <strong>MERGE</strong> into the curated customer table: <code>WHEN MATCHED AND s.IsDeleted = 1</code> → expire/soft-delete (set IsCurrent = 0, IsDeleted = 1, ValidTo) or hard-delete, changed City → expire and insert a new version (type 2 staging trick), new customers → insert with a new surrogate key, name corrections → type 1 update. (4) Build gold <code>DimCustomer</code> (or a view materialised as a Delta table – Direct Lake needs tables, not views) filtered to non-deleted members, plus an unknown member row (-1). (5) Facts look up the version valid at the order date. The delete is applied <strong>once</strong> in the curated layer, so every consumer is consistent, while bronze keeps the audit trail and allows a rebuild.</div></div>
-
-<h2>Key takeaways &amp; exam tips</h2>
-<ul>
-<li>Star schema = facts (declared grain, measures, surrogate FKs) + denormalised dimensions; one-to-many, single direction.</li>
-<li>Fact types: transactional, periodic snapshot (semi-additive), accumulating snapshot (updated rows, several dates), factless.</li>
-<li>Use <strong>integer surrogate keys</strong> (warehouse: <code>BIGINT IDENTITY</code>); keep the business key; add an <strong>unknown member</strong>.</li>
-<li>Conformed date dimension built once physically and reused; role-playing → inactive relationships + <code>USERELATIONSHIP</code>; many-to-many → <strong>bridge table</strong>; flags → junk dimension.</li>
-<li>SCD: 0 keep, 1 overwrite, <strong>2 new row with ValidFrom/ValidTo/IsCurrent</strong>, 3 previous-value column, 6 = 2 + current-value column. Implement with MERGE (Delta or T-SQL) or UPDATE + INSERT; a row hash simplifies change detection.</li>
-<li>Latest row per key: <strong>ROW_NUMBER() over (PARTITION BY key ORDER BY date DESC) = 1</strong> (or QUALIFY / Spark window). <code>dropDuplicates(["key"])</code> is non-deterministic.</li>
-<li>Appending resent data duplicates rows – make loads idempotent (window replace or MERGE on keys).</li>
-<li>Materialise row-level calculated columns and summary tables in gold (Delta) – especially for Direct Lake.</li>
-<li>Power Query: merge = join (left anti for orphans, fuzzy for approximate text); append = union; <strong>Unpivot other columns</strong> for growing column sets; Combine files for folders; profiling uses top 1,000 rows by default.</li>
-<li>Query folding pushes work to the source; one non-foldable step stops folding for everything after it; check with folding indicators / View data source query.</li>
-<li>Dataflow Gen2: staging prevents re-evaluating referenced queries; fast copy for big simple loads; parameters for environments.</li>
-<li>Pick the tool by skills, volume, data shape and destination: T-SQL for set-based warehouse ELT, PySpark for big/complex/semi-structured, Dataflow Gen2 for low-code.</li>
-</ul>
-<p class="muted">Related pages: <a href="05-lakehouse-spark.html">Lakehouse, Delta &amp; Spark</a>, <a href="06-warehouse-tsql.html">Warehouse &amp; T-SQL</a>, <a href="10-semantic-model-design.html">Semantic model design</a>.</p>
+</section>
 </main>
 <script src="assets/app.js"></script>
 </body>

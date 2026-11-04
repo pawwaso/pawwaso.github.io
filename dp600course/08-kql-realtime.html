@@ -5,420 +5,186 @@
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>Eventhouse &amp; KQL – DP-600</title>
 <link rel="stylesheet" href="assets/style.css">
+<style>
+.kql-ops { display: flex; flex-wrap: wrap; gap: 6px; margin: 8px 0; }
+.kql-ops button { font-family: ui-monospace, Consolas, monospace; font-size: .85em; }
+.kql-q { margin: 8px 0; }
+.kql-q .st { display: inline-block; margin: 2px 4px 2px 0; padding: 2px 8px; border-radius: 6px; background: var(--soft); border: 1px solid var(--line); font-family: ui-monospace, Consolas, monospace; font-size: .88em; }
+.kql-res table { font-size: .88em; margin: 6px 0 0; }
+.kql-res td.hot { color: var(--bad); font-weight: 700; }
+.kql-err { color: var(--bad); font-weight: 600; }
+</style>
 </head>
-<body>
+<body data-domain="2">
 <main>
-<h1>Eventhouse &amp; KQL</h1>
-<p class="lead">Real-Time Intelligence in Fabric: how streaming data flows from an eventstream into an eventhouse / KQL database, how it is kept (update policies, materialized views, retention, caching, OneLake availability) and, above all, how to read and write the Kusto Query Language (KQL) the exam expects. Maps to the DP-600 skills <em>Prepare data → Get data</em> (real-time ingestion) and <em>Query and analyze data → select, filter and aggregate data by using KQL</em>.</p>
 
-<div class="exam">DP-600 does not test KQL management commands in depth, but it <strong>does</strong> show you short KQL queries and asks which one returns a given result, which operator is faster (<code>has</code> vs <code>contains</code>), what the default join kind is, and which Fabric item to use for streaming telemetry. Learn to read a pipe from top to bottom.</div>
+<header class="hero">
+  <div class="hi">🛰️</div>
+  <div>
+    <h1>Eventhouse &amp; KQL</h1>
+    <p class="lead">Streaming data flows into an eventhouse, and you query it with KQL, one pipe at a time.</p>
+    <div class="meta"><span class="pill">Domain 2 · Prepare data</span><span class="pill">⏱ 35 min</span><span class="pill">6 lessons</span></div>
+    <ul class="goals">
+      <li>Place eventstream, eventhouse, Real-Time dashboard and Activator in one chain</li>
+      <li>Choose an update policy, materialized view, retention or caching policy</li>
+      <li>Read and build KQL pipes: where, extend, project, summarize, top</li>
+      <li>Avoid the traps: has vs contains, innerunique joins, sort defaults</li>
+    </ul>
+  </div>
+</header>
 
-<h2>Real-Time Intelligence at a glance</h2>
-<p><strong>Real-Time Intelligence (RTI)</strong> is the Fabric workload for event-based, time-stamped data: telemetry, logs, IoT signals, clickstreams, security events, CDC feeds. Its building blocks are separate Fabric items that you chain together:</p>
+<div class="tldr"><ul>
+  <li><b>Eventstream</b> captures and routes events; <b>eventhouse</b> stores them in KQL databases.</li>
+  <li>A KQL query is a <b>pipe</b>: table <code>|</code> filter <code>|</code> shape <code>|</code> aggregate <code>|</code> sort <code>|</code> render.</li>
+  <li><b>has</b> beats <b>contains</b>; the default join is <b>innerunique</b>; <code>sort</code> and <code>top</code> default to <b>descending</b>.</li>
+  <li><b>Retention</b> = how long you keep data; <b>caching</b> = how much stays fast (cache ≤ retention).</li>
+</ul></div>
 
-<div class="diagram">
-<svg viewBox="0 0 760 210" role="img" aria-label="Sources flow into an eventstream, then into an eventhouse with KQL databases; from there into a KQL queryset, a Real-Time dashboard, Power BI and Activator. OneLake availability exposes Delta tables.">
-<defs><marker id="ar" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto"><path d="M0,0 L10,5 L0,10 z" fill="currentColor"/></marker></defs>
-<g fill="none" stroke="currentColor" stroke-width="1.5">
-<rect x="10" y="70" width="120" height="60" rx="8"/>
-<rect x="170" y="70" width="120" height="60" rx="8"/>
-<rect x="330" y="50" width="150" height="100" rx="8"/>
-<rect x="530" y="10" width="200" height="34" rx="6"/>
-<rect x="530" y="58" width="200" height="34" rx="6"/>
-<rect x="530" y="106" width="200" height="34" rx="6"/>
-<rect x="530" y="154" width="200" height="34" rx="6"/>
-<path d="M130 100 H168" marker-end="url(#ar)"/>
-<path d="M290 100 H328" marker-end="url(#ar)"/>
-<path d="M480 80 L528 27" marker-end="url(#ar)"/>
-<path d="M480 95 L528 75" marker-end="url(#ar)"/>
-<path d="M480 110 L528 123" marker-end="url(#ar)"/>
-<path d="M290 115 C 400 200, 450 190, 528 171" marker-end="url(#ar)" stroke-dasharray="4 3"/>
-</g>
-<g fill="currentColor" font-size="12" text-anchor="middle">
-<text x="70" y="96">Sources</text><text x="70" y="112" font-size="10">Event Hubs, IoT Hub, CDC…</text>
-<text x="230" y="96">Eventstream</text><text x="230" y="112" font-size="10">filter, aggregate, route</text>
-<text x="405" y="80">Eventhouse</text><text x="405" y="98" font-size="10">KQL database(s)</text><text x="405" y="114" font-size="10">tables, MVs, policies</text><text x="405" y="130" font-size="10">OneLake availability</text>
-<text x="630" y="31">KQL queryset (explore)</text>
-<text x="630" y="79">Real-Time dashboard</text>
-<text x="630" y="127">Power BI (DQ / Direct Lake)</text>
-<text x="630" y="175">Activator (alerts, actions)</text>
-</g>
-</svg>
+<!-- ===================== Lesson 1 ===================== -->
+<section class="lesson">
+<h2>The real-time chain</h2>
+<p class="idea">Events travel from a source, through an eventstream, into an eventhouse, then to dashboards and alerts.</p>
+<div class="flow" data-hint="Click a stage to see what it does.">
+  <div data-title="Sources" data-info="Event Hubs, IoT Hub, Kafka, custom apps, CDC from Azure SQL / PostgreSQL / MySQL / Cosmos DB, Fabric and Azure events. Discover them all in the Real-Time hub (tenant-wide catalog of streams)."><span class="fi">📡</span>Sources<small>IoT Hub, Event Hubs, CDC</small></div>
+  <div data-title="Eventstream" data-info="No-code capture, transform and route: filter, manage fields, aggregate, group by time windows, union, join. Filtering here (e.g. dropping heartbeats) is the cheapest place to throw data away. One stream can go to several destinations."><span class="fi">🌊</span>Eventstream<small>filter · route</small></div>
+  <div data-title="Eventhouse" data-info="Container with shared compute and monitoring for one or more KQL databases. Each database holds tables, functions, materialized views and policies."><span class="fi">🛰️</span>Eventhouse<small>KQL databases</small></div>
+  <div data-title="Real-Time dashboard" data-info="Tiles are KQL queries with auto refresh (seconds), parameters, cross-filtering and drill-through. No semantic model, no refresh schedule."><span class="fi">📈</span>RT dashboard<small>KQL tiles</small></div>
+  <div data-title="Activator" data-info="No-code rules on streams, dashboard tiles or reports. Actions: email, Teams message, run a pipeline or notebook, Power Automate flow. Example: temperature above 8 °C for 5 minutes."><span class="fi">🔔</span>Activator<small>alerts · actions</small></div>
 </div>
-
-<div class="tw"><table>
-<thead><tr><th>Item / feature</th><th>What it does</th><th>Exam hook</th></tr></thead>
-<tbody>
-<tr><td><strong>Real-Time hub</strong></td><td>Tenant-wide catalog of data streams (eventstreams, KQL tables), Azure events, Fabric workspace item events, OneLake events, job events. Connect a source and route it to a destination from one place.</td><td>"Single place to discover streams and route them to an eventhouse" → Real-Time hub.</td></tr>
-<tr><td><strong>Eventstream</strong></td><td>No-code capture, transform and route of streaming events. Sources → optional processing (filter, manage fields, aggregate, group by with windows, union, expand, join) → destinations.</td><td>Ingest Event Hubs / IoT Hub telemetry; drop unwanted events <em>before</em> storage (cheapest place to filter).</td></tr>
-<tr><td><strong>Eventhouse</strong></td><td>Container for one or more KQL databases; shares compute/capacity and gives unified monitoring (system overview).</td><td>The store for streaming, time-series, log and semi-structured data.</td></tr>
-<tr><td><strong>KQL database</strong></td><td>Tables, functions, materialized views, update policies, retention/caching policies. Queried with KQL (and a subset of T-SQL).</td><td>Where the data lives; OneLake availability exposes it as Delta.</td></tr>
-<tr><td><strong>KQL queryset</strong></td><td>Saved KQL queries in tabs against one or more data sources; results grid, charts, Copilot, "pin to dashboard", build Power BI report.</td><td>Ad-hoc exploration, sharing queries.</td></tr>
-<tr><td><strong>Real-Time dashboard</strong></td><td>Dashboard whose tiles are KQL queries; parameters, auto refresh, cross-filtering, drill-through.</td><td>Second-level freshness on live data without a semantic model refresh.</td></tr>
-<tr><td><strong>Activator</strong></td><td>No-code rules on streaming or report data that trigger actions (email, Teams message, run a Fabric item such as a pipeline or notebook, Power Automate flow).</td><td>"Notify when temperature stays above X for 5 minutes" → Activator rule.</td></tr>
-</tbody>
-</table></div>
-
-<div class="note">Naming: the workload was called <em>Real-Time Analytics</em> and the alerting engine <em>Data Activator</em> in early Fabric. Use the current names <strong>Real-Time Intelligence</strong> and <strong>Activator</strong>.</div>
-
-<h2>Eventhouse vs KQL database</h2>
-<p>An <strong>eventhouse</strong> is the workspace item you create first. Creating it also creates a <strong>KQL database with the same name</strong> inside it; you can add more databases later. The eventhouse is the unit of compute and monitoring; the database is the unit of schema, policies and permissions.</p>
-<div class="tw"><table>
-<thead><tr><th></th><th>Eventhouse</th><th>KQL database</th></tr></thead>
-<tbody>
-<tr><td>Role</td><td>Container + shared compute for several databases</td><td>Holds tables, functions, materialized views, policies</td></tr>
-<tr><td>Monitoring</td><td>System overview: storage, compute usage, ingestion rate, top queried/ingested databases, schema changes</td><td>Database details, data preview, query insights (top 100 queries)</td></tr>
-<tr><td>Cost behaviour</td><td>Suspends when idle (a few seconds of resume latency). <strong>Capacity Planner</strong> (previously "minimum consumption"/"always-on") keeps it active and can schedule minimum CUs per hour-block</td><td>Billed through the eventhouse; storage billed as OneLake storage</td></tr>
-<tr><td>Variants</td><td>—</td><td>Standard database or <strong>database shortcut</strong> (read-only follower of another KQL database / Azure Data Explorer database)</td></tr>
-<tr><td>Query entry</td><td>—</td><td>Each database has an embedded queryset for exploration</td></tr>
-<tr><td>Sharing</td><td>Link inherits permission to all databases and components</td><td>Can be shared individually</td></tr>
-</tbody>
-</table></div>
-
-<div class="check" data-answer="3">
-<p>You create an eventhouse named <code>TelemetryEH</code> in a workspace. Without any further action, what does the workspace contain?</p>
-<ul><li>Only the eventhouse; databases must be created before tables can be added</li><li>The eventhouse and a lakehouse used as its storage</li><li>The eventhouse and a KQL database named <code>TelemetryEH</code></li><li>The eventhouse, a KQL database and a default semantic model</li></ul>
-<p class="why">Creating an eventhouse automatically creates a KQL database with the same name. No lakehouse is created, and Fabric no longer creates default semantic models automatically.</p>
+<div class="vs">
+  <div><h4>🛰️ Eventhouse</h4><ul><li>Workspace item you create first</li><li>Shared compute, system overview monitoring</li><li>Suspends when idle (or keep it warm with minimum capacity)</li></ul></div>
+  <div class="vsmark">VS</div>
+  <div><h4>🗄️ KQL database</h4><ul><li>Created <b>automatically</b> with the same name</li><li>Schema, policies, permissions</li><li>Can be a read-only <i>database shortcut</i></li></ul></div>
 </div>
+<div class="check" data-answer="3"><p>You create an eventhouse named <code>TelemetryEH</code>. What does the workspace contain afterwards?</p><ul><li>Only the eventhouse</li><li>The eventhouse and a lakehouse for storage</li><li>The eventhouse and a KQL database named TelemetryEH</li><li>The eventhouse, a KQL database and a default semantic model</li></ul><p class="why">An eventhouse always creates a KQL database with the same name. No lakehouse, and no automatic default semantic models.</p></div>
+<details><summary>Deep dive: other ways to get data into an eventhouse</summary>
+<ul>
+<li><b>Eventstream → Eventhouse destination</b>: <i>Direct ingestion</i> (raw events) or <i>Event processing before ingestion</i>.</li>
+<li><b>Get data wizard</b> in the KQL database: files, OneLake, Azure Storage, Amazon S3, Event Hubs; infers schema and creates the ingestion mapping.</li>
+<li><b>Pipeline Copy activity / Copy job</b> and <b>Dataflow Gen2</b> both support a KQL database destination.</li>
+<li>Connectors and SDKs: Kafka, Logstash, OpenTelemetry, Fluent Bit, .NET / Python (queued or streaming ingestion).</li>
+<li><b>OneLake shortcut</b> (external table): query Delta/Parquet in place, slower than ingested data.</li>
+<li>Old names: Real-Time Analytics → <b>Real-Time Intelligence</b>; Data Activator → <b>Activator</b>.</li>
+</ul></details>
+</section>
 
-<h2>Getting data into an eventhouse</h2>
-<h3>Ingestion paths</h3>
-<div class="tw"><table>
-<thead><tr><th>Path</th><th>Typical use</th><th>Notes</th></tr></thead>
-<tbody>
-<tr><td><strong>Eventstream → Eventhouse destination</strong></td><td>Continuous streams (Event Hubs, IoT Hub, Kafka, custom endpoint apps, CDC from Azure SQL / PostgreSQL / MySQL / Cosmos DB, sample data, Fabric &amp; Azure events)</td><td>Two modes: <em>Direct ingestion</em> (eventhouse pulls raw events) or <em>Event processing before ingestion</em> (transform in the eventstream first)</td></tr>
-<tr><td><strong>Get data</strong> wizard in the KQL database</td><td>One-off or recurring loads from local files, OneLake, Azure Storage, Amazon S3, Event Hubs, pipelines</td><td>Infers schema, creates table + ingestion mapping (JSON/CSV)</td></tr>
-<tr><td><strong>Pipeline Copy activity</strong> / <strong>Copy job</strong></td><td>Batch loads from 100+ connectors</td><td>KQL database is a supported destination</td></tr>
-<tr><td><strong>Dataflow Gen2</strong></td><td>Power Query transformations</td><td>KQL database is a supported data destination</td></tr>
-<tr><td>Connectors / SDKs</td><td>Kafka, Logstash, OpenTelemetry, Fluent Bit, .NET/Python SDKs</td><td>Queued (batched) or streaming ingestion</td></tr>
-<tr><td><strong>OneLake shortcut</strong> (external table)</td><td>Query Delta/Parquet in OneLake from KQL without ingesting</td><td>Data stays in place; slower than ingested data</td></tr>
-</tbody>
-</table></div>
-
-<div class="sort" data-task="Where should each requirement be implemented?">
-<ul data-bucket="Eventstream"><li>Drop heartbeat events before they are stored</li><li>Route the same stream to an eventhouse and a lakehouse</li><li>Compute a 1-minute tumbling-window average in flight</li></ul>
-<ul data-bucket="KQL database"><li>Parse raw JSON into a typed table automatically on arrival</li><li>Keep only 90 days of data</li><li>Maintain the latest reading per device, always up to date</li></ul>
-<ul data-bucket="Activator"><li>Send a Teams message when a value crosses a threshold</li><li>Start a pipeline when a condition is met</li></ul>
+<!-- ===================== Lesson 2 ===================== -->
+<section class="lesson">
+<h2>Shape &amp; keep the data</h2>
+<p class="idea">Transform at ingest with an update policy, pre-aggregate with a materialized view, and control cost with policies.</p>
+<div class="icards">
+  <div class="icard" data-title="Update policy" data-info="Runs a KQL query (usually a stored function) every time data lands in a source table and appends the result to a target table. Classic pattern: raw table with a dynamic JSON column → typed silver table. IsTransactional = true makes a policy failure fail the ingestion too."><div class="i">🧩</div><h4>Update policy</h4><p>Parse raw JSON on arrival</p></div>
+  <div class="icard" data-title="Materialized view" data-info="An always-fresh summarize over a table: the engine stores the aggregated part and only aggregates the new delta at query time. Best for latest row per key (arg_max), dedup (take_any) and rollups."><div class="i">🧮</div><h4>Materialized view</h4><p>Latest value per device, rollups</p></div>
+  <div class="icard" data-title="Stored function" data-info="Reusable or parameterised query logic; nothing is stored, it runs at query time."><div class="i">ƒ</div><h4>Stored function</h4><p>Reusable query, computed each time</p></div>
+  <div class="icard" data-title="OneLake availability" data-info="Exposes KQL tables as read-only Delta tables in OneLake (no extra storage charge). Then use shortcuts, Spark, the SQL analytics endpoint and Direct Lake. Write latency is adaptive, up to 3 hours by default."><div class="i">🏞️</div><h4>OneLake availability</h4><p>KQL tables as Delta for Spark &amp; Direct Lake</p></div>
 </div>
+<div class="stats">
+  <div><b>3,650 d</b><span>default retention (soft delete)</span></div>
+  <div><b>3,650 d</b><span>default hot cache</span></div>
+  <div><b>≤</b><span>cache period never exceeds retention</span></div>
+  <div><b>≤ 3 h</b><span>OneLake availability write latency (default)</span></div>
+</div>
+<div class="remember"><b>"Retention = Remember, Caching = Quick."</b> Retention decides how long data exists; caching decides how much of it is fast (hot on SSD).</div>
+<div class="check" data-answer="3"><p>Queries over the last 30 days must be fast; one year must stay queryable at lower cost. Which configuration?</p><ul><li>Retention 30 d, caching 365 d</li><li>Retention 30 d, caching 30 d + OneLake availability</li><li>Retention 365 d, caching 30 d</li><li>Retention 365 d, caching 365 d</li></ul><p class="why">Keep 365 days, cache 30. Caching can never exceed retention, and caching everything costs more.</p></div>
+<div class="check" data-answer="2"><p>A Real-Time dashboard refreshing every 10 s must show the latest reading per device from a table with millions of rows per hour. What do you create?</p><ul><li>An update policy that deletes old rows</li><li>A materialized view with <code>summarize arg_max(Timestamp, *) by DeviceId</code></li><li>A stored function with <code>top 1 by Timestamp</code></li><li>A caching policy of 1 hour</li></ul><p class="why">A materialized view keeps the aggregate precomputed. A function recomputes every time; <code>top 1</code> gives one row overall.</p></div>
 
-<h3>Update policies (ingest-time transformation)</h3>
-<p>An <strong>update policy</strong> on a <em>target</em> table runs a KQL query (usually a stored function) whenever data is ingested into a <em>source</em> table, and appends the result to the target. Classic medallion-in-KQL pattern: raw (bronze) table with a <code>dynamic</code> column → update policy → typed silver table.</p>
-<pre><code>// 1. raw landing table
-.create table RawEvents (Payload: dynamic)
-
-// 2. function that shapes the raw data
+<div class="sort" data-task="Where does each requirement belong?">
+  <ul data-bucket="Eventstream"><li>Drop heartbeat events before storage</li><li>Route one stream to an eventhouse and a lakehouse</li></ul>
+  <ul data-bucket="Update policy"><li>Parse raw JSON into a typed table on arrival</li></ul>
+  <ul data-bucket="Materialized view"><li>Always-current latest reading per device</li></ul>
+  <ul data-bucket="Retention policy"><li>Keep only 90 days of data</li></ul>
+  <ul data-bucket="Activator"><li>Send a Teams message when a threshold is crossed</li><li>Start a pipeline when a condition is met</li></ul>
+</div>
+<details><summary>Deep dive: commands and OneLake availability limits</summary>
+<pre><code>.create table RawEvents (Payload: dynamic)
 .create-or-alter function ParseRaw() {
     RawEvents
-    | project Timestamp   = todatetime(Payload.ts),
-              DeviceId    = tostring(Payload.deviceId),
-              Temperature = toreal(Payload.temp)
+    | project Timestamp = todatetime(Payload.ts), DeviceId = tostring(Payload.deviceId), Temperature = toreal(Payload.temp)
 }
-
-// 3. typed target table + update policy
-.create table Telemetry (Timestamp: datetime, DeviceId: string, Temperature: real)
-
 .alter table Telemetry policy update
-@'[{"IsEnabled": true, "Source": "RawEvents", "Query": "ParseRaw()", "IsTransactional": false}]'</code></pre>
-<p>Commands that change metadata start with a dot (<code>.create</code>, <code>.alter</code>, <code>.show</code>); queries do not. Set <code>IsTransactional</code> to <code>true</code> if a failure of the policy must also fail the ingestion into the source table. A short retention (even 0) on the raw table is common once the policy has done its job.</p>
+@'[{"IsEnabled": true, "Source": "RawEvents", "Query": "ParseRaw()", "IsTransactional": false}]'
 
-<h3>Materialized views</h3>
-<p>A <strong>materialized view</strong> is an always-up-to-date <code>summarize</code> over a source table. The engine stores the already-aggregated part and aggregates only the new delta at query time, so the result is always fresh and cheap to query. Typical uses: latest record per key (<code>arg_max</code>), deduplication (<code>take_any</code>), hourly/daily rollups.</p>
-<pre><code>.create materialized-view with (backfill = true) DeviceLatest on table Telemetry
-{
-    Telemetry
-    | summarize arg_max(Timestamp, *) by DeviceId
-}
+.create materialized-view with (backfill = true) DeviceLatest on table Telemetry
+{ Telemetry | summarize arg_max(Timestamp, *) by DeviceId }
 
-// query it like a table (or force the materialized part only)
-DeviceLatest | where Temperature &gt; 8
-materialized_view("DeviceLatest")</code></pre>
-<div class="tw"><table>
-<thead><tr><th></th><th>Update policy</th><th>Materialized view</th><th>Stored function</th></tr></thead>
-<tbody>
-<tr><td>When it runs</td><td>At ingestion time, per batch</td><td>Continuously in the background + delta at query time</td><td>At query time</td></tr>
-<tr><td>Output</td><td>Rows appended to another table</td><td>Aggregated result (must be a <code>summarize</code>)</td><td>Nothing stored</td></tr>
-<tr><td>Use for</td><td>Parsing, enrichment, routing, filtering</td><td>Latest value, dedup, rollups</td><td>Reusable query logic, parameterised queries</td></tr>
-</tbody>
-</table></div>
-
-<h3>Retention and caching policies</h3>
+.alter-merge table Telemetry policy retention softdelete = 90d
+.alter table Telemetry policy caching hot = 14d</code></pre>
 <ul>
-<li><strong>Retention policy</strong> (soft-delete period): data older than the period is removed automatically from the table or materialized view. In Fabric the default is <strong>3,650 days</strong> (minimum 1 day, maximum 36,500 days, or <em>Unlimited</em>).</li>
-<li><strong>Caching policy</strong> (hot cache): how much recent data is kept on local SSD/memory for fast queries; older data stays queryable from cold storage, only slower. Default <strong>3,650 days</strong>; the cache period must be <strong>≤ retention</strong>.</li>
-<li>Set in the UI (database → <em>Manage → Data policies</em>) or with commands. Policies can be set at database level and overridden per table.</li>
-</ul>
-<pre><code>.alter-merge table Telemetry policy retention softdelete = 90d
-.alter table Telemetry policy caching hot = 14d
-.show table Telemetry policy retention</code></pre>
-<div class="tip">Rule of thumb: <em>retention</em> answers "how long do I keep it?" (cost of storage, compliance); <em>caching</em> answers "how much do I query fast?" (performance vs premium storage cost).</div>
+<li>Management commands start with a dot (<code>.create</code>, <code>.alter</code>, <code>.show</code>); queries don't.</li>
+<li>Retention range: 1 to 36,500 days or Unlimited. Policies at database level, overridable per table (UI: Manage → Data policies).</li>
+<li>OneLake availability at database level applies to new tables; tick <i>Apply to existing tables</i> to backfill. The database retention policy also applies to the OneLake copy. Latency configurable 5 min–3 h (<code>TargetLatencyInMinutes</code>).</li>
+<li>While it is on you cannot rename tables, change a column type, apply RLS or delete/truncate/purge. Adding or dropping columns is allowed.</li>
+<li>Eventhouse cost: suspends when idle (a few seconds to resume); minimum capacity (formerly "always-on") keeps it active.</li>
+</ul></details>
+</section>
 
-<h3>OneLake availability</h3>
-<p>Turn on <strong>OneLake availability</strong> at database or table level to expose KQL tables as <strong>Delta tables in OneLake</strong> (a logical copy, no extra storage charge). Then lakehouses and warehouses can reference them through <strong>shortcuts</strong>, Spark notebooks can read them, a SQL analytics endpoint can query them, and Power BI can use <strong>Direct Lake</strong> (Direct Lake on OneLake supports KQL databases).</p>
-<ul>
-<li>Database level: applies to new tables; tick <em>Apply to existing tables</em> to backfill historic data.</li>
-<li>The database <strong>retention policy also applies</strong> to the OneLake copy.</li>
-<li>Data is batched into well-sized Parquet files; write latency is adaptive, by default <em>up to 3 hours</em> or until files are big enough (configurable 5 min–3 h via the mirroring policy <code>TargetLatencyInMinutes</code>).</li>
-<li>While enabled you <strong>cannot</strong> rename tables, alter a column type, apply RLS to the table, or delete/truncate/purge data — turn it off, make the change, turn it on again. Adding or dropping columns is allowed.</li>
-<li>The Delta copy is read-only.</li>
-</ul>
-
-<div class="check" data-answer="2">
-<p>Data engineers must analyze tables of a KQL database from a lakehouse notebook and from a Direct Lake semantic model, without building a copy process. What should you do?</p>
-<ul><li>Schedule a pipeline that exports the KQL tables to Parquet nightly</li><li>Turn on OneLake availability for the KQL database and create shortcuts in the lakehouse</li><li>Mirror the KQL database into a warehouse</li><li>Create a materialized view for each table</li></ul>
-<p class="why">OneLake availability publishes the KQL tables as Delta in OneLake; shortcuts make them visible to Spark, the SQL analytics endpoint and Direct Lake. Exports add a copy process, "mirroring a KQL database" is not a feature, and materialized views stay inside the KQL database.</p>
+<!-- ===================== Lesson 3 ===================== -->
+<section class="lesson">
+<h2>KQL pipe playground</h2>
+<p class="idea">Each operator receives the rows of the previous one, so the order of the pipe changes the result.</p>
+<div class="sim">
+  <div class="wtitle">KQL pipeline playground: click operators to add them to the pipe</div>
+  <div class="kql-ops" id="p08-ops"></div>
+  <div><button id="p08-undo">↶ Remove last</button> <button id="p08-reset">↺ Reset</button> <span class="muted">Presets:</span> <button id="p08-pre1">Hot devices</button> <button id="p08-pre2">Latest per device</button> <button id="p08-pre3">Broken order</button></div>
+  <div class="kql-q" id="p08-q"></div>
+  <div class="out kql-res" id="p08-out"></div>
 </div>
-
-<h2>KQL fundamentals</h2>
-<p>A KQL query is a <strong>data flow</strong>: start with a table (or function, or <code>let</code> variable) and pass the rows through operators separated by the pipe <code>|</code>. Each operator receives the output of the previous one. Order matters — filter early, project early, aggregate late.</p>
-<pre><code>Telemetry                                   // source table
-| where Timestamp &gt; ago(1h)                 // filter rows (time first!)
-| where DeviceId startswith "TRK"
-| summarize AvgTemp = avg(Temperature),     // aggregate
-            Readings = count()
-            by DeviceId
-| where AvgTemp &gt; 8                         // filter on aggregated value (= HAVING)
-| top 10 by AvgTemp desc                    // sort + limit</code></pre>
-<ul>
-<li><strong>Case sensitivity:</strong> table, column and function names are case-sensitive; operator keywords are lower case (<code>where</code>, not <code>WHERE</code>). <code>==</code> is case-sensitive, <code>=~</code> is case-insensitive.</li>
-<li>Comments use <code>//</code>. Strings use double or single quotes. Datetime literals: <code>datetime(2026-11-04)</code>; timespans: <code>30s</code>, <code>5m</code>, <code>1h</code>, <code>7d</code>.</li>
-<li>Equality is <code>==</code> (single <code>=</code> is assignment, e.g. in <code>extend</code>). Logical operators: <code>and</code>, <code>or</code>, <code>not()</code>.</li>
-<li>Several statements in one query are separated by <code>;</code> (needed after <code>let</code>).</li>
-</ul>
-
-<h3>Filtering rows: <code>where</code>, time functions, <code>between</code></h3>
-<pre><code>Telemetry | where Timestamp &gt; ago(24h)                         // last 24 hours
-Telemetry | where Timestamp between (datetime(2026-10-01) .. datetime(2026-10-31))
-Telemetry | where Timestamp &gt;= startofday(now()) and Temperature &gt; 8
-Telemetry | where DeviceId in ("TRK-01", "TRK-02")           // case-sensitive list
-Telemetry | where isnotempty(DeviceId) and isnotnull(Temperature)
-Telemetry | where Temperature between (2.0 .. 8.0)            // inclusive range</code></pre>
-<p><code>ago(timespan)</code> = <code>now() - timespan</code> (UTC). <code>between</code> is <strong>inclusive</strong> on both ends and uses <code>..</code>. Other handy date functions: <code>startofday/week/month/year()</code>, <code>endofday()</code>, <code>datetime_part()</code>, <code>format_datetime()</code>, <code>dayofweek()</code>, <code>datetime_add()</code>, <code>datetime_diff()</code>.</p>
-
-<h3>String predicates: <code>has</code> vs <code>contains</code> (the term index)</h3>
-<p>KQL splits string values into <strong>terms</strong> — maximal sequences of alphanumeric characters — and indexes every term of <strong>three or more characters</strong>. Operators with <code>has</code> in their name use this term index; <code>contains</code>, <code>startswith</code>, <code>endswith</code> scan the values.</p>
-<div class="tw"><table>
-<thead><tr><th>Expression</th><th>Result</th><th>Why</th></tr></thead>
-<tbody>
-<tr><td><code>"North America" has "america"</code></td><td>true</td><td>whole term, case-insensitive</td></tr>
-<tr><td><code>"KustoExplorerQueryRun" has "Explorer"</code></td><td><strong>false</strong></td><td>"Explorer" is not a separate term</td></tr>
-<tr><td><code>"KustoExplorerQueryRun" contains "Explorer"</code></td><td>true</td><td>substring match (scan)</td></tr>
-<tr><td><code>"North America" hasprefix "ame"</code></td><td>true</td><td>prefix of a term</td></tr>
-<tr><td><code>"Fabrikam" startswith "fab"</code></td><td>true</td><td>start of the whole string</td></tr>
-<tr><td><code>"abc" =~ "ABC"</code></td><td>true</td><td>case-insensitive equality</td></tr>
-</tbody>
-</table></div>
-<ul>
-<li>Prefer <code>has</code> / <code>in</code> / <code>==</code> when you search for a whole word — <strong><code>has</code> is faster than <code>contains</code></strong>.</li>
-<li>Prefer case-sensitive variants (<code>==</code> over <code>=~</code>, <code>has_cs</code> over <code>has</code>, <code>in</code> over <code>in~</code>) when possible; suffix <code>_cs</code> = case-sensitive.</li>
-<li><code>has_any("a","b")</code>, <code>has_all(...)</code>, <code>matches regex</code>, negations with <code>!</code> (<code>!has</code>, <code>!contains</code>).</li>
-</ul>
-
-<div class="check" data-answer="4">
-<p>A <code>Logs</code> table has billions of rows. You need rows whose <code>Message</code> contains the word <code>timeout</code> (always surrounded by spaces or punctuation). Which predicate is MOST efficient?</p>
-<ul><li><code>where Message contains "timeout"</code></li><li><code>where Message matches regex "timeout"</code></li><li><code>where Message like "%timeout%"</code></li><li><code>where Message has "timeout"</code></li></ul>
-<p class="why"><code>has</code> looks up a whole term in the term index; <code>contains</code> and regex scan every value. <code>like</code> is SQL, not KQL.</p>
-</div>
-
-<h3>Shaping columns: <code>project</code>, <code>extend</code> and friends</h3>
-<pre><code>Telemetry
-| project Timestamp, DeviceId, TempC = Temperature        // keep / rename / compute columns
-| extend TempF = TempC * 9 / 5 + 32,                      // add computed columns, keep the rest
-         Band  = case(TempC &lt; 2, "Too cold", TempC &gt; 8, "Too warm", "OK")
-| project-away TempC                                      // drop columns
-| project-rename Device = DeviceId                        // rename only
-| project-reorder Timestamp, Device                       // reorder</code></pre>
-<ul>
-<li><code>project</code> = SQL <code>SELECT col list</code> (only listed columns remain). <code>extend</code> adds columns and keeps all existing ones.</li>
-<li><code>iff(cond, a, b)</code> for if/else, <code>case()</code> for multiple branches, <code>coalesce()</code>, <code>strcat()</code>, <code>tostring()</code>, <code>toint()</code>, <code>toreal()</code>, <code>todatetime()</code>, <code>round()</code>.</li>
-</ul>
-
-<h3>Aggregating: <code>summarize</code></h3>
-<pre><code>Telemetry
-| where Timestamp &gt; ago(1d)
-| summarize Readings  = count(),
-            Devices   = dcount(DeviceId),               // approximate distinct count
-            AvgTemp   = avg(Temperature),
-            MaxTemp   = max(Temperature),
-            HotCount  = countif(Temperature &gt; 8),
-            P95       = percentile(Temperature, 95)
-            by Region</code></pre>
-<div class="tw"><table>
-<thead><tr><th>Aggregation</th><th>Meaning</th></tr></thead>
-<tbody>
-<tr><td><code>count()</code>, <code>countif(pred)</code></td><td>rows, rows meeting a condition</td></tr>
-<tr><td><code>dcount(col)</code></td><td>distinct count — <strong>estimated</strong> (HyperLogLog), fast; <code>dcount(col, 4)</code> raises accuracy; <code>count_distinct()</code> is exact but costlier</td></tr>
-<tr><td><code>sum</code>, <code>avg</code>, <code>min</code>, <code>max</code>, <code>stdev</code>, <code>variance</code></td><td>usual statistics</td></tr>
-<tr><td><code>percentile(col, 95)</code>, <code>percentiles(col, 50, 95, 99)</code></td><td>(estimated) percentiles; <code>percentiles</code> returns one column per value</td></tr>
-<tr><td><code>arg_max(Timestamp, *)</code> / <code>arg_min(...)</code></td><td>the <strong>whole row</strong> with the max/min of the first argument — e.g. latest reading per device</td></tr>
-<tr><td><code>take_any(col)</code></td><td>any value (used for dedup)</td></tr>
-<tr><td><code>make_list(col)</code>, <code>make_set(col)</code></td><td>array of values (set = distinct)</td></tr>
-</tbody>
-</table></div>
-
-<h3>Time buckets: <code>bin()</code></h3>
-<p><code>bin(value, size)</code> rounds down to a multiple of <code>size</code> — the KQL way to group by minute/hour/day (also works on numbers: <code>bin(Price, 10)</code>).</p>
-<pre><code>Telemetry
-| where Timestamp &gt; ago(7d)
-| summarize AvgTemp = avg(Temperature) by DeviceId, bin(Timestamp, 1h)
-| render timechart</code></pre>
-<div class="warn">Rows that do not exist produce no bin. If you need a value (e.g. 0) for every empty hour, use <code>make-series</code> instead of <code>summarize ... by bin()</code>.</div>
-
-<h3>Sorting and limiting: <code>sort</code>/<code>order</code>, <code>top</code>, <code>take</code></h3>
-<pre><code>Telemetry | sort by Timestamp desc            // order by = alias of sort by
-Telemetry | sort by Temperature                // DEFAULT IS DESCENDING!
-Telemetry | top 5 by Temperature               // sort + take in one operator (desc by default)
-Telemetry | take 100                           // any 100 rows, no order (limit = alias)
-Telemetry | distinct DeviceId, Region          // unique combinations</code></pre>
-<div class="exam"><code>sort by</code> and <code>top</code> default to <strong>descending</strong> (nulls last for desc) — the opposite of SQL <code>ORDER BY</code>. <code>take</code> returns arbitrary rows; it is not "the first N" unless you sort first (use <code>top</code>).</div>
-
-<div class="check" data-answer="1">
-<p>Which query returns the five devices with the <strong>highest</strong> average temperature over the last day?</p>
-<ul><li><code>Telemetry | where Timestamp &gt; ago(1d) | summarize Avg = avg(Temperature) by DeviceId | top 5 by Avg</code></li><li><code>Telemetry | take 5 | summarize Avg = avg(Temperature) by DeviceId</code></li><li><code>Telemetry | where Timestamp &gt; ago(1d) | top 5 by Temperature | summarize avg(Temperature) by DeviceId</code></li><li><code>Telemetry | summarize Avg = avg(Temperature) by DeviceId | sort by Avg asc | take 5</code></li></ul>
-<p class="why">Filter, aggregate, then <code>top 5 by Avg</code> (descending by default). Option 2 samples 5 arbitrary rows first; option 3 takes the 5 hottest single readings before aggregating; option 4 sorts ascending (lowest) and ignores the time window.</p>
-</div>
-
-<h3>Combining tables: <code>join</code>, <code>lookup</code>, <code>union</code></h3>
-<pre><code>Telemetry
-| where Timestamp &gt; ago(1h)
-| join kind=inner (Devices | project DeviceId, Site, Owner) on DeviceId
-
-// different column names on each side
-Telemetry
-| join kind=leftouter Devices on $left.DeviceId == $right.Id</code></pre>
-<div class="tw"><table>
-<thead><tr><th>kind</th><th>Returns</th></tr></thead>
-<tbody>
-<tr><td><strong><code>innerunique</code> (default!)</strong></td><td>Deduplicates the <strong>left</strong> side on the join key (keeps one arbitrary row per key), then inner-joins. Can silently drop left rows with duplicate keys.</td></tr>
-<tr><td><code>inner</code></td><td>Standard inner join: every matching combination (like SQL <code>INNER JOIN</code>)</td></tr>
-<tr><td><code>leftouter</code> / <code>rightouter</code> / <code>fullouter</code></td><td>Outer joins; unmatched columns are null/empty</td></tr>
-<tr><td><code>leftanti</code> (<code>anti</code>) / <code>rightanti</code></td><td>Rows of one side with <strong>no</strong> match (SQL <code>NOT EXISTS</code>)</td></tr>
-<tr><td><code>leftsemi</code> / <code>rightsemi</code></td><td>Rows of one side that <strong>have</strong> a match, only that side's columns (SQL <code>EXISTS</code>)</td></tr>
-</tbody>
-</table></div>
-<ul>
-<li>When you omit <code>kind</code>, you get <code>innerunique</code>. If you need SQL semantics, write <code>kind=inner</code> explicitly.</li>
-<li>Put the <strong>smaller</strong> table on the left; filter and <code>project</code> both sides before joining. Hints: <code>hint.strategy=broadcast</code> (small left side), <code>hint.shufflekey=Key</code> (high-cardinality keys).</li>
-<li><code>lookup</code> is an optimized join for enriching a large fact with a small dimension (right side is loaded in memory; default <code>leftouter</code>).</li>
-<li><code>union Table1, Table2</code> stacks rows (like SQL <code>UNION ALL</code>, columns matched by name; <code>withsource=SourceTable</code> adds the source name; wildcards such as <code>union Logs_*</code> allowed).</li>
-</ul>
-
-<div class="check" data-answer="2">
-<p>A query uses <code>Orders | join Customers on CustomerId</code> without a <code>kind</code>. <code>Orders</code> has many rows per customer. Analysts notice that only one order per customer is returned. Why?</p>
-<ul><li>KQL joins are always left semi joins</li><li>The default join kind is <code>innerunique</code>, which deduplicates the left side on the key</li><li>KQL joins return only the first matching row of the right side</li><li>The <code>on</code> clause must use <code>$left</code> and <code>$right</code></li></ul>
-<p class="why">With no kind, KQL uses <code>innerunique</code>: left rows are deduplicated by key before the inner join. Put the smaller table (Customers) on the left, or specify <code>kind=inner</code>.</p>
-</div>
-
-<h3>Variables and reuse: <code>let</code></h3>
-<pre><code>let threshold = 8.0;
-let window    = 1h;
-let hotDevices =
-    Telemetry
-    | where Timestamp &gt; ago(window) and Temperature &gt; threshold
-    | distinct DeviceId;
-Devices
-| where DeviceId in (hotDevices)            // tabular let used as a list
-| project DeviceId, Site, Owner</code></pre>
-<p><code>let</code> binds a scalar, a tabular expression or a function (<code>let f = (x:real) { x * 2 };</code>). Each <code>let</code> ends with a semicolon. To persist a function in the database, use <code>.create-or-alter function</code>.</p>
-
-<h3>Parsing and semi-structured data: <code>parse</code>, <code>extract</code>, <code>mv-expand</code></h3>
-<pre><code>// "Device TRK-07 reported 9.4C at dock 12"
-Logs
-| parse Message with "Device " DeviceId " reported " Temp:real "C at dock " Dock:int
-| project Timestamp, DeviceId, Temp, Dock
-
-// JSON payload in a dynamic column
-RawEvents
-| extend ts = todatetime(Payload.ts), tags = Payload.tags     // dot or ['x'] access
-| mv-expand tag = tags to typeof(string)                        // one row per array element
-| summarize count() by tag</code></pre>
-<ul>
-<li><code>parse</code> extracts columns from a string using a pattern of literals and typed column names; <code>extract(regex, group, text)</code> pulls a regex group; <code>parse_json()</code> (alias <code>todynamic()</code>) turns a JSON string into <code>dynamic</code>.</li>
-<li><code>mv-expand</code> turns each element of an array (or property bag) into its own row — like SQL <code>CROSS APPLY OPENJSON</code> or Spark <code>explode()</code>. The reverse is <code>summarize make_list()</code>.</li>
-<li><code>bag_unpack()</code> plugin spreads a property bag into columns: <code>| evaluate bag_unpack(Payload)</code>.</li>
-</ul>
-
-<h3>Visualising and time series: <code>render</code>, <code>make-series</code></h3>
-<pre><code>// regular time series with zero-filled gaps, one series per device
-Telemetry
-| where Timestamp &gt; ago(7d)
-| make-series AvgTemp = avg(Temperature) default = 0
-    on Timestamp from ago(7d) to now() step 1h
-    by DeviceId
-| extend (anomalies, score, baseline) = series_decompose_anomalies(AvgTemp, 1.5)
-| render anomalychart with (anomalycolumns = anomalies)</code></pre>
-<ul>
-<li><code>render</code> must be the <strong>last</strong> operator: <code>timechart</code>, <code>linechart</code>, <code>columnchart</code>, <code>barchart</code>, <code>piechart</code>, <code>areachart</code>, <code>scatterchart</code>, <code>anomalychart</code>, <code>card</code>… It is a hint to the client (queryset, dashboard) and doesn't change data.</li>
-<li><code>make-series</code> creates arrays (one per group) on a fixed time axis with a <code>default</code> for empty steps — required input for <strong>series functions</strong>: <code>series_decompose_anomalies()</code> (anomaly detection), <code>series_decompose_forecast()</code> (forecast), <code>series_fir()</code> (moving average filter), <code>series_stats()</code>, <code>series_fit_line()</code> (trend).</li>
-<li><code>summarize ... by bin()</code> → table rows; <code>make-series</code> → arrays per group. Use <code>mv-expand</code> to turn series back into rows.</li>
-</ul>
-
-<div class="match" data-task="Match each KQL operator to what it does.">
-<dl>
-<dt><code>extend</code></dt><dd>Adds calculated columns while keeping all existing columns</dd>
-<dt><code>project</code></dt><dd>Keeps only the listed (or computed) columns</dd>
-<dt><code>summarize</code></dt><dd>Groups rows and computes aggregations</dd>
-<dt><code>bin()</code></dt><dd>Rounds a timestamp or number down into fixed-size buckets</dd>
-<dt><code>arg_max()</code></dt><dd>Returns the whole row with the highest value of an expression per group</dd>
-<dt><code>mv-expand</code></dt><dd>Turns each element of a dynamic array into a separate row</dd>
-<dt><code>make-series</code></dt><dd>Builds arrays on a regular time axis with default values for gaps</dd>
-<dt><code>take</code></dt><dd>Returns an arbitrary number of rows without ordering</dd>
-</dl>
-</div>
-
-<h2>KQL ↔ SQL translation</h2>
-<div class="tw"><table>
-<thead><tr><th>SQL</th><th>KQL</th></tr></thead>
-<tbody>
-<tr><td><code>SELECT * FROM T</code></td><td><code>T</code></td></tr>
-<tr><td><code>SELECT a, b FROM T</code></td><td><code>T | project a, b</code></td></tr>
-<tr><td><code>SELECT TOP 100 * FROM T</code></td><td><code>T | take 100</code></td></tr>
-<tr><td><code>SELECT *, a*2 AS c FROM T</code></td><td><code>T | extend c = a * 2</code></td></tr>
-<tr><td><code>WHERE ts &gt; GETDATE()-1</code></td><td><code>| where ts &gt; ago(1d)</code></td></tr>
-<tr><td><code>WHERE x IS NOT NULL</code></td><td><code>| where isnotnull(x)</code> (strings: <code>isnotempty(x)</code>)</td></tr>
-<tr><td><code>WHERE name LIKE 'Azure%'</code></td><td><code>| where name startswith "Azure"</code></td></tr>
-<tr><td><code>WHERE type LIKE '%blob%'</code></td><td><code>| where type has "blob"</code> (term) or <code>contains</code> (substring)</td></tr>
-<tr><td><code>SELECT DISTINCT a, b</code></td><td><code>| distinct a, b</code></td></tr>
-<tr><td><code>SELECT a, AVG(d) FROM T GROUP BY a</code></td><td><code>T | summarize avg(d) by a</code></td></tr>
-<tr><td><code>COUNT(DISTINCT x)</code></td><td><code>dcount(x)</code> (approx.) / <code>count_distinct(x)</code></td></tr>
-<tr><td><code>HAVING COUNT(*) &gt; 3</code></td><td><code>| summarize c = count() by a | where c &gt; 3</code></td></tr>
-<tr><td><code>ORDER BY ts ASC</code></td><td><code>| sort by ts asc</code> (default desc!)</td></tr>
-<tr><td><code>SELECT TOP 10 ... ORDER BY c DESC</code></td><td><code>| top 10 by c desc</code></td></tr>
-<tr><td><code>CASE WHEN ... END</code></td><td><code>case()</code> / <code>iff()</code></td></tr>
-<tr><td><code>LEFT OUTER JOIN ... ON a.k = b.k</code></td><td><code>| join kind=leftouter (B) on k</code></td></tr>
-<tr><td><code>UNION ALL</code></td><td><code>union A, B</code></td></tr>
-<tr><td>subquery / CTE</td><td><code>let</code> statement; <code>toscalar()</code> for a single value</td></tr>
-</tbody>
-</table></div>
-
-<h3>Let the engine translate: <code>explain</code></h3>
-<p>KQL databases accept a read-only subset of T-SQL. To see the KQL equivalent of a SQL query, prefix it with a comment line <code>--</code> and the keyword <code>explain</code>:</p>
-<pre><code>--
-explain
-SELECT COUNT_BIG(*) AS C FROM StormEvents
-
-// Output:
-// StormEvents
-// | summarize C=count()
-// | project C</code></pre>
-<p>Great for learning, and for SQL-savvy analysts; but write production queries in KQL — T-SQL support is limited (no DML, many KQL-only features such as <code>bin</code>, <code>make-series</code>, <code>render</code>).</p>
-
-<h2>Exercise: build a pipe in the right order</h2>
-<p><strong>Requirement:</strong> for the last 24 hours, show the hourly average temperature of the 3 devices that had the most readings above 8 °C, as a time chart.</p>
-<div class="order" data-task="Put the KQL lines in the order that produces the required result.">
-<ol>
-<li><code>let hot = Telemetry | where Timestamp &gt; ago(24h) and Temperature &gt; 8 | summarize n = count() by DeviceId | top 3 by n | project DeviceId;</code></li>
-<li><code>Telemetry</code></li>
-<li><code>| where Timestamp &gt; ago(24h)</code></li>
-<li><code>| where DeviceId in (hot)</code></li>
-<li><code>| summarize AvgTemp = avg(Temperature) by DeviceId, bin(Timestamp, 1h)</code></li>
-<li><code>| render timechart</code></li>
-</ol>
-</div>
-<details><summary>Why this order?</summary>
-<p>The <code>let</code> must come first and end with <code>;</code>. Then start from the table, filter by time first (cheap, uses the time index), then by the device list, aggregate into hourly bins, and <code>render</code> last. Swapping <code>summarize</code> before <code>where DeviceId in</code> also works but aggregates devices you throw away.</p>
-</details>
-
-<div class="order" data-task="Order these operators to return the latest reading of every device in the 'North' region, newest first.">
+<script>
+(function () {
+  var NOW = 10 * 60 + 30; // 10:30
+  var DATA = [
+    ['09:40','TRK-01','North',5.1],['09:45','TRK-02','South',7.9],['09:50','TRK-03','North',9.4],['09:55','TRK-01','North',6.0],
+    ['10:00','TRK-04','South',8.6],['10:05','TRK-02','South',8.2],['10:10','TRK-03','North',10.1],['10:12','TRK-01','North',4.8],
+    ['10:15','TRK-04','South',9.0],['10:20','TRK-02','South',7.5],['10:25','TRK-03','North',8.8],['10:28','TRK-04','South',6.9]
+  ].map(function (r) { return { Timestamp: r[0], DeviceId: r[1], Region: r[2], Temp: r[3] }; });
+  function mins(t) { var p = t.split(':'); return +p[0] * 60 + +p[1]; }
+  function need(cols, list) { for (var i = 0; i < list.length; i++) if (cols.indexOf(list[i]) < 0) throw new Error("Failed to resolve column '" + list[i] + "'"); }
+  function group(rows, key) { var g = {}, order = []; rows.forEach(function (r) { if (!g[r[key]]) { g[r[key]] = []; order.push(r[key]); } g[r[key]].push(r); }); return order.map(function (k) { return g[k]; }); }
+  function sortBy(rows, c, asc) { return rows.slice().sort(function (a, b) { var x = a[c], y = b[c]; return (x < y ? -1 : x > y ? 1 : 0) * (asc ? 1 : -1); }); }
+  var OPS = [
+    { t: 'where Timestamp > ago(30m)', f: function (r, c) { need(c, ['Timestamp']); return [r.filter(function (x) { return mins(x.Timestamp) > NOW - 30; }), c]; } },
+    { t: 'where Region == "North"', f: function (r, c) { need(c, ['Region']); return [r.filter(function (x) { return x.Region === 'North'; }), c]; } },
+    { t: 'where Temp > 8', f: function (r, c) { need(c, ['Temp']); return [r.filter(function (x) { return x.Temp > 8; }), c]; } },
+    { t: 'extend TempF = Temp * 9 / 5 + 32', f: function (r, c) { need(c, ['Temp']); return [r.map(function (x) { var y = Object.assign({}, x); y.TempF = Math.round((x.Temp * 9 / 5 + 32) * 10) / 10; return y; }), c.concat(c.indexOf('TempF') < 0 ? ['TempF'] : [])]; } },
+    { t: 'project DeviceId, Temp', f: function (r, c) { need(c, ['DeviceId', 'Temp']); return [r.map(function (x) { return { DeviceId: x.DeviceId, Temp: x.Temp }; }), ['DeviceId', 'Temp']]; } },
+    { t: 'summarize Readings = count() by DeviceId', f: function (r, c) { need(c, ['DeviceId']); return [group(r, 'DeviceId').map(function (g) { return { DeviceId: g[0].DeviceId, Readings: g.length }; }), ['DeviceId', 'Readings']]; } },
+    { t: 'summarize AvgTemp = avg(Temp) by DeviceId', f: function (r, c) { need(c, ['DeviceId', 'Temp']); return [group(r, 'DeviceId').map(function (g) { var s = 0; g.forEach(function (x) { s += x.Temp; }); return { DeviceId: g[0].DeviceId, AvgTemp: Math.round(s / g.length * 100) / 100 }; }), ['DeviceId', 'AvgTemp']]; } },
+    { t: 'summarize arg_max(Timestamp, *) by DeviceId', f: function (r, c) { need(c, ['Timestamp', 'DeviceId']); return [group(r, 'DeviceId').map(function (g) { return sortBy(g, 'Timestamp', false)[0]; }), c]; } },
+    { t: 'sort by Temp', f: function (r, c) { need(c, ['Temp']); return [sortBy(r, 'Temp', false), c]; } },
+    { t: 'sort by Timestamp asc', f: function (r, c) { need(c, ['Timestamp']); return [sortBy(r, 'Timestamp', true), c]; } },
+    { t: 'top 3 by Temp', f: function (r, c) { need(c, ['Temp']); return [sortBy(r, 'Temp', false).slice(0, 3), c]; } },
+    { t: 'top 2 by AvgTemp', f: function (r, c) { need(c, ['AvgTemp']); return [sortBy(r, 'AvgTemp', false).slice(0, 2), c]; } },
+    { t: 'take 3', f: function (r, c) { var s = r.slice(); s.push(s.shift()); s.reverse(); return [s.slice(0, 3), c]; } },
+    { t: 'count', f: function (r) { return [[{ Count: r.length }], ['Count']]; } }
+  ];
+  var pipe = [];
+  var opsBox = document.getElementById('p08-ops'), q = document.getElementById('p08-q'), out = document.getElementById('p08-out');
+  OPS.forEach(function (o, i) { var b = document.createElement('button'); b.textContent = '| ' + o.t; b.onclick = function () { pipe.push(i); run(); }; opsBox.appendChild(b); });
+  function esc(s) { return String(s).replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;'); }
+  function run() {
+    var rows = DATA, cols = ['Timestamp', 'DeviceId', 'Region', 'Temp'], err = null, at = -1;
+    for (var i = 0; i < pipe.length; i++) {
+      try { var res = OPS[pipe[i]].f(rows, cols); rows = res[0]; cols = res[1]; } catch (e) { err = e.message; at = i; break; }
+    }
+    q.innerHTML = '<span class="st">Telemetry</span>' + pipe.map(function (p, i) { return '<span class="st"' + (i === at ? ' style="border-color:var(--bad)"' : '') + '>| ' + esc(OPS[p].t) + '</span>'; }).join('');
+    if (err) { out.innerHTML = '<span class="badge bad">Semantic error</span> <span class="kql-err">' + esc(err) + '</span> in step ' + (at + 1) + '. An earlier operator removed that column.'; return; }
+    var note = '';
+    if (pipe.indexOf(12) >= 0) note = ' <span class="badge" style="background:var(--warn-soft);color:var(--warn)">take = any rows, no order</span>';
+    if (pipe.some(function (p) { return p === 8 || p === 10 || p === 11; })) note += ' <span class="badge ok">sort/top default: desc</span>';
+    var h = '<b>' + rows.length + ' row' + (rows.length === 1 ? '' : 's') + '</b>' + note + '<div class="tw"><table><tr>' + cols.map(function (c) { return '<th>' + c + '</th>'; }).join('') + '</tr>';
+    rows.forEach(function (r) { h += '<tr>' + cols.map(function (c) { var v = r[c]; var hot = (c === 'Temp' || c === 'AvgTemp') && v > 8; return '<td' + (hot ? ' class="hot"' : '') + '>' + esc(v) + '</td>'; }).join('') + '</tr>'; });
+    out.innerHTML = h + '</table></div>';
+  }
+  document.getElementById('p08-undo').onclick = function () { pipe.pop(); run(); };
+  document.getElementById('p08-reset').onclick = function () { pipe = []; run(); };
+  document.getElementById('p08-pre1').onclick = function () { pipe = [0, 6, 11]; run(); };
+  document.getElementById('p08-pre2').onclick = function () { pipe = [1, 7, 4, 8]; run(); };
+  document.getElementById('p08-pre3').onclick = function () { pipe = [4, 1]; run(); };
+  run();
+})();
+</script>
+<p>Try <b>Broken order</b>: <code>project</code> dropped <code>Region</code>, so the next <code>where</code> fails. Then compare <code>take 3</code> with <code>top 3 by Temp</code>.</p>
+<div class="order" data-task="Order the pipe: latest reading of every 'North' device, newest first.">
 <ol>
 <li><code>Telemetry</code></li>
 <li><code>| where Region == "North"</code></li>
@@ -427,91 +193,166 @@ SELECT COUNT_BIG(*) AS C FROM StormEvents
 <li><code>| sort by Timestamp desc</code></li>
 </ol>
 </div>
+<div class="check" data-answer="1"><p>Which query returns the five devices with the highest average temperature over the last day?</p><ul><li><code>T | where Timestamp &gt; ago(1d) | summarize Avg = avg(Temperature) by DeviceId | top 5 by Avg</code></li><li><code>T | take 5 | summarize Avg = avg(Temperature) by DeviceId</code></li><li><code>T | where Timestamp &gt; ago(1d) | top 5 by Temperature | summarize avg(Temperature) by DeviceId</code></li><li><code>T | summarize Avg = avg(Temperature) by DeviceId | sort by Avg asc | take 5</code></li></ul><p class="why">Filter, aggregate, then <code>top 5 by Avg</code> (descending by default). The others sample, pre-limit or sort ascending.</p></div>
+<details><summary>Deep dive: syntax rules worth knowing</summary>
+<ul>
+<li>Table, column and function names are <b>case-sensitive</b>; keywords are lower case (<code>where</code>, not <code>WHERE</code>).</li>
+<li><code>==</code> compares (case-sensitive), <code>=~</code> is case-insensitive, single <code>=</code> assigns (in <code>extend</code>).</li>
+<li>Comments <code>//</code>; datetime <code>datetime(2026-11-04)</code>; timespans <code>30s, 5m, 1h, 7d</code>; statements separated by <code>;</code> (after <code>let</code>).</li>
+<li><code>project</code> keeps only listed columns; <code>extend</code> adds columns and keeps all; also <code>project-away</code>, <code>project-rename</code>, <code>project-reorder</code>.</li>
+<li><code>iff()</code>, <code>case()</code>, <code>coalesce()</code>, <code>strcat()</code>, <code>tostring()</code>, <code>toreal()</code>, <code>todatetime()</code>.</li>
+<li><code>let threshold = 8.0;</code> binds scalars, tabular expressions (usable with <code>in (hotDevices)</code>) or functions.</li>
+<li><code>parse Message with "Device " DeviceId " reported " Temp:real ...</code> extracts columns from text; <code>extract()</code> uses regex; <code>parse_json()</code> makes dynamic.</li>
+<li><code>mv-expand</code> turns array elements into rows (like Spark <code>explode()</code>); <code>evaluate bag_unpack(Payload)</code> spreads a property bag into columns.</li>
+<li><code>render timechart</code> (or columnchart, piechart, anomalychart…) is always the last operator; it is a visual hint only.</li>
+</ul></details>
+</section>
 
-<h2>KQL querysets, Real-Time dashboards and Copilot</h2>
-<h3>KQL queryset</h3>
-<ul>
-<li>A standalone Fabric item holding KQL (and T-SQL) queries in <strong>tabs</strong>, each tab connected to a data source: a KQL database in Fabric, an Azure Data Explorer cluster, or Azure Monitor (Log Analytics / Application Insights).</li>
-<li>Every KQL database also has an <em>embedded</em> queryset for quick exploration.</li>
-<li>Run the query under the cursor (Shift+Enter) or selected text; view results as table or chart; export to CSV; <strong>pin a query to a Real-Time dashboard</strong>; create a <strong>Power BI report</strong> from the query (DirectQuery to the KQL database); set an <strong>Activator alert</strong> on results.</li>
-<li>Share the queryset like any item; readers need access to the underlying database to run queries.</li>
-</ul>
-<h3>Real-Time dashboards</h3>
-<ul>
-<li>Each <strong>tile</strong> is a KQL query plus a visual. Dashboards support <strong>parameters</strong> (time range, multi-select dropdowns fed by a query), <strong>base queries</strong> reused by tiles, cross-filtering and drill-through, conditional formatting, <strong>auto refresh</strong> (editor sets a minimum interval; viewers pick their own above that), and JSON export/import.</li>
-<li>Queries hit the eventhouse directly on every refresh — no semantic model, no refresh schedule. Ideal for operational, seconds-fresh monitoring; a Power BI report is better for curated business KPIs over a governed model.</li>
-<li>Tiles can be created from a queryset (<em>Pin to dashboard</em>), and an Activator rule can be set on a tile.</li>
-</ul>
-<h3>Copilot for Real-Time Intelligence</h3>
-<ul>
-<li><strong>Copilot in the KQL queryset</strong> turns natural language into KQL ("show the average temperature per device in the last hour as a timechart"), explains and refines queries. It uses the database schema as context; always review the query (check time filters and join kinds).</li>
-<li>Copilot can also help create Real-Time dashboard tiles. Requires a paid Fabric capacity with Copilot enabled in tenant settings.</li>
-</ul>
-
-<h3>Power BI on eventhouse data — options</h3>
-<div class="tw"><table>
-<thead><tr><th>Option</th><th>Freshness</th><th>Notes</th></tr></thead>
-<tbody>
-<tr><td>Real-Time dashboard</td><td>Seconds (auto refresh)</td><td>KQL tiles, no model</td></tr>
-<tr><td>Power BI DirectQuery to KQL database</td><td>Each visual query hits the eventhouse</td><td>Full Power BI features, KQL generated from DAX; keep visuals simple</td></tr>
-<tr><td>Power BI Import from KQL</td><td>As of last refresh</td><td>Good for aggregated history</td></tr>
-<tr><td>Direct Lake via OneLake availability</td><td>Minutes to hours (adaptive write latency)</td><td>No eventhouse compute for report queries</td></tr>
-</tbody>
+<!-- ===================== Lesson 4 ===================== -->
+<section class="lesson">
+<h2>Operators that trip people up</h2>
+<p class="idea">A handful of KQL defaults differ from SQL; flip each card and test yourself.</p>
+<div class="flips">
+  <div class="flip"><div class="front"><span><code>has</code> vs <code>contains</code>?</span></div><div class="back"><span><b>has</b>: whole term via the index (fast). <b>contains</b>: substring scan (slow).</span></div></div>
+  <div class="flip"><div class="front"><span>"KustoExplorerQuery" <code>has</code> "Explorer"?</span></div><div class="back"><span><b>false</b>: terms are maximal alphanumeric runs, so "Explorer" is not a separate term. <code>contains</code> → true.</span></div></div>
+  <div class="flip"><div class="front"><span><code>ago(1h)</code>?</span></div><div class="back"><span><code>now() - 1h</code> in UTC. Filter on time first: it is cheap.</span></div></div>
+  <div class="flip"><div class="front"><span><code>bin(Timestamp, 5m)</code>?</span></div><div class="back"><span>Rounds down into 5-minute buckets. Empty buckets produce <b>no row</b>; use <code>make-series … default=0</code> to fill gaps.</span></div></div>
+  <div class="flip"><div class="front"><span>Default join kind?</span></div><div class="back"><span><b>innerunique</b>: deduplicates the left side on the key first. Write <code>kind=inner</code> for SQL semantics.</span></div></div>
+  <div class="flip"><div class="front"><span><code>sort by</code> / <code>top</code> default order?</span></div><div class="back"><span><b>Descending</b>, the opposite of SQL <code>ORDER BY</code>.</span></div></div>
+  <div class="flip"><div class="front"><span><code>dcount()</code>?</span></div><div class="back"><span>Approximate distinct count (HyperLogLog). Exact: <code>count_distinct()</code>.</span></div></div>
+  <div class="flip"><div class="front"><span><code>between (2.0 .. 8.0)</code>?</span></div><div class="back"><span>Inclusive on both ends, written with <code>..</code></span></div></div>
+</div>
+<div class="tw"><table class="matrix">
+<tr><th>Expression</th><th>Result</th></tr>
+<tr><td><code>"North America" has "america"</code></td><td>✓ true (whole term, case-insensitive)</td></tr>
+<tr><td><code>"KustoExplorerQueryRun" has "Explorer"</code></td><td>✗ false</td></tr>
+<tr><td><code>"KustoExplorerQueryRun" contains "Explorer"</code></td><td>✓ true (substring scan)</td></tr>
 </table></div>
+<div class="check" data-answer="4"><p>Billions of log rows. You need rows whose Message contains the word <i>timeout</i> (surrounded by spaces). Most efficient?</p><ul><li><code>where Message contains "timeout"</code></li><li><code>where Message matches regex "timeout"</code></li><li><code>where Message like "%timeout%"</code></li><li><code>where Message has "timeout"</code></li></ul><p class="why"><code>has</code> uses the term index. <code>like</code> is SQL, not KQL.</p></div>
+<div class="check" data-answer="2"><p><code>Orders | join Customers on CustomerId</code> (no kind) returns only one order per customer. Why?</p><ul><li>KQL joins are always left semi joins</li><li>The default kind is innerunique, which dedups the left side</li><li>KQL returns only the first match on the right</li><li>The on clause needs <code>$left</code> / <code>$right</code></li></ul><p class="why">Put the smaller table on the left or write <code>kind=inner</code>.</p></div>
+<div class="check" data-answer="4"><p>What is true about <code>Telemetry | summarize count() by bin(Timestamp, 5m)</code>?</p><ul><li>It returns every 5-minute interval, with 0 for empty ones</li><li>It returns arrays of counts per device</li><li>It fails, because bin() works only on numbers</li><li>It returns one row per 5-minute interval that has data</li></ul><p class="why">Only existing groups appear. <code>make-series</code> fills gaps.</p></div>
+<details><summary>Deep dive: join kinds, aggregations, time series</summary>
+<ul>
+<li><b>Join kinds</b>: innerunique (default), inner, leftouter / rightouter / fullouter, leftanti (= NOT EXISTS), leftsemi (= EXISTS). Different key names: <code>on $left.DeviceId == $right.Id</code>.</li>
+<li>Smaller table on the left; filter and project both sides first. Hints: <code>hint.strategy=broadcast</code>, <code>hint.shufflekey=Key</code>.</li>
+<li><code>lookup</code> = optimized join to enrich a large fact with a small dimension (default leftouter). <code>union A, B</code> = UNION ALL (by column name; <code>withsource=</code>, wildcards).</li>
+<li>Aggregations: <code>count()</code>, <code>countif()</code>, <code>dcount(col, 4)</code> (more accurate), <code>percentile(col, 95)</code>, <code>percentiles(col, 50, 95)</code>, <code>arg_max(Timestamp, *)</code>, <code>take_any()</code>, <code>make_list()</code>, <code>make_set()</code>.</li>
+<li>String rules: terms of 3+ characters are indexed; prefer <code>==</code>, <code>has_cs</code>, <code>in</code> (case-sensitive is faster); <code>has_any</code>, <code>has_all</code>, <code>!has</code>.</li>
+<li><code>"North America" hasprefix "ame"</code> → true; <code>"abc" =~ "ABC"</code> → true.</li>
+<li>Time: <code>startofday/week/month()</code>, <code>endofday()</code>, <code>datetime_diff()</code>, <code>format_datetime()</code>.</li>
+<li><code>make-series … on Timestamp from ago(7d) to now() step 1h by DeviceId</code> creates arrays for <code>series_decompose_anomalies()</code>, <code>series_decompose_forecast()</code>, <code>series_fir()</code>, <code>series_fit_line()</code>.</li>
+</ul></details>
+</section>
 
+<!-- ===================== Lesson 5 ===================== -->
+<section class="lesson">
+<h2>KQL ↔ SQL translation</h2>
+<p class="idea">If you know SQL, you already know most of KQL; the clauses just run top to bottom.</p>
+<div class="tabset">
+  <section data-tab="Select &amp; filter">
+    <div class="tw"><table><tr><th>SQL</th><th>KQL</th></tr>
+    <tr><td><code>SELECT a, b FROM T</code></td><td><code>T | project a, b</code></td></tr>
+    <tr><td><code>SELECT TOP 100 *</code></td><td><code>T | take 100</code></td></tr>
+    <tr><td><code>SELECT *, a*2 AS c</code></td><td><code>T | extend c = a * 2</code></td></tr>
+    <tr><td><code>WHERE ts &gt; GETDATE()-1</code></td><td><code>| where ts &gt; ago(1d)</code></td></tr>
+    <tr><td><code>WHERE name LIKE 'Azure%'</code></td><td><code>| where name startswith "Azure"</code></td></tr>
+    <tr><td><code>WHERE x IS NOT NULL</code></td><td><code>| where isnotnull(x)</code> (strings: <code>isnotempty</code>)</td></tr>
+    </table></div>
+  </section>
+  <section data-tab="Group &amp; sort">
+    <div class="tw"><table><tr><th>SQL</th><th>KQL</th></tr>
+    <tr><td><code>SELECT a, AVG(d) … GROUP BY a</code></td><td><code>T | summarize avg(d) by a</code></td></tr>
+    <tr><td><code>COUNT(DISTINCT x)</code></td><td><code>dcount(x)</code> (approx.)</td></tr>
+    <tr><td><code>HAVING COUNT(*) &gt; 3</code></td><td><code>| summarize c = count() by a | where c &gt; 3</code></td></tr>
+    <tr><td><code>ORDER BY ts ASC</code></td><td><code>| sort by ts asc</code> (default desc!)</td></tr>
+    <tr><td><code>TOP 10 … ORDER BY c DESC</code></td><td><code>| top 10 by c</code></td></tr>
+    <tr><td><code>SELECT DISTINCT a, b</code></td><td><code>| distinct a, b</code></td></tr>
+    </table></div>
+  </section>
+  <section data-tab="Join &amp; more">
+    <div class="tw"><table><tr><th>SQL</th><th>KQL</th></tr>
+    <tr><td><code>LEFT OUTER JOIN B ON a.k = b.k</code></td><td><code>| join kind=leftouter (B) on k</code></td></tr>
+    <tr><td><code>UNION ALL</code></td><td><code>union A, B</code></td></tr>
+    <tr><td><code>CASE WHEN … END</code></td><td><code>case()</code> / <code>iff()</code></td></tr>
+    <tr><td>CTE / subquery</td><td><code>let</code>; <code>toscalar()</code> for one value</td></tr>
+    </table></div>
+  </section>
+  <section data-tab="explain">
+    <p>KQL databases accept a read-only subset of T-SQL. Prefix a query with <code>--</code> and <code>explain</code> to see its KQL translation:</p>
+<pre><code>--
+explain
+SELECT COUNT_BIG(*) AS C FROM StormEvents
+// → StormEvents | summarize C=count() | project C</code></pre>
+  </section>
+</div>
+<div class="match" data-task="Match each KQL operator to what it does.">
+<dl>
+<dt><code>extend</code></dt><dd>Adds calculated columns, keeps existing ones</dd>
+<dt><code>project</code></dt><dd>Keeps only the listed columns</dd>
+<dt><code>summarize</code></dt><dd>Groups rows and aggregates</dd>
+<dt><code>arg_max()</code></dt><dd>Whole row with the highest value per group</dd>
+<dt><code>mv-expand</code></dt><dd>One row per element of a dynamic array</dd>
+<dt><code>take</code></dt><dd>Any N rows, no ordering</dd>
+</dl>
+</div>
+<div class="check" data-answer="1"><p>An analyst who knows only SQL wants the KQL equivalent of a <code>SELECT … GROUP BY</code> query. Quickest way?</p><ul><li>Run the SQL in the queryset prefixed with <code>--</code> and <code>explain</code></li><li>Run it in the warehouse SQL editor as a cross-database query</li><li>Use the visual query editor of the KQL database</li><li>Convert it in DAX query view</li></ul><p class="why"><code>explain</code> returns the translation. KQL databases have no visual query editor.</p></div>
+</section>
+
+<!-- ===================== Lesson 6 ===================== -->
+<section class="lesson">
+<h2>Explore, visualize, act</h2>
+<p class="idea">Pick the consumer by freshness: dashboards for seconds, Power BI for governed KPIs, Activator for actions.</p>
+<div class="icards">
+  <div class="icard" data-title="KQL queryset" data-info="Saved KQL (and T-SQL) queries in tabs against KQL databases, Azure Data Explorer or Azure Monitor. Run with Shift+Enter, chart results, export CSV, pin to a dashboard, build a Power BI report, set an alert. Every KQL database also has an embedded queryset."><div class="i">📝</div><h4>KQL queryset</h4><p>Explore &amp; share queries</p></div>
+  <div class="icard" data-title="Real-Time dashboard" data-info="KQL tiles, parameters, base queries, cross-filtering, drill-through, conditional formatting, auto refresh (editor sets a minimum; viewers choose above it), JSON export/import."><div class="i">📈</div><h4>RT dashboard</h4><p>Seconds-fresh tiles</p></div>
+  <div class="icard" data-title="Power BI" data-info="DirectQuery to the KQL database (each visual hits the eventhouse), Import (as of last refresh) or Direct Lake via OneLake availability (minutes to hours, no eventhouse compute)."><div class="i">📊</div><h4>Power BI</h4><p>DQ, Import or Direct Lake</p></div>
+  <div class="icard" data-title="Copilot" data-info="Turns natural language into KQL in the queryset and helps build dashboard tiles. Needs a paid Fabric capacity with Copilot enabled. Always check the time filter and the join kind."><div class="i">✨</div><h4>Copilot</h4><p>English → KQL</p></div>
+  <div class="icard" data-title="Activator" data-info="Rules on eventstreams, dashboard tiles or Power BI visuals. Conditions like 'above 8 for 5 minutes'; actions: email, Teams, run a Fabric item, Power Automate."><div class="i">🔔</div><h4>Activator</h4><p>Condition → action</p></div>
+</div>
+<div class="tw"><table class="matrix">
+<tr><th>Option</th><th>Seconds fresh</th><th>No eventhouse compute per query</th><th>Full Power BI features</th></tr>
+<tr><td>Real-Time dashboard</td><td>✓</td><td>✗</td><td>✗</td></tr>
+<tr><td>Power BI DirectQuery</td><td>✓</td><td>✗</td><td>✓</td></tr>
+<tr><td>Power BI Import</td><td>✗ last refresh</td><td>✓</td><td>✓</td></tr>
+<tr><td>Direct Lake (OneLake availability)</td><td>~ minutes–hours</td><td>✓</td><td>✓</td></tr>
+</table></div>
+<div class="check" data-answer="2"><p>Data engineers must read KQL tables from a lakehouse notebook and a Direct Lake model, with no copy process. What do you do?</p><ul><li>Export the tables to Parquet nightly with a pipeline</li><li>Turn on OneLake availability and create shortcuts in the lakehouse</li><li>Mirror the KQL database into a warehouse</li><li>Create a materialized view per table</li></ul><p class="why">OneLake availability publishes Delta; shortcuts make it visible to Spark, SQL endpoint and Direct Lake.</p></div>
 <div class="reveal">
-<p><strong>Scenario.</strong> A logistics company streams refrigerated-truck telemetry from Azure IoT Hub (50,000 events/s, 30% are heartbeat messages). Requirements: (1) operations staff see per-truck temperatures with &lt; 30 s latency; (2) a Teams message goes to the dispatcher when a truck stays above 8 °C for 5 minutes; (3) data scientists analyze 2 years of history in Spark; (4) only 13 months must be queried fast, older data rarely; (5) finance builds a monthly Power BI report in a Direct Lake model. Design the solution.</p>
-<div class="answer">
-<ul>
-<li><strong>Eventstream</strong> with IoT Hub source; a <em>Filter</em> operation drops heartbeats before storage (cheapest place). Destination: <strong>eventhouse</strong> (KQL database table <code>Telemetry</code>). Optionally an update policy parses raw JSON into a typed table.</li>
-<li>(1) <strong>Real-Time dashboard</strong> with tiles such as <code>Telemetry | where Timestamp &gt; ago(15m) | summarize arg_max(Timestamp, *) by TruckId</code>, auto refresh every 30 s; a materialized view <code>arg_max(Timestamp,*) by TruckId</code> makes "latest per truck" cheap.</li>
-<li>(2) <strong>Activator</strong> rule on the eventstream (or on the dashboard tile) with a condition "Temperature &gt; 8 for 5 minutes" → Teams message action.</li>
-<li>(3) + (5) Turn on <strong>OneLake availability</strong>; create a <strong>shortcut</strong> in a lakehouse for Spark; build a <strong>Direct Lake</strong> model (or aggregate monthly in a gold Delta table first). Retention applies to the OneLake copy too, so set retention to at least 2 years.</li>
-<li>(4) <strong>Retention policy</strong> 730 days (2 years) and <strong>caching policy</strong> hot = 395 days (≈13 months); cache ≤ retention.</li>
+<p><b>Scenario.</b> Truck telemetry from IoT Hub (30% heartbeats). Ops needs per-truck temperatures within 30 s; dispatch gets a Teams message when a truck stays above 8 °C for 5 min; Spark needs 2 years of history; only 13 months must be fast; finance wants a Direct Lake report. Design it.</p>
+<div class="answer"><ul>
+<li><b>Eventstream</b> with a Filter that drops heartbeats → <b>eventhouse</b> table (update policy to parse JSON if needed).</li>
+<li>Real-Time dashboard, 30 s auto refresh, over a materialized view <code>arg_max(Timestamp, *) by TruckId</code>.</li>
+<li><b>Activator</b> rule "Temperature &gt; 8 for 5 minutes" → Teams.</li>
+<li><b>Retention 730 d</b>, <b>caching 395 d</b> (≈ 13 months).</li>
+<li><b>OneLake availability</b> + lakehouse shortcut for Spark and Direct Lake (retention applies to the copy too).</li>
+</ul></div>
+</div>
+</section>
+
+<section class="lesson">
+<h2>Exam traps</h2>
+<ul class="traps">
+  <li>Default join is <b>innerunique</b>, not inner: left rows with duplicate keys vanish.</li>
+  <li><code>sort by</code> and <code>top</code> are <b>descending</b> by default; <code>take</code> is unordered.</li>
+  <li><code>has</code> ≠ <code>contains</code>: has matches whole terms only, and it's faster.</li>
+  <li><code>summarize … by bin()</code> skips empty buckets; use <code>make-series</code> for zeros.</li>
+  <li>Caching can't exceed retention. Retention also applies to the OneLake availability copy.</li>
+  <li>Creating an eventhouse creates a KQL database with the same name.</li>
+  <li>Filter unwanted events in the <b>eventstream</b>, before they are stored.</li>
+  <li><code>render</code> is always last; <code>let</code> statements end with <code>;</code>.</li>
 </ul>
-</div>
-</div>
+</section>
 
-<div class="check" data-answer="3">
-<p>You need queries over the last 30 days to be fast, while keeping one year of data queryable at lower cost. Which configuration should you apply to the table?</p>
-<ul><li>Retention 30 days, caching 365 days</li><li>Retention 30 days, caching 30 days, plus OneLake availability</li><li>Retention 365 days, caching 30 days</li><li>Retention 365 days, caching 365 days</li></ul>
-<p class="why">Retention controls how long data is kept (365 d); the caching policy keeps the most recent 30 d in hot cache. Caching cannot exceed retention, and caching everything costs more than required.</p>
+<section class="lesson">
+<h2>Cheat sheet</h2>
+<div class="cheat">
+  <div><h4>🛰️ Items</h4><ul><li>Real-Time hub: discover streams</li><li>Eventstream: capture, filter, route</li><li>Eventhouse ⊃ KQL databases</li><li>Queryset, RT dashboard, Activator</li></ul></div>
+  <div><h4>🧩 Store</h4><ul><li>Update policy: transform at ingest</li><li>Materialized view: latest / rollup</li><li>Retention 3,650 d default; cache ≤ retention</li><li>OneLake availability → Delta</li></ul></div>
+  <div><h4>🔎 Pipe</h4><ul><li><code>where</code> → <code>extend/project</code> → <code>summarize … by bin()</code> → <code>top</code> → <code>render</code></li><li><code>==</code> compare, <code>=~</code> case-insensitive</li><li><code>arg_max(ts, *)</code> = latest row</li></ul></div>
+  <div><h4>⚠️ Defaults</h4><ul><li>join = innerunique</li><li>sort/top = desc</li><li>dcount = approximate</li><li>between = inclusive</li><li>SQL → KQL: <code>explain</code></li></ul></div>
 </div>
+</section>
 
-<div class="check" data-answer="2">
-<p>You must always return the most recent reading per device from a table that receives millions of rows per hour, with minimal query cost for a Real-Time dashboard that refreshes every 10 seconds. What should you create?</p>
-<ul><li>An update policy that deletes old rows per device</li><li>A materialized view with <code>summarize arg_max(Timestamp, *) by DeviceId</code></li><li>A stored function with <code>top 1 by Timestamp</code></li><li>A caching policy of 1 hour</li></ul>
-<p class="why">A materialized view keeps the aggregation pre-computed and only processes the new delta at query time. A function recomputes on every refresh; <code>top 1</code> returns one row overall, not per device; caching does not aggregate.</p>
-</div>
-
-<div class="check" data-answer="1">
-<p>An analyst who knows only SQL wants to learn the KQL equivalent of a T-SQL <code>SELECT ... GROUP BY</code> query against a KQL database. What is the quickest way?</p>
-<ul><li>Run the SQL in the queryset prefixed with <code>--</code> and <code>explain</code></li><li>Run the SQL through the warehouse SQL query editor with a cross-database query</li><li>Use the visual query editor of the KQL database</li><li>Convert it with the DAX query view</li></ul>
-<p class="why"><code>explain</code> returns the KQL translation of a supported T-SQL query. KQL databases have no visual query editor, and DAX query view targets semantic models.</p>
-</div>
-
-<div class="check" data-answer="4">
-<p>Which statement about <code>Telemetry | summarize count() by bin(Timestamp, 5m)</code> is TRUE?</p>
-<ul><li>It returns a row for every 5-minute interval, including intervals without data (count 0)</li><li>It returns arrays of counts, one per device</li><li>It fails because <code>bin()</code> works only with numbers</li><li>It returns one row per 5-minute interval that contains at least one row</li></ul>
-<p class="why"><code>summarize ... by bin()</code> only produces groups that exist. Use <code>make-series ... default=0</code> to fill gaps with zeros and get arrays.</p>
-</div>
-
-<h2>Key takeaways &amp; exam tips</h2>
-<ul>
-<li><strong>Chain:</strong> sources → <strong>eventstream</strong> (filter/route) → <strong>eventhouse / KQL database</strong> → <strong>KQL queryset</strong>, <strong>Real-Time dashboard</strong>, Power BI → <strong>Activator</strong> for actions. Discover streams in the <strong>Real-Time hub</strong>.</li>
-<li>Creating an eventhouse creates a KQL database with the same name. Eventhouse = container + shared compute; database = schema + policies.</li>
-<li>Filter unwanted events in the <strong>eventstream</strong> before storing. Parse raw data at ingest with an <strong>update policy</strong>; keep "latest per key" or rollups with a <strong>materialized view</strong>.</li>
-<li><strong>Retention</strong> = how long data is kept (default 3,650 days); <strong>caching</strong> = how much is hot (default 3,650 days, must be ≤ retention).</li>
-<li><strong>OneLake availability</strong> exposes KQL tables as Delta → shortcuts, Spark, SQL endpoint, Direct Lake; retention applies to the copy; no rename/column-type change while it is on.</li>
-<li>KQL reads top to bottom: <code>T | where | extend/project | summarize ... by bin() | top/sort | render</code>. Names are case-sensitive; <code>==</code> compares, <code>=</code> assigns.</li>
-<li><code>has</code> (term index, ≥ 3-char terms) is faster than <code>contains</code> (substring scan). <code>between</code> is inclusive with <code>..</code>. <code>ago(1h)</code> = now minus one hour.</li>
-<li><code>dcount</code> is approximate; <code>arg_max(Timestamp, *)</code> returns the latest row per group; <code>percentiles()</code> returns several percentiles.</li>
-<li><code>sort by</code> and <code>top</code> default to <strong>descending</strong>; <code>take</code> is unordered.</li>
-<li>Default join kind is <strong><code>innerunique</code></strong> (left side deduplicated) — use <code>kind=inner</code> for SQL semantics; smaller table on the left.</li>
-<li><code>let</code> statements end with <code>;</code>. <code>render</code> is always last. <code>make-series</code> + <code>series_*</code> functions for gap-filled time series, anomalies and forecasts.</li>
-<li>T-SQL → KQL: prefix with <code>--</code> and <code>explain</code>. Copilot in the queryset writes KQL from natural language — still check the time filter and join kind.</li>
-</ul>
-<p>Next: <a href="09-query-analyze.html">Query &amp; analyze: SQL, visual queries, DAX queries</a>. Related: <a href="04-get-data.html">Get data</a>, <a href="11-direct-lake.html">Direct Lake in depth</a>.</p>
 </main>
 <script src="assets/app.js"></script>
 </body>

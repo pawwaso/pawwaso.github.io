@@ -5,476 +5,444 @@
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>Get data: ingestion, shortcuts, mirroring, real-time – DP-600</title>
 <link rel="stylesheet" href="assets/style.css">
+<style>
+/* page-specific: shortcut simulator */
+.p04-sc { display: grid; grid-template-columns: 1fr 70px 1fr; gap: 8px; align-items: stretch; margin: 10px 0; }
+.p04-box { border: 1px solid var(--line); border-radius: 10px; padding: 8px 10px; background: var(--bg); font-size: .9em; }
+.p04-box h5 { margin: 0 0 6px; font-size: 1em; }
+.p04-f { border: 1px solid var(--line); border-radius: 6px; padding: 2px 8px; margin: 3px 0; background: var(--soft); }
+.p04-f.lnk { border-left: 4px solid var(--c1); }
+.p04-f.gone { text-decoration: line-through; color: var(--muted); background: transparent; border-style: dashed; }
+.p04-f.brk { border-left-color: var(--bad); background: var(--bad-soft); }
+.p04-arrow { display: flex; align-items: center; justify-content: center; font-size: 1.8em; color: var(--muted); }
+.p04-arrow.brk { color: var(--bad); }
+.p04-ctl { display: flex; flex-wrap: wrap; gap: 6px 14px; align-items: center; margin: 6px 0; }
+.p04-gw { display: flex; gap: 10px; flex-wrap: wrap; align-items: center; margin-top: 8px; }
+.p04-gw span.n { padding: 6px 12px; border-radius: 10px; border: 2px solid var(--line); background: var(--bg); font-weight: 600; }
+.p04-gw span.on { border-color: var(--dom); background: color-mix(in srgb, var(--dom) 12%, var(--bg)); }
+@media (max-width: 700px) { .p04-sc { grid-template-columns: 1fr; } .p04-arrow { transform: rotate(90deg); } }
+</style>
 </head>
-<body>
+<body data-domain="2">
 <main>
-<h1>Get data: ingestion, shortcuts, mirroring, real-time</h1>
-<p class="lead">How data gets into (or becomes visible in) Fabric: choosing between pipelines, Copy job, Dataflow Gen2, notebooks, eventstreams, mirroring and OneLake shortcuts; connections and gateways; discovering data in the OneLake catalog and Real-Time hub; and choosing a lakehouse, warehouse or eventhouse as destination. Maps to the exam domain <em>Prepare data → Get data</em> (part of the 45–50% "Prepare data" domain).</p>
+<header class="hero">
+  <div class="hi">📥</div>
+  <div>
+    <h1>Get data: ingestion, shortcuts, mirroring, real-time</h1>
+    <p class="lead">Choose how data gets into Fabric, or whether it needs to move at all.</p>
+    <div class="meta"><span class="pill">Domain 2 · Prepare data</span><span class="pill">⏱ 35 min</span><span class="pill">7 lessons</span></div>
+    <ul class="goals">
+      <li>Pick the right ingestion tool for a scenario</li>
+      <li>Predict shortcut behavior: security, deletes, discovery</li>
+      <li>Explain mirroring types and costs</li>
+      <li>Choose a gateway and a destination</li>
+    </ul>
+  </div>
+</header>
 
-<div class="note">
-<p><strong>Decision mindset for the exam:</strong> first ask <em>"must the data move at all?"</em> (shortcut or mirroring may be enough), then <em>"batch or streaming?"</em>, then <em>"code or no code?"</em>, <em>"how much transformation?"</em>, <em>"full or incremental?"</em> and <em>"does it need orchestration with other steps?"</em>.</p>
+<div class="tldr"><ul>
+  <li>First ask <b>"must the data move?"</b> Shortcut (files/Delta) or mirroring (databases) may be enough.</li>
+  <li><b>Copy job</b> = simple full/incremental/CDC copy. <b>Pipeline</b> = orchestration + bulk Copy. <b>Dataflow Gen2</b> = Power Query. <b>Notebook</b> = code.</li>
+  <li><b>Eventstream</b> = streaming ingestion and routing; <b>Activator</b> = alerts.</li>
+  <li>Deleting a <b>shortcut</b> never deletes the target; deleting files <i>inside</i> it does.</li>
+  <li><b>On-prem gateway</b> for your datacenter; <b>VNet gateway</b> for Azure private networks, nothing to install.</li>
+</ul></div>
+
+<!-- ============ L1 ============ -->
+<section class="lesson">
+<h2>Pick the tool: does the data need to move?</h2>
+<p class="idea">Four questions pick the tool: move or not, batch or streaming, code or no code, transform or just copy.</p>
+<div class="icards" data-hint="Click a tool to see when it wins.">
+  <div class="icard" data-info="Pointer to data elsewhere (OneLake, ADLS Gen2, S3, GCS, Dataverse…). No copy, no schedule, always current. No transformation; depends on source availability; cross-cloud egress (use caching)."><div class="i">🔗</div><h4>Shortcut</h4><p>Read in place, zero copies</p></div>
+  <div class="icard" data-info="Continuous near real-time replication of an operational database into Delta + read-only SQL analytics endpoint. Replication compute free. Replicate, don't transform."><div class="i">🪞</div><h4>Mirroring</h4><p>Database replica, no pipeline</p></div>
+  <div class="icard" data-info="Wizard item: full, incremental (watermark) or CDC copy; append, merge, overwrite, SCD Type 2; schedules; resumes after failure. Movement, not transformation."><div class="i">📋</div><h4>Copy job</h4><p>Simplest full / incremental copy</p></div>
+  <div class="icard" data-info="Copy activity inside an orchestrated pipeline: highest throughput for bulk files/tables, 100+ connectors (SFTP, REST, gzip), staging, fault tolerance, metadata-driven loops. Only column mapping."><div class="i">🔀</div><h4>Pipeline Copy</h4><p>Bulk + orchestration</p></div>
+  <div class="icard" data-info="Power Query Online with data destinations. Hundreds of transformations, analyst friendly, incremental refresh, fast copy. Slower for huge volumes unless fast copy/staging is used."><div class="i">🌊</div><h4>Dataflow Gen2</h4><p>Low-code transformations</p></div>
+  <div class="icard" data-info="Spark (PySpark, Scala, SQL, R) or Python. REST APIs with OAuth and pagination, complex parsing, data quality, ML, huge volumes. You build logging and error handling."><div class="i">📓</div><h4>Notebook</h4><p>Full code control</p></div>
+  <div class="icard" data-info="No-code streaming from Event Hubs, IoT Hub, Kafka, CDC. Filter/aggregate in flight; route to eventhouse, lakehouse, Activator. F4+ recommended."><div class="i">⚡</div><h4>Eventstream</h4><p>Streaming events</p></div>
+  <div class="icard" data-info="COPY INTO, INSERT…SELECT, OPENROWSET: fast bulk load of CSV/Parquet/JSONL from ADLS Gen2, Blob, OneLake. Warehouse only."><div class="i">🏢</div><h4>T-SQL load</h4><p>Warehouse COPY INTO</p></div>
 </div>
-
-<h2>Choosing an ingestion tool</h2>
-<div class="diagram">
-<svg viewBox="0 0 780 300" width="780" role="img" aria-label="Decision tree for choosing an ingestion method">
-  <g fill="none" stroke="currentColor" stroke-width="1.4">
-    <rect x="280" y="8" width="220" height="40" rx="8"/>
-    <rect x="20" y="90" width="200" height="44" rx="8"/>
-    <rect x="290" y="90" width="200" height="44" rx="8"/>
-    <rect x="560" y="90" width="200" height="44" rx="8"/>
-    <rect x="20" y="190" width="200" height="56" rx="8"/>
-    <rect x="250" y="190" width="130" height="56" rx="8"/>
-    <rect x="395" y="190" width="130" height="56" rx="8"/>
-    <rect x="540" y="190" width="105" height="56" rx="8"/>
-    <rect x="660" y="190" width="105" height="56" rx="8"/>
-    <path d="M390 48 L120 90"/><path d="M390 48 L390 90"/><path d="M390 48 L660 90"/>
-    <path d="M120 134 L120 190"/><path d="M390 134 L315 190"/><path d="M390 134 L460 190"/><path d="M660 134 L592 190"/><path d="M660 134 L712 190"/>
-  </g>
-  <g fill="currentColor" font-size="12.5" text-anchor="middle" font-family="Segoe UI, Arial, sans-serif">
-    <text x="390" y="33">Does the data need to move?</text>
-    <text x="120" y="110">No: read in place</text><text x="120" y="126" font-size="11">or replicate a database</text>
-    <text x="390" y="110">Yes: batch</text><text x="390" y="126" font-size="11">files, tables, APIs</text>
-    <text x="660" y="110">Yes: streaming</text><text x="660" y="126" font-size="11">events, telemetry, CDC</text>
-    <text x="120" y="212">Shortcut (files/Delta)</text><text x="120" y="230">Mirroring (databases)</text>
-    <text x="315" y="212">No-code</text><text x="315" y="230" font-size="11">Copy job / Copy</text><text x="315" y="243" font-size="11">activity / Dataflow</text>
-    <text x="460" y="212">Code</text><text x="460" y="230" font-size="11">Notebook (Spark,</text><text x="460" y="243" font-size="11">Python), T-SQL</text>
-    <text x="592" y="212">Eventstream</text><text x="592" y="230" font-size="11">no-code routing</text>
-    <text x="712" y="212">Spark</text><text x="712" y="230" font-size="11">structured</text><text x="712" y="243" font-size="11">streaming</text>
-  </g>
-</svg>
+<div class="decide" data-task="Which ingestion tool?">
+  <div data-node="start" data-q="Does the data need to be physically copied into Fabric?"><button data-go="nomove">No, read it where it is</button><button data-go="move">Yes</button></div>
+  <div data-node="nomove" data-q="What is the source?"><button data-go="sc">Files / Delta in storage or OneLake</button><button data-go="mir">Operational database (Azure SQL, Snowflake, Cosmos DB…)</button></div>
+  <div data-node="move" data-q="Batch or streaming?"><button data-go="batch">Batch</button><button data-go="es">Streaming events (seconds)</button></div>
+  <div data-node="batch" data-q="How much transformation, and who builds it?"><button data-go="simple">None, just move tables (full or changes)</button><button data-go="pq">Reshape with Power Query, analysts</button><button data-go="code">Complex logic / APIs, coders</button></div>
+  <div data-node="simple" data-q="Part of a multi-step flow (copy → notebook → refresh) or thousands of files?"><button data-go="pipe">Yes</button><button data-go="cj">No, standalone</button></div>
+  <div data-node="sc" data-result>🔗 <b>OneLake shortcut</b>: no copy, always current.</div>
+  <div data-node="mir" data-result>🪞 <b>Mirroring</b>: near real-time Delta replica, no pipeline.</div>
+  <div data-node="es" data-result>⚡ <b>Eventstream</b> → eventhouse / lakehouse, plus Activator for alerts.</div>
+  <div data-node="pq" data-result>🌊 <b>Dataflow Gen2</b> with a data destination.</div>
+  <div data-node="code" data-result>📓 <b>Notebook</b> (Spark or Python).</div>
+  <div data-node="pipe" data-result>🔀 <b>Pipeline</b> with Copy activity and dependencies.</div>
+  <div data-node="cj" data-result>📋 <b>Copy job</b> (incremental or CDC).</div>
 </div>
-
-<div class="tw"><table>
-<thead><tr><th>Option</th><th>What it is</th><th>Strengths</th><th>Watch out</th></tr></thead>
-<tbody>
-<tr><td><strong>OneLake shortcut</strong></td><td>Pointer from a lakehouse/KQL database to data elsewhere (OneLake, ADLS Gen2, S3, GCS, Dataverse…)</td><td>No copy, no schedule, always current, zero duplication</td><td>Depends on source availability/performance; cross-cloud egress (use caching); no transformation</td></tr>
-<tr><td><strong>Mirroring</strong></td><td>Continuous, near real-time replication of an operational database into OneLake Delta tables</td><td>No pipeline, replication compute free, free storage allowance, read-only SQL analytics endpoint</td><td>Supported sources only; replicate, don't transform</td></tr>
-<tr><td><strong>Copy job</strong></td><td>Standalone, wizard-based data movement item</td><td>Full, <strong>incremental (watermark)</strong> or <strong>CDC</strong> copy without building a pipeline; append/merge/overwrite/SCD2; schedules</td><td>Movement, not transformation</td></tr>
-<tr><td><strong>Pipeline Copy activity</strong></td><td>Copy data inside an orchestrated pipeline</td><td>Highest throughput for bulk files/tables, 100+ connectors, staging, fault tolerance, parameterized/metadata-driven loops</td><td>No rich transformations (mapping only)</td></tr>
-<tr><td><strong>Dataflow Gen2</strong></td><td>Power Query Online (low-code ETL) with data destinations</td><td>Hundreds of transformations, familiar to Power BI users, incremental refresh, fast copy</td><td>Slower for very large volumes unless fast copy/staging is used; CU cost</td></tr>
-<tr><td><strong>Notebook</strong></td><td>Spark (PySpark, Scala, SQL, R) or Python notebook</td><td>Full code control: APIs with OAuth/pagination, complex logic, data quality, ML, huge volumes</td><td>Requires coding skills; you build logging/error handling</td></tr>
-<tr><td><strong>Eventstream</strong></td><td>No-code streaming ingestion and routing</td><td>Event Hubs, IoT Hub, Kafka, CDC sources; filter/aggregate in flight; route to eventhouse, lakehouse, Activator</td><td>Streaming only; F4 or larger recommended</td></tr>
-<tr><td>T-SQL (<code>COPY INTO</code>, <code>INSERT…SELECT</code>, <code>OPENROWSET</code>)</td><td>Load a warehouse from files or other Fabric SQL items</td><td>Fast bulk loading of CSV/Parquet/JSONL from ADLS Gen2, Blob, OneLake</td><td>Warehouse only</td></tr>
-</tbody>
+<div class="tw"><table class="matrix">
+<tr><th></th><th>Copy job</th><th>Pipeline Copy</th><th>Dataflow Gen2</th><th>Notebook</th><th>Eventstream</th></tr>
+<tr><td>No-code</td><td>✓ wizard</td><td>✓ designer</td><td>✓ Power Query</td><td>✗ code</td><td>✓ (+ SQL operator)</td></tr>
+<tr><td>Transformations</td><td>✗ move only</td><td>~ mapping only</td><td>✓ rich</td><td>✓ anything</td><td>~ filter, aggregate, join</td></tr>
+<tr><td>Incremental</td><td>✓ watermark / CDC</td><td>~ you build watermark</td><td>✓ incremental refresh</td><td>~ you code it</td><td>✓ continuous</td></tr>
+<tr><td>Latency</td><td>~ scheduled</td><td>~ scheduled</td><td>~ scheduled</td><td>~ batch or streaming</td><td>✓ seconds</td></tr>
+<tr><td>Orchestrates other steps</td><td>✗</td><td>✓</td><td>✗</td><td>~ notebookutils</td><td>✗</td></tr>
 </table></div>
-
-<h3>Decision guidance</h3>
-<div class="tw"><table>
-<thead><tr><th>Requirement</th><th>Best fit</th></tr></thead>
-<tbody>
-<tr><td>Data already in ADLS Gen2/S3/another workspace; avoid duplication and schedules</td><td>Shortcut</td></tr>
-<tr><td>Operational Azure SQL DB / Cosmos DB / Snowflake / SQL Server available near real-time, no ETL to maintain</td><td>Mirroring</td></tr>
-<tr><td>Simple "move these 50 tables, then only changes" without building a pipeline</td><td>Copy job (incremental or CDC)</td></tr>
-<tr><td>Thousands of (gzip) files, highest throughput, least code</td><td>Pipeline Copy activity</td></tr>
-<tr><td>Ingest + several dependent steps (copy → notebooks → refresh model), retry, alerts on failure</td><td>Pipeline (orchestration)</td></tr>
-<tr><td>Business analysts, Power Query skills, merges/unpivots from Excel/SharePoint, moderate volume</td><td>Dataflow Gen2</td></tr>
-<tr><td>Python team, REST API with OAuth refresh, custom pagination, row-level validation</td><td>Notebook</td></tr>
-<tr><td>Telemetry from Event Hubs / IoT Hub, seconds of latency</td><td>Eventstream → eventhouse</td></tr>
-<tr><td>Need an independent copy that survives the source being deleted, or must decouple from a fragile source</td><td>Copy (not a shortcut)</td></tr>
-<tr><td>Dynamics 365 / Dataverse tables in Fabric without export pipelines</td><td>Dataverse <em>Link to Microsoft Fabric</em> (Dataverse shortcuts)</td></tr>
-<tr><td>SFTP file drops</td><td>Pipeline Copy activity (SFTP connector) into lakehouse Files</td></tr>
-</tbody>
-</table></div>
-
-<div class="sort" data-task="Which ingestion option fits each requirement best?">
-<ul data-bucket="Shortcut">
-<li>40 TB of Parquet in Amazon S3 must be queryable without copying</li>
-<li>Reuse certified gold tables from another workspace's lakehouse</li>
-</ul>
-<ul data-bucket="Mirroring">
-<li>Azure SQL Database replicated near real-time with no pipeline</li>
-<li>Snowflake tables continuously available as Delta in OneLake</li>
-</ul>
-<ul data-bucket="Dataflow Gen2 or Copy job">
-<li>Analysts merge and unpivot SharePoint lists with Power Query</li>
-<li>Wizard-based incremental copy of 60 tables with no pipeline</li>
-</ul>
-<ul data-bucket="Notebook or Eventstream">
-<li>Python team calls a paginated OAuth REST API with custom validation</li>
-<li>Device telemetry from Azure Event Hubs routed to an eventhouse</li>
-</ul>
+<div class="sort" data-task="Which option fits each requirement best?">
+<ul data-bucket="Shortcut"><li>40 TB of Parquet in Amazon S3, no copy</li><li>Reuse certified tables from another workspace</li></ul>
+<ul data-bucket="Mirroring"><li>Azure SQL DB near real-time, no pipeline</li><li>Snowflake tables continuously as Delta</li></ul>
+<ul data-bucket="Copy job"><li>Incremental copy of 60 tables, no pipeline</li></ul>
+<ul data-bucket="Dataflow Gen2"><li>Analysts unpivot SharePoint lists</li></ul>
+<ul data-bucket="Notebook"><li>Paginated OAuth REST API with validation</li></ul>
+<ul data-bucket="Eventstream"><li>Event Hubs telemetry to an eventhouse</li></ul>
 </div>
+<details><summary>Deep dive: more scenario → tool pairs</summary>
+<ul><li>Need an independent copy that survives source deletion → copy, not a shortcut.</li>
+<li>Dynamics 365 / Dataverse → Link to Microsoft Fabric (Dataverse shortcuts).</li>
+<li>SFTP file drops → pipeline Copy activity into lakehouse Files.</li>
+<li>Ingest + dependent steps, retries, failure alerts → pipeline.</li></ul></details>
+</section>
 
-<h2>Connections and gateways</h2>
-<p>Fabric items connect to sources through <strong>connections</strong> (managed in <em>Settings → Manage connections and gateways</em>). A connection stores the endpoint, authentication method (OAuth/organizational account, service principal, workspace identity, key, SAS, basic…) and privacy level. Connection roles: <strong>Owner</strong>, <strong>User</strong> (can use it in items), <strong>User with resharing</strong>. To bind a shortcut or item to a connection you need permission on the connection.</p>
-
-<div class="tw"><table>
-<thead><tr><th></th><th>On-premises data gateway (standard mode)</th><th>Virtual network (VNet) data gateway</th></tr></thead>
-<tbody>
-<tr><td>Where it runs</td><td>Software you install on a Windows machine inside your network (or an Azure VM)</td><td><strong>Microsoft-managed</strong>, injected into a <strong>delegated subnet</strong> of your Azure VNet – nothing to install or patch</td></tr>
-<tr><td>Use for</td><td>Sources in your datacenter or any network-isolated location (SQL Server on-prem, file shares, SAP…)</td><td>Azure sources behind <strong>private endpoints</strong> / VNets (Azure SQL MI, Storage with firewall, Synapse…)</td></tr>
-<tr><td>High availability</td><td><strong>Gateway clusters</strong> (multiple members) for failover and load balancing</td><td>Managed; scale by number of gateway nodes</td></tr>
-<tr><td>Fabric items</td><td>Dataflow Gen2, pipelines (Copy etc.), Copy job, mirroring (on-prem sources), shortcuts (S3-compatible/on-prem), semantic models, paginated reports</td><td>Dataflow Gen2, pipelines, Copy job, mirroring, semantic models, paginated reports</td></tr>
-<tr><td>Licensing</td><td>Any</td><td>Fabric F / Premium P / A4+ capacity (F8+ recommended)</td></tr>
-</tbody>
-</table></div>
-<ul>
-<li>The <em>personal mode</em> gateway is for Power BI semantic models of one user only – not for Fabric items.</li>
-<li>Keep the gateway updated: features such as Dataflow Gen2 fast copy and incremental refresh to a lakehouse require recent gateway versions.</li>
-<li><strong>Trusted workspace access</strong>: for ADLS Gen2 accounts with public access disabled, use a <strong>workspace identity</strong> plus a <strong>resource instance rule</strong> on the storage firewall (F SKU capacity) – shortcuts, pipelines and COPY INTO can then reach the account without opening it to the internet.</li>
-</ul>
-
-<div class="check" data-answer="2">
-<p>A pipeline must copy from an Azure SQL Managed Instance reachable only inside an Azure virtual network. Your team must not install or maintain gateway software on any machine. What should you use?</p>
-<ul>
-<li>An on-premises data gateway installed on an Azure VM in the VNet</li>
-<li>A virtual network data gateway in a delegated subnet</li>
-<li>A personal mode gateway</li>
-<li>A OneLake shortcut to the managed instance</li>
-</ul>
-<p class="why">The VNet data gateway is Microsoft-managed and injected into your subnet, so nothing is installed; it supports pipelines, Copy job, Dataflow Gen2, mirroring and semantic models. An on-premises gateway on a VM would work but requires installation and maintenance; shortcuts don't point to SQL databases.</p>
-</div>
-
+<!-- ============ L2 ============ -->
+<section class="lesson">
 <h2>OneLake shortcuts</h2>
-<p>A <strong>shortcut</strong> is an object in OneLake that points to a <em>target path</em> somewhere else. It looks like a folder; every engine (Spark, SQL analytics endpoint, Direct Lake, KQL, external tools using the OneLake ADLS API) reads through it as if the data were local. Nothing is copied.</p>
-
-<h3>Where you can create them</h3>
-<ul>
-<li><strong>Lakehouse</strong> – in <strong>Tables</strong> only at the <strong>top level</strong> (or as a <em>schema shortcut</em> in a schema-enabled lakehouse). If the target is a Delta table, it's <strong>auto-discovered as a table</strong> and queryable from the SQL analytics endpoint and Direct Lake. Names with spaces aren't recognized as Delta tables.</li>
-<li>Lakehouse <strong>Files</strong> – at <strong>any folder level</strong>, any format, no table discovery (read with Spark; use shortcut transformations or a load to create Delta tables).</li>
-<li><strong>KQL database / eventhouse</strong> – appears under <em>Shortcuts</em>, queried as an external table: <code>external_table('MyShortcut')</code>.</li>
-<li><strong>Not</strong> in a warehouse – a warehouse queries lakehouse shortcuts through cross-database queries (three-part names) instead.</li>
-</ul>
-
-<h3>Target types</h3>
-<div class="tw"><table>
-<thead><tr><th>Internal (OneLake)</th><th>External</th></tr></thead>
-<tbody>
-<tr><td>Lakehouses, warehouses, KQL databases, mirrored databases, mirrored Azure Databricks catalogs, SQL databases, semantic models (OneLake integration exports) – same item, same workspace or other workspaces; item types don't have to match</td><td>ADLS Gen2, Azure Blob Storage, Amazon S3, S3-compatible storage, Google Cloud Storage, Dataverse, OneDrive/SharePoint, Iceberg tables; on-premises/network-restricted locations via the on-premises data gateway</td></tr>
-</tbody>
-</table></div>
-
-<h3>Security model</h3>
-<ul>
-<li>Creating a shortcut requires <strong>write</strong> permission on the item where it's created (Contributor or higher) and access to the target.</li>
-<li><strong>Internal shortcuts – identity passthrough</strong>: OneLake authorizes the <em>calling user</em> against the <strong>target</strong>; the reader needs Read permission on the target data. (Exception: Direct Lake on SQL endpoint and T-SQL in <em>delegated identity mode</em> pass the item owner's identity; Direct Lake on OneLake and T-SQL <em>user identity mode</em> pass the user.)</li>
-<li><strong>External shortcuts – delegated</strong>: access uses the <strong>cloud connection credentials</strong> (account key, SAS, service principal, organizational account, workspace identity) bound when the shortcut was created. Anyone who can read the shortcut path reads with those credentials – secure the shortcut path with OneLake security roles/workspace roles.</li>
-</ul>
-
-<h3>Caching, deletion and limits</h3>
-<ul>
-<li><strong>Shortcut caching</strong> (workspace settings → OneLake): caches files read through <strong>S3, S3-compatible, GCS and on-premises gateway</strong> shortcuts to cut cross-cloud <strong>egress</strong> cost. Retention <strong>1–28 days</strong>, reset on every access; files <strong>&gt; 1 GB aren't cached</strong>; newer source versions are fetched automatically; <em>Reset cache</em> clears it.</li>
-<li><strong>Deleting a shortcut</strong> deletes only the pointer – the target data is untouched (no cascading delete).</li>
-<li><strong>Deleting a file or folder <em>inside</em> a shortcut</strong> deletes it in the <strong>target</strong> if you have write permission there.</li>
-<li>Moving, renaming or deleting the target breaks the shortcut. Schema changes in the source sync automatically.</li>
-<li>Limits: 100,000 shortcuts per item; 100 unique external connections per item; up to 10 shortcuts in a single path; max 5 chained (shortcut-to-shortcut) hops; no <code>%</code> or <code>+</code> in names.</li>
-<li>Shortcuts are created in the UI (<em>Get data → New shortcut</em> or right-click Tables/Files) or with the OneLake shortcuts REST API; their target can come from a <strong>variable library</strong> for CI/CD.</li>
-</ul>
-
-<div class="check" data-answer="3">
-<p>Lakehouse1 has a shortcut <code>Files/Raw</code> pointing to an ADLS Gen2 container. A user with write access to the storage account deletes the folder <code>Files/Raw/2025</code> in Lakehouse1. What happens?</p>
-<ul>
-<li>Only the shortcut definition is removed; the storage account is unchanged</li>
-<li>Nothing, because shortcuts are read-only</li>
-<li>The 2025 folder is deleted from the ADLS Gen2 container</li>
-<li>The folder is moved to the lakehouse recycle bin and kept for 7 days</li>
-</ul>
-<p class="why">Deleting the shortcut itself never touches the target, but deleting files or folders <em>through</em> the shortcut deletes them in the target when the identity has write permission there.</p>
+<p class="idea">A shortcut is a pointer that looks like a folder; every engine reads through it, nothing is copied.</p>
+<div class="sim">
+  <div class="wtitle">Shortcut simulator</div>
+  <div class="p04-ctl">
+    <label>Target <select id="p04-tg"><option value="int">Internal: LH_Gold (another workspace)</option><option value="ext">External: ADLS Gen2 (service principal connection)</option></select></label>
+    <label>Created in <select id="p04-loc"><option value="tt">Lakehouse Tables (top level)</option><option value="ts">Lakehouse Tables/sub/folder</option><option value="ff">Lakehouse Files (any folder)</option><option value="wh">Warehouse</option></select></label>
+    <label><input type="checkbox" id="p04-dl" checked> Target is a Delta table</label>
+    <label>Reader <select id="p04-rd"><option value="a">Ana: Read on target</option><option value="b">Ben: access to LH_Sales only</option></select></label>
+  </div>
+  <div class="p04-sc">
+    <div class="p04-box"><h5>🏞️ LH_Sales <span class="muted">(contains the shortcut)</span></h5><div id="p04-left"></div></div>
+    <div class="p04-arrow" id="p04-ar">➜</div>
+    <div class="p04-box"><h5 id="p04-tgt-h"></h5><div id="p04-right"></div></div>
+  </div>
+  <div class="p04-ctl">
+    <button class="primary" id="p04-q">🔍 Query it</button>
+    <button id="p04-dels">🗑️ Delete the shortcut</button>
+    <button id="p04-delf">🗑️ Delete 2025/ through the shortcut</button>
+    <button id="p04-ren">✏️ Rename the target folder</button>
+    <button id="p04-rs">↺ Reset</button>
+  </div>
+  <div class="out" id="p04-out"></div>
 </div>
-
-<div class="check" data-answer="1">
-<p>You create a shortcut in the <strong>Tables</strong> section of a lakehouse to a folder in another lakehouse that contains a valid Delta table. Which statement is true?</p>
-<ul>
-<li>It is recognized as a table and can be queried from the SQL analytics endpoint and used by Direct Lake</li>
-<li>It can be created at any subfolder depth below Tables</li>
-<li>It copies the Delta files into the current lakehouse during creation</li>
-<li>Users only need access to the lakehouse that contains the shortcut, never to the target</li>
-</ul>
-<p class="why">Tables shortcuts must be at the top level and are auto-discovered as tables when the target is Delta. Internal shortcuts pass the user identity, so readers need permission on the target. Nothing is copied.</p>
+<script>
+(function () {
+  function $(id) { return document.getElementById(id); }
+  var files, sc, broken;
+  function reset() { files = { '2024/': 1, '2025/': 1, '2026/': 1 }; sc = true; broken = false; render(); say('Pick options, then try the buttons.'); }
+  function say(h) { $('p04-out').innerHTML = h; }
+  function render() {
+    var ext = $('p04-tg').value === 'ext';
+    $('p04-tgt-h').innerHTML = ext ? '☁️ ADLS Gen2 container <span class="muted">/sales</span>' : '🏞️ LH_Gold <span class="muted">(other workspace)</span>';
+    var r = '';
+    Object.keys(files).forEach(function (k) { r += '<div class="p04-f' + (files[k] ? '' : ' gone') + '">📁 ' + (broken ? 'sales_v2/' : '') + k + '</div>'; });
+    $('p04-right').innerHTML = r;
+    $('p04-left').innerHTML = '<div class="p04-f">📄 local_table</div>' + (sc ? '<div class="p04-f lnk' + (broken ? ' brk' : '') + '">🔗 Sales_ext ' + (broken ? '<span class="badge bad">broken</span>' : '') + '</div>' : '<div class="p04-f gone">🔗 Sales_ext</div>');
+    $('p04-ar').className = 'p04-arrow' + (broken || !sc ? ' brk' : '');
+    $('p04-ar').textContent = sc ? (broken ? '⤳' : '➜') : '✕';
+  }
+  function placeOk() {
+    var l = $('p04-loc').value;
+    if (l === 'wh') { say('<span class="badge bad">Not possible</span> Warehouses can\'t hold shortcuts. Query lakehouse tables with <b>cross-database queries</b> (three-part names).'); return false; }
+    if (l === 'ts') { say('<span class="badge bad">Not possible</span> Tables shortcuts must be at the <b>top level</b> of Tables (or a schema shortcut). Use Files for deeper folders.'); return false; }
+    return true;
+  }
+  function query() {
+    if (!placeOk()) return;
+    if (!sc) { say('<span class="badge bad">Not found</span> The shortcut was deleted.'); return; }
+    if (broken) { say('<span class="badge bad">Broken</span> The target moved/renamed. Shortcuts don\'t follow the target.'); return; }
+    var l = $('p04-loc').value, dl = $('p04-dl').checked, ext = $('p04-tg').value === 'ext', ben = $('p04-rd').value === 'b';
+    var h = '';
+    if (l === 'tt') h += dl ? '<span class="badge ok">Table</span> Delta auto-discovered: SQL analytics endpoint ✓, Direct Lake ✓, Spark ✓. ' : '<span class="badge warn">Unidentified</span> Not Delta, so no table appears in Tables. ';
+    else h += '<span class="badge ok">Files</span> Any format, no table discovery; read with Spark. ';
+    if (!ext) h += ben ? '<br><span class="badge bad">Access denied</span> Internal shortcut = <b>identity passthrough</b>: Ben needs Read on LH_Gold too.' : '<br><span class="badge ok">Allowed</span> Identity passthrough: Ana\'s own permission on LH_Gold is checked.';
+    else h += '<br><span class="badge ok">Allowed</span> External shortcut = <b>delegated</b>: the connection\'s credentials are used for ' + (ben ? 'Ben' : 'Ana') + '. Secure the shortcut path with OneLake security / workspace roles.';
+    say(h);
+  }
+  $('p04-q').addEventListener('click', query);
+  $('p04-dels').addEventListener('click', function () { if (!placeOk()) return; sc = false; render(); say('<span class="badge ok">Pointer removed</span> Only the shortcut is gone. Target data is <b>untouched</b> (no cascading delete).'); });
+  $('p04-delf').addEventListener('click', function () {
+    if (!placeOk()) return;
+    if (!sc || broken) { say('Nothing to delete through: the shortcut is ' + (sc ? 'broken' : 'deleted') + '.'); return; }
+    files['2025/'] = 0; render(); say('<span class="badge bad">Deleted in target</span> Deleting files or folders <i>inside</i> a shortcut deletes them at the target when the identity has write permission there.');
+  });
+  $('p04-ren').addEventListener('click', function () { if (!placeOk()) return; broken = true; render(); say('<span class="badge bad">Shortcut broken</span> Moving, renaming or deleting the target breaks the shortcut. (Schema changes in the source do sync.)'); });
+  $('p04-rs').addEventListener('click', reset);
+  ['p04-tg', 'p04-loc', 'p04-dl', 'p04-rd'].forEach(function (id) { $(id).addEventListener('change', function () { render(); query(); }); });
+  reset();
+})();
+</script>
+<div class="vs">
+  <div><h4>🏠 Internal (OneLake)</h4><ul><li>Lakehouse, warehouse, KQL DB, mirrored DB, SQL DB, semantic model export</li><li><b>Identity passthrough</b>: reader needs Read on target</li></ul></div>
+  <div class="vsmark">VS</div>
+  <div><h4>☁️ External</h4><ul><li>ADLS Gen2, Blob, S3 (+compatible), GCS, Dataverse, OneDrive/SharePoint, Iceberg, on-prem via gateway</li><li><b>Delegated</b>: connection credentials for everyone</li></ul></div>
 </div>
-
-<h2>Mirroring</h2>
-<p>Mirroring continuously replicates data from an operational system into OneLake as <strong>Delta tables</strong> – no pipelines, no schedules. It creates a <strong>mirrored database</strong> item with a <strong>SQL analytics endpoint</strong> (read-only for data: query with T-SQL, create views, cross-database queries, Direct Lake, shortcuts to Spark).</p>
-<div class="tw"><table>
-<thead><tr><th>Type</th><th>How it works</th><th>Examples</th></tr></thead>
-<tbody>
-<tr><td><strong>Database mirroring</strong></td><td>Initial snapshot, then change capture from the source (transaction log / change feed) merged into Delta; changes can arrive as fast as every ~15 seconds</td><td>Azure SQL Database, Azure SQL MI, SQL Server (2016–2025, via gateway for on-prem), Azure Cosmos DB, Azure Database for PostgreSQL, Snowflake, Oracle, Google BigQuery, SAP; Fabric SQL database is mirrored automatically</td></tr>
-<tr><td><strong>Metadata mirroring</strong></td><td>Syncs only catalog metadata (catalogs, schemas, tables) and uses <strong>shortcuts</strong> to the data – nothing is copied</td><td>Azure Databricks Unity Catalog, Snowflake (option), Dremio</td></tr>
-<tr><td><strong>Open mirroring</strong></td><td>You (or a partner tool) write change files into the mirrored database's <strong>landing zone</strong> per the open mirroring spec; Fabric merges inserts/updates/deletes into Delta</td><td>Any source via custom apps or partner solutions</td></tr>
-</tbody>
-</table></div>
-
-<h3>Cost model (frequently tested)</h3>
-<ul>
-<li><strong>Replication compute is free</strong> – it doesn't consume capacity units.</li>
-<li><strong>Storage for replicas is free up to 1 TB per purchased CU</strong> (F64 → 64 TB). Beyond that, or while the capacity is <strong>paused</strong>, normal OneLake storage is charged.</li>
-<li><strong>Querying</strong> mirrored data (SQL, Spark, Power BI) consumes CUs at normal rates.</li>
-<li>A <strong>running capacity is required</strong>; while paused, nothing is replicated.</li>
-<li>Mirrored tables are vacuumed automatically (default retention 1 day for new mirrors; configurable for time travel).</li>
-</ul>
-
-<div class="check" data-answer="4">
-<p>The finance team asks how mirroring an Azure SQL database into a workspace on an F64 capacity affects cost. Which statement is correct?</p>
-<ul>
-<li>Replication consumes CUs continuously, and all mirrored storage is billed</li>
-<li>Mirroring requires a separate mirroring license per database</li>
-<li>Mirroring is free in every respect, including queries</li>
-<li>Replication compute is free and up to 64 TB of mirrored storage is free; queries consume CUs normally</li>
-</ul>
-<p class="why">Background replication is free, storage is free up to 1 TB per CU (64 TB for F64), and only querying and storage beyond the allowance (or while paused) are charged.</p>
+<div class="stats">
+  <div><b>1–28</b><span>days of shortcut cache (S3, GCS, gateway)</span></div>
+  <div><b>1 GB</b><span>files above this aren't cached</span></div>
+  <div><b>5</b><span>max chained shortcut hops</span></div>
+  <div><b>100K</b><span>shortcuts per item</span></div>
 </div>
+<div class="check" data-answer="3"><p>Files/Raw is a shortcut to ADLS Gen2. A user with write access on the storage deletes Files/Raw/2025 in the lakehouse. Result?</p><ul><li>Only the shortcut definition is removed</li><li>Nothing: shortcuts are read-only</li><li>The 2025 folder is deleted from the ADLS container</li><li>It goes to the lakehouse recycle bin for 7 days</li></ul><p class="why">Deleting <i>through</i> a shortcut deletes in the target; deleting the shortcut itself never does.</p></div>
+<div class="check" data-answer="1"><p>A Tables shortcut points to a valid Delta table in another lakehouse. Which is true?</p><ul><li>It's a table for the SQL analytics endpoint and Direct Lake</li><li>It can sit at any subfolder depth under Tables</li><li>It copies the Delta files on creation</li><li>Readers never need access to the target</li></ul><p class="why">Top-level Tables shortcuts to Delta are auto-discovered; internal shortcuts pass the user identity.</p></div>
+<details><summary>Deep dive: shortcut fine print</summary>
+<ul><li>Create: Contributor+ on the item holding the shortcut + access to the target. UI (New shortcut) or OneLake shortcuts REST API; target can come from a variable library.</li>
+<li>Exception to passthrough: Direct Lake on SQL endpoint and T-SQL delegated mode use the item owner's identity; Direct Lake on OneLake and T-SQL user identity mode use the user.</li>
+<li>KQL database: appears under Shortcuts, query with <code>external_table('MyShortcut')</code>.</li>
+<li>Names with spaces aren't recognized as Delta tables; no % or + in names. 100 external connections per item; 10 shortcuts in one path.</li>
+<li>Cache (workspace settings → OneLake): retention resets on each access; newer source versions fetched; Reset cache clears it.</li>
+<li>Firewalled ADLS Gen2 → <b>trusted workspace access</b>: workspace identity + resource instance rule (F SKU).</li></ul></details>
+</section>
 
-<div class="tw"><table>
-<thead><tr><th></th><th>Shortcut</th><th>Mirroring</th><th>Copy (job/activity/dataflow)</th></tr></thead>
-<tbody>
-<tr><td>Data copied?</td><td>No</td><td>Yes (replica as Delta) – except metadata mirroring</td><td>Yes</td></tr>
-<tr><td>Freshness</td><td>Always current</td><td>Near real-time</td><td>As of last run</td></tr>
-<tr><td>Source types</td><td>Storage (files/Delta), OneLake items</td><td>Operational databases / warehouses</td><td>Almost anything</td></tr>
-<tr><td>Transformation</td><td>None</td><td>None</td><td>Mapping (copy) to rich (dataflow/notebook)</td></tr>
-<tr><td>Survives source deletion</td><td>No</td><td>Replica remains but stops updating</td><td>Yes</td></tr>
-</tbody>
-</table></div>
-
-<h2>Discover data: OneLake catalog and endorsement</h2>
-<ul>
-<li>The <strong>OneLake catalog</strong> (successor of the OneLake data hub) is the central place to <strong>find, explore and connect</strong> to items you can access: <em>Explore</em> tab (filter by item type, workspace, <strong>domain</strong>, endorsement, owner, tags; open details, lineage, schema), <em>Govern</em> tab (insights and recommended actions for your data estate). It's also embedded in <em>Get data</em> dialogs of Power BI Desktop, dataflows, notebooks and pipelines.</li>
-<li><strong>Endorsement</strong>: <strong>Promoted</strong> – any user with write permission on the item; <strong>Certified</strong> – only users/groups authorized by a Fabric admin in the tenant setting; <strong>Master data</strong> – designated owners of authoritative reference data (admin-authorized). Endorsed items rank higher in discovery.</li>
-<li>Discoverability: items can be made discoverable to users who don't yet have access so they can <strong>request access</strong>.</li>
-<li>To reuse a model: endorse it, make it discoverable, and grant <strong>Build</strong> permission.</li>
-</ul>
-
-<h2>Real-Time hub and eventstreams</h2>
-<h3>Real-Time hub</h3>
-<p>The tenant-wide catalog of <strong>data in motion</strong>. Pages: <em>All data streams</em> / <em>My data streams</em> (eventstreams and KQL tables you can access), <em>Connect to</em> sources (Azure Event Hubs, IoT Hub, Kafka, CDC from databases, Google Pub/Sub, Kinesis…), <strong>Azure events</strong> (Blob Storage events) and <strong>Fabric events</strong> (workspace item events, <strong>job events</strong>, <strong>OneLake events</strong>, capacity events). Connecting a source from the hub creates an eventstream; events can be routed to an eventhouse or to <strong>Activator</strong> for alerts.</p>
-
-<h3>Eventstream</h3>
-<div class="tw"><table>
-<thead><tr><th>Sources (examples)</th><th>No-code transformations</th><th>Destinations</th></tr></thead>
-<tbody>
-<tr><td>Azure Event Hubs, IoT Hub, Event Grid, Service Bus, Apache Kafka / Confluent / Amazon MSK, Amazon Kinesis, Google Pub/Sub, MQTT, <strong>CDC</strong> from Azure SQL DB / SQL MI / SQL Server VM / PostgreSQL / MySQL / Cosmos DB / MongoDB, <strong>custom endpoint</strong> (custom app, Kafka protocol), sample data, Fabric workspace / OneLake / job events, Azure Blob Storage events</td><td><strong>Filter</strong>, <strong>Manage fields</strong> (add, remove, rename, change type), <strong>Aggregate</strong>, <strong>Group by</strong> (time windows: tumbling, hopping, sliding, session, snapshot), <strong>Union</strong>, <strong>Expand</strong> (array → rows), <strong>Join</strong>; plus a SQL operator for code-first logic</td><td><strong>Eventhouse</strong> (KQL database – <em>direct ingestion</em> or <em>event processing before ingestion</em>), <strong>Lakehouse</strong> (Delta tables), <strong>Activator</strong>, <strong>Derived stream</strong>, <strong>Custom endpoint</strong>, Spark notebook (preview); multiple destinations at once</td></tr>
-</tbody>
-</table></div>
-<ul>
-<li>Filter unwanted events (heartbeats, test devices) <strong>in the eventstream</strong> – the cheapest point, because they are never stored or processed downstream.</li>
-<li>Delivery guarantee: at least once; max message size 1 MB; retention up to 90 days; recommended capacity F4 or larger.</li>
-<li>"Alert in Teams when temperature &gt; 8 °C for 5 minutes" → <strong>Activator</strong> rule on the stream.</li>
-</ul>
-
-<div class="match" data-task="Match each real-time component to its role.">
-<dl>
-<dt>Real-Time hub</dt><dd>Catalog to discover data streams and Fabric/Azure events and connect them</dd>
-<dt>Eventstream</dt><dd>No-code ingestion, in-flight transformation and routing of events</dd>
-<dt>Eventhouse</dt><dd>Store and analyze high-volume time-series events with KQL</dd>
-<dt>Activator</dt><dd>Monitor conditions on streaming or report data and trigger actions</dd>
-<dt>Derived stream</dt><dd>Transformed version of the default stream that can be reused by other destinations</dd>
-<dt>Custom endpoint</dt><dd>Connection string that lets your own application or Kafka client send or read events</dd>
-</dl>
+<!-- ============ L3 ============ -->
+<section class="lesson">
+<h2>Mirroring vs shortcut vs copy</h2>
+<p class="idea">Mirroring keeps a near real-time Delta replica of a database, with replication compute for free.</p>
+<div class="flow" data-hint="Click each step of database mirroring.">
+  <div data-info="Azure SQL DB/MI, SQL Server 2016–2025 (gateway for on-prem), Cosmos DB, PostgreSQL, Snowflake, Oracle, BigQuery, SAP. Fabric SQL database is mirrored automatically."><span class="fi">🗄️</span>Source DB<small>operational</small></div>
+  <div data-info="Initial snapshot, then change capture (transaction log / change feed). Changes can land about every 15 seconds."><span class="fi">🔄</span>Snapshot + changes<small>no pipeline</small></div>
+  <div data-info="Delta tables in OneLake, vacuumed automatically (default retention 1 day for new mirrors)."><span class="fi">🪞</span>Mirrored DB<small>Delta in OneLake</small></div>
+  <div data-info="Read-only SQL analytics endpoint: T-SQL, views, cross-database queries, Direct Lake, shortcuts for Spark."><span class="fi">🔍</span>SQL endpoint<small>read-only</small></div>
 </div>
-
-<h2>Dataflow Gen2</h2>
-<p>Dataflow Gen2 is <strong>Power Query Online</strong> as a Fabric item: connect to 150+ sources, transform with the ribbon or M code (Advanced editor), and write each query to a <strong>data destination</strong>. It can run on its own schedule or as a <strong>Dataflow activity in a pipeline</strong>. The current item type is <em>Dataflow Gen2 (CI/CD)</em>, which supports Git, deployment pipelines, public parameters and variable libraries.</p>
-
-<h3>Data destinations</h3>
-<p>Fabric Lakehouse (<strong>Tables or Files</strong>), Fabric Warehouse, Fabric KQL database, Fabric SQL database, Azure SQL database, Azure Data Explorer, ADLS Gen2, SharePoint files, Snowflake, PostgreSQL. Each tabular query can have its own destination.</p>
-<div class="tw"><table>
-<thead><tr><th>Setting</th><th>Behavior</th></tr></thead>
-<tbody>
-<tr><td><strong>Automatic settings</strong> (default for a <em>new</em> table; Lakehouse, Azure SQL, Snowflake)</td><td>Update method <strong>Replace</strong>, <strong>managed mapping</strong> (schema changes follow the query on republish), table is <strong>dropped and recreated</strong> on each refresh</td></tr>
-<tr><td><strong>Replace</strong></td><td>Destination data is removed and replaced by the query output on every refresh (not supported for KQL database / ADX)</td></tr>
-<tr><td><strong>Append</strong></td><td>Query output is added to existing rows on every refresh (no schema changes possible)</td></tr>
-<tr><td><strong>Dynamic schema</strong> (with Replace)</td><td>Schema may change on republish; table dropped/recreated when it differs</td></tr>
-<tr><td><strong>Fixed schema</strong></td><td>Only rows are replaced; schema changes make publish fail; relationships/measures on the table survive. <strong>Warehouse supports only fixed schema</strong>.</td></tr>
-<tr><td>Existing table</td><td>Mapping chosen manually; the dataflow never re-creates a table you deleted</td></tr>
-</tbody>
-</table></div>
-
-<h3>Staging</h3>
-<ul>
-<li>Staging loads query results into internal staging items (a staging lakehouse/warehouse only dataflows can see) so the SQL compute can process large transformations ("compute engine").</li>
-<li>Loading to a <strong>warehouse requires staging</strong> (and the warehouse must be in the same workspace). For lakehouse and other destinations staging is <strong>off by default</strong> so data is written directly.</li>
-<li>Split big work: query A (staging enabled) ingests; query B <strong>references</strong> A, transforms at scale and writes to the destination.</li>
-</ul>
-
-<h3>Fast copy</h3>
-<ul>
-<li>Uses the <strong>pipeline Copy activity engine</strong> instead of the mashup engine for large ingestions; enable <em>Allow use of fast copy connectors</em> (Options → Scale). It kicks in automatically above thresholds: files (CSV/Parquet in ADLS Gen2/Blob) ≥ 100 MB, databases ≥ 5 million rows; <em>Require fast copy</em> forces it (and fails fast if impossible).</li>
-<li>Only simple transformations on file sources (combine files, select/remove/rename columns, change types); for SQL sources, whatever folds into the native query.</li>
-<li>Writes directly only to a <strong>Lakehouse</strong>; for other destinations stage first and reference.</li>
-<li>Refresh history shows engine <em>CopyActivity</em> when it was used.</li>
-</ul>
-
-<h3>Incremental refresh (Dataflow Gen2)</h3>
-<ul>
-<li>Right-click a query → <em>Incremental refresh</em>: choose a <strong>DateTime/Date column to filter</strong>, how far to <strong>extract data from the past</strong>, a <strong>bucket size</strong> (day, month…) and a column whose <strong>maximum value</strong> indicates changes; optionally only concluded periods.</li>
-<li>Only buckets whose max value changed are re-extracted and <strong>replaced</strong> in the destination; older data is untouched.</li>
-<li>Destinations: <strong>Lakehouse, Warehouse, Azure SQL Database</strong>; requires <strong>fixed schema</strong> and <strong>Replace</strong>; query should fully <strong>fold</strong>; max 50 buckets per query, 150 per dataflow.</li>
-<li>Different from a semantic model's incremental refresh policy (RangeStart/RangeEnd parameters).</li>
-</ul>
-
-<h3>Query folding</h3>
-<p>Put selective, foldable steps (filter rows, remove columns, group by) <strong>early</strong> so the source engine executes them. If the step-folding indicator shows a step isn't folded (and <em>View data source query</em> is unavailable), everything before it is pulled into the mashup engine – a common cause of slow refreshes on large tables.</p>
-
-<div class="check" data-answer="2">
-<p>A Dataflow Gen2 loads 400 GB of Parquet from ADLS Gen2 into a lakehouse; the only steps are selecting and renaming columns. Refresh takes hours. What should you do first?</p>
-<ul>
-<li>Enable staging and change the destination to a warehouse</li>
-<li>Enable fast copy so the copy engine performs the ingestion</li>
-<li>Switch the update method from Replace to Append</li>
-<li>Add an index column to improve folding</li>
-</ul>
-<p class="why">Fast copy uses the pipeline Copy engine for large file and database volumes when the transformations are supported (select/rename are) and the destination is a lakehouse.</p>
+<div class="tabset">
+  <section data-tab="🗄️ Database">
+    <p>Snapshot + change capture into Delta. Most sources.</p>
+  </section>
+  <section data-tab="🏷️ Metadata">
+    <p>Syncs only catalog metadata and uses <b>shortcuts</b> to the data: nothing copied. Azure Databricks Unity Catalog, Snowflake (option), Dremio.</p>
+  </section>
+  <section data-tab="📂 Open">
+    <p>Your app or a partner writes change files into the <b>landing zone</b>; Fabric merges inserts/updates/deletes into Delta.</p>
+  </section>
 </div>
-
-<h2>Pipelines (Data Factory)</h2>
-<p>A pipeline orchestrates <strong>activities</strong> with dependencies, parameters, expressions, retries and schedules.</p>
-
-<div class="tw"><table>
-<thead><tr><th>Category</th><th>Activities</th></tr></thead>
-<tbody>
-<tr><td>Move &amp; transform</td><td><strong>Copy data</strong>, <strong>Copy job</strong>, <strong>Dataflow</strong> (Gen2), <strong>Notebook</strong>, Spark job definition, <strong>Stored procedure</strong>, <strong>Script</strong>, KQL, <strong>Semantic model refresh</strong></td></tr>
-<tr><td>Control flow</td><td><strong>ForEach</strong>, <strong>If condition</strong>, Switch, Until, Wait, Filter, <strong>Set variable</strong>, Append variable, <strong>Invoke pipeline</strong>, Fail</td></tr>
-<tr><td>Lookup &amp; metadata</td><td><strong>Lookup</strong> (read a row/small result set, e.g., a watermark or control table), <strong>Get metadata</strong> (file/folder info: child items, last modified, exists…)</td></tr>
-<tr><td>External &amp; notify</td><td>Web, Webhook, Azure Function, Office 365 Outlook, Teams</td></tr>
-</tbody>
-</table></div>
-
-<h3>Dependencies, retries, parameters, expressions</h3>
-<ul>
-<li>Dependency conditions between activities: <strong>On success</strong>, <strong>On fail</strong> (e.g., send a Teams/Outlook alert only when the load fails), <strong>On completion</strong> (always – cleanup), <strong>On skip</strong>.</li>
-<li>Each activity has <strong>retry</strong> count, <strong>retry interval</strong> and timeout – the fix for transient errors such as HTTP 429 throttling.</li>
-<li><strong>Parameters</strong> are inputs fixed for a run (<code>@pipeline().parameters.LoadDate</code>); <strong>variables</strong> are mutable within the run (<em>Set variable</em>, <em>Append variable</em>). Pipelines can also read a <strong>variable library</strong>.</li>
-<li>Expressions use the <code>@</code> syntax and functions: <code>@concat('raw/', formatDateTime(utcNow(), 'yyyy/MM/dd'))</code>; activity outputs: <code>@activity('LookupWatermark').output.firstRow.LastModified</code> (Lookup with <em>First row only</em>), <code>@activity('GetFiles').output.childItems</code>; current ForEach element: <code>@item().TableName</code>.</li>
-<li><strong>Notebook activity</strong> passes <strong>base parameters</strong> that override the variables in the notebook cell marked as the <em>parameters cell</em>.</li>
-<li><strong>Invoke pipeline</strong> runs child pipelines – chain them with On success for ordered parent/child orchestration.</li>
-</ul>
-
-<pre><code>Lookup (control table: schema, table, watermark column)
-  └─ ForEach  items = @activity('LookupTables').output.value
-                Sequential = false, Batch count = 20 (max 50)
-       └─ Copy data
-            source query = SELECT * FROM @{item().SchemaName}.@{item().TableName}
-                           WHERE ModifiedDate &gt; '@{item().LastWatermark}'
-            sink = lakehouse table @{item().TableName}
-       └─ (On success) Stored procedure / Script: update watermark for @{item().TableName}</code></pre>
-<ul>
-<li><strong>Metadata-driven ingestion</strong>: one generic pipeline + a control table → onboarding a new table is a row insert, not new code.</li>
-<li><strong>ForEach</strong> runs in parallel unless <em>Sequential</em> is checked; <em>Batch count</em> limits concurrency (default 20, max 50). Slow loop with iterations one after another → check Sequential; capacity pressure at peak hours → reduce batch count / reschedule.</li>
-<li><strong>Watermark pattern</strong>: Lookup the old watermark → Copy rows where <code>ModifiedDate &gt; watermark</code> → update the watermark <strong>only after the copy succeeds</strong> (so a failed run is safely re-read next time).</li>
-<li>"Skip processing when no new files" → <strong>Get metadata</strong> (child items) + <strong>If condition</strong> on the count.</li>
-</ul>
-
-<h3>Copy activity details</h3>
-<ul>
-<li>Sources/sinks: 100+ connectors incl. SFTP, REST, ODBC, on-prem via gateway; reads compressed files (gzip, zip…) natively; writes to lakehouse Tables (append/overwrite) or Files, warehouse, KQL database, SQL DB…</li>
-<li><strong>Column mapping</strong> (explicit or auto), <strong>staging</strong> (interim storage when a direct path isn't supported or bulk loading is faster, e.g., loading a warehouse from an on-prem source through a gateway), <strong>fault tolerance</strong> (skip incompatible rows and log them), parallel copies, partition options.</li>
-</ul>
-
-<h3>Triggers and schedules</h3>
-<ul>
-<li>Every schedulable item (pipeline, dataflow, notebook, Copy job, semantic model) has its own <strong>schedule</strong> with frequency, time and <strong>time zone</strong>; Copy jobs support multiple schedules.</li>
-<li><strong>Event-based triggers</strong> (e.g., a file arrives in storage / OneLake, job events) are set up through the Real-Time hub / Activator and can start a pipeline.</li>
-<li>Separate schedules can't guarantee order – if the notebook must start after the dataflow finishes, put both in <strong>one pipeline with On success dependencies</strong>.</li>
-</ul>
-
-<div class="check" data-answer="3">
-<p>A Lookup activity named <code>LookupWatermark</code> has <em>First row only</em> selected and returns the column <code>LastModified</code>. Which expression inserts the value into the next Copy activity's source query?</p>
-<ul>
-<li><code>@activity('LookupWatermark').output.value[0]</code></li>
-<li><code>@pipeline().parameters.LastModified</code></li>
-<li><code>@activity('LookupWatermark').output.firstRow.LastModified</code></li>
-<li><code>@item().LastModified</code></li>
-</ul>
-<p class="why">With First row only, the Lookup output exposes <code>firstRow</code>; without it, the rows are in <code>output.value</code> (an array). <code>@item()</code> only exists inside ForEach.</p>
+<div class="stats">
+  <div><b>0 CU</b><span>replication compute</span></div>
+  <div><b>1 TB / CU</b><span>free replica storage (F64 → 64 TB)</span></div>
+  <div><b>CU</b><span>queries billed normally</span></div>
+  <div><b>⏸</b><span>paused capacity = no replication, storage billed</span></div>
 </div>
+<div class="tw"><table class="matrix">
+<tr><th></th><th>Shortcut</th><th>Mirroring</th><th>Copy (job / activity / dataflow)</th></tr>
+<tr><td>Data copied</td><td>✗ no</td><td>✓ Delta replica (✗ for metadata mirroring)</td><td>✓ yes</td></tr>
+<tr><td>Freshness</td><td>✓ always current</td><td>✓ near real-time</td><td>~ as of last run</td></tr>
+<tr><td>Sources</td><td>~ storage, OneLake items</td><td>~ databases / warehouses</td><td>✓ almost anything</td></tr>
+<tr><td>Transformation</td><td>✗ none</td><td>✗ none</td><td>✓ mapping to rich</td></tr>
+<tr><td>Survives source deletion</td><td>✗</td><td>~ replica stays, stops updating</td><td>✓</td></tr>
+</table></div>
+<div class="check" data-answer="4"><p>How does mirroring an Azure SQL DB on an F64 capacity affect cost?</p><ul><li>Replication consumes CUs and all storage is billed</li><li>A separate mirroring license per database</li><li>Everything is free, including queries</li><li>Replication is free, 64 TB storage free, queries consume CUs</li></ul><p class="why">Only queries and storage beyond 1 TB per CU (or while paused) cost.</p></div>
+</section>
 
-<div class="order" data-task="Order the activities of a safe incremental (watermark) load.">
+<!-- ============ L4 ============ -->
+<section class="lesson">
+<h2>Batch tools: Copy job, pipelines, Dataflow Gen2, notebooks</h2>
+<p class="idea">Copy job moves, pipelines orchestrate, dataflows reshape, notebooks code.</p>
+<div class="tabset">
+  <section data-tab="📋 Copy job">
+    <ul><li>Modes: <b>full</b> or <b>incremental</b> (watermark column or <b>CDC</b>, which also captures deletes).</li>
+    <li>Write: append (default), merge (upsert), overwrite, <b>SCD Type 2</b>.</li>
+    <li>State managed: failed run resumes; reset to full per table.</li>
+    <li>Several schedules, or a Copy job activity in a pipeline; gateways, Git, variable libraries.</li></ul>
+  </section>
+  <section data-tab="🌊 Dataflow Gen2">
+    <div class="icards">
+      <div class="icard" data-info="Replace = drop data and reload each refresh (not for KQL/ADX). Append = add rows. Automatic settings (default) = Replace + managed mapping + drop/recreate table. Fixed schema keeps relationships/measures; warehouse supports only fixed schema."><div class="i">🎯</div><h4>Destination</h4><p>Replace vs Append</p></div>
+      <div class="icard" data-info="Loads results into internal staging items for SQL compute. Required for warehouse destinations (same workspace). Off by default for lakehouse."><div class="i">🧱</div><h4>Staging</h4><p>Needed for warehouse</p></div>
+      <div class="icard" data-info="Uses the pipeline Copy engine: files ≥ 100 MB or ≥ 5M DB rows. Only simple steps (combine files, select/rename columns, change types) or folded SQL. Writes directly only to a lakehouse. History shows CopyActivity."><div class="i">🏎️</div><h4>Fast copy</h4><p>Big volumes, simple steps</p></div>
+      <div class="icard" data-info="Date column filter + bucket size + change-detection column. Only changed buckets reloaded. Lakehouse, warehouse, Azure SQL; fixed schema + Replace; must fold; 50 buckets/query, 150/dataflow."><div class="i">⏩</div><h4>Incremental refresh</h4><p>Reload changed buckets</p></div>
+    </div>
+  </section>
+  <section data-tab="🔀 Pipeline">
+    <p>Activities with dependencies: <b>On success</b>, <b>On fail</b> (alert), <b>On completion</b>, <b>On skip</b>. Each activity has retry, retry interval, timeout (fixes HTTP 429).</p>
+    <p>Order-dependent steps belong in <b>one pipeline</b>; separate schedules can't guarantee order.</p>
+  </section>
+  <section data-tab="📓 Notebook">
+    <p>REST APIs with OAuth, nested JSON, custom quality rules. Land raw payloads in <b>Files</b> (bronze), then Delta. Explicit schema for CSV; <code>mergeSchema</code> for new columns. Parameters cell, schedule, pipeline Notebook activity.</p>
+  </section>
+</div>
+<div class="walk">
+<pre><code>Lookup  LookupTables   (control table: schema, table, watermark)
+ForEach items = @activity('LookupTables').output.value
+        Sequential = false, Batch count = 20 (max 50)
+  Copy data
+    source = SELECT * FROM @{item().SchemaName}.@{item().TableName}
+             WHERE ModifiedDate &gt; '@{item().LastWatermark}'
+    sink   = lakehouse table @{item().TableName}
+  (On success) Script: update watermark for @{item().TableName}</code></pre>
+<ol>
+  <li data-lines="1">Lookup reads the control table: adding a table = inserting a row, not new code.</li>
+  <li data-lines="2-3">ForEach runs in parallel unless Sequential; Batch count limits concurrency.</li>
+  <li data-lines="4-7">@item() is the current element, only valid inside ForEach.</li>
+  <li data-lines="8">Update the watermark only after the copy succeeds, so failures are re-read next run.</li>
+</ol>
+</div>
+<div class="order" data-task="Order a watermark-based incremental load with alerting.">
 <ol>
 <li>Lookup the last watermark from the control table</li>
 <li>Copy rows whose ModifiedDate is greater than the watermark</li>
-<li>On success, update the watermark to the new maximum ModifiedDate</li>
+<li>On success, update the watermark to the new maximum</li>
 <li>On success, refresh the semantic model</li>
-<li>On fail of any step, send an alert to the on-call engineer</li>
+<li>On fail of any step, alert the on-call engineer</li>
 </ol>
 </div>
-
-<h3>Copy job in more detail</h3>
-<ul>
-<li>Copy modes: <strong>full</strong> or <strong>incremental</strong> (first run full, then only new/changed rows). Incremental uses a <strong>watermark column</strong> (ROWVERSION, datetime, date, integer…) or <strong>CDC</strong> if enabled on the source (CDC also captures <strong>deletes</strong>).</li>
-<li>State is managed for you: a failed run resumes from the last successful run; you can reset to full copy per table or job.</li>
-<li>Write methods: <strong>append</strong> (default), <strong>merge</strong> (upsert on key), <strong>overwrite</strong>, <strong>SCD Type 2</strong>; can auto-create and optionally truncate destination tables; audit columns.</li>
-<li>Run once, on one or several schedules, or as a <em>Copy job activity</em> inside a pipeline; supports gateways (on-prem and VNet), Git/deployment pipelines and variable libraries.</li>
-</ul>
-
-<h2>Notebooks for ingestion</h2>
-<ul>
-<li>Choose notebooks when you need code: REST APIs with OAuth token refresh and pagination, complex parsing (nested JSON), custom data-quality rules, very large or specialised processing, or structured streaming with checkpoints.</li>
-<li>Land raw payloads in lakehouse <strong>Files</strong> (bronze) in a predictable, partitioned folder layout; then write curated <strong>Delta tables</strong>. Use an explicit schema for CSV reads; enable <code>mergeSchema</code> when the source adds columns.</li>
-<li>Notebooks can be parameterized (parameters cell), scheduled, called from a pipeline Notebook activity or from another notebook (<code>notebookutils.notebook.run</code>).</li>
-</ul>
-
-<h2>Choosing the destination: lakehouse, warehouse or eventhouse</h2>
-<div class="tw"><table>
-<thead><tr><th></th><th>Lakehouse</th><th>Warehouse</th><th>Eventhouse (KQL database)</th><th>SQL database</th></tr></thead>
-<tbody>
-<tr><td>Data shape</td><td>Files of any format + Delta tables</td><td>Structured Delta tables</td><td>High-volume events, logs, time series, semi-structured JSON</td><td>Operational rows</td></tr>
-<tr><td>Write with</td><td>Spark, Dataflow, pipelines, Copy job, shortcuts</td><td><strong>T-SQL (full DML, multi-table transactions)</strong>, COPY INTO, pipelines, Dataflow</td><td>Eventstream, KQL ingestion, pipelines, Dataflow (append)</td><td>Applications (OLTP), T-SQL</td></tr>
-<tr><td>Read with</td><td>Spark, <strong>read-only SQL analytics endpoint</strong>, Direct Lake</td><td>T-SQL, Spark (read), Direct Lake</td><td>KQL, T-SQL (subset), Real-Time dashboards</td><td>T-SQL; auto-mirrored to OneLake for analytics</td></tr>
-<tr><td>Typical team</td><td>Data engineers (Python/Spark), data scientists</td><td>SQL developers / BI engineers</td><td>Real-time / operations analytics</td><td>App developers</td></tr>
-</tbody>
-</table></div>
-<ul>
-<li>Thanks to <strong>OneLake / OneCopy</strong> one curated copy serves all engines: a warehouse can join lakehouse tables via cross-database queries, a lakehouse can shortcut warehouse tables. Don't ingest the same source twice without a reason.</li>
-<li>Landing zone for raw files of any format (CSV, JSON, images) → lakehouse <strong>Files</strong>.</li>
-</ul>
-
-<div class="check" data-answer="4">
-<p>A team writes all transformation logic in T-SQL and needs multi-table transactions and UPDATE/DELETE on the curated layer. Data arrives as Parquet in ADLS Gen2. Which destination and load method fit best?</p>
-<ul>
-<li>A lakehouse loaded with a Dataflow Gen2, then modified through the SQL analytics endpoint</li>
-<li>An eventhouse with an eventstream</li>
-<li>A lakehouse Files shortcut queried with T-SQL views only</li>
-<li>A warehouse loaded with COPY INTO (or a pipeline Copy activity)</li>
-</ul>
-<p class="why">The warehouse provides full T-SQL DML with transactions; COPY INTO loads Parquet/CSV/JSONL from ADLS Gen2, Blob or OneLake. The lakehouse SQL analytics endpoint is read-only for table data.</p>
+<div class="flips">
+  <div class="flip"><div class="front"><span>Lookup with <i>First row only</i>: expression for column LastModified?</span></div><div class="back"><span><code>…output.firstRow.LastModified</code> (without it: <code>output.value</code> array)</span></div></div>
+  <div class="flip"><div class="front">Skip processing when no new files arrived?</div><div class="back"><span><b>Get metadata</b> (child items) + <b>If condition</b> on the count.</span></div></div>
+  <div class="flip"><div class="front">Dataflow Gen2 to a warehouse needs…?</div><div class="back"><span><b>Staging</b> and a <b>fixed schema</b>.</span></div></div>
 </div>
+<div class="check" data-answer="2"><p>A Dataflow Gen2 loads 400 GB of Parquet into a lakehouse with only select/rename steps. It takes hours. First fix?</p><ul><li>Enable staging, switch to a warehouse</li><li>Enable fast copy</li><li>Switch Replace to Append</li><li>Add an index column</li></ul><p class="why">Fast copy uses the Copy engine for big files when steps are simple and the target is a lakehouse.</p></div>
+<div class="check" data-answer="3"><p>Lookup <i>LookupWatermark</i> (First row only) returns LastModified. Which expression feeds the next Copy?</p><ul><li>@activity('LookupWatermark').output.value[0]</li><li>@pipeline().parameters.LastModified</li><li>@activity('LookupWatermark').output.firstRow.LastModified</li><li>@item().LastModified</li></ul><p class="why">First row only exposes firstRow; @item() exists only inside ForEach.</p></div>
+<details><summary>Deep dive: pipeline and dataflow fine print</summary>
+<ul><li>Activities: Copy data, Copy job, Dataflow, Notebook, Spark job definition, Stored procedure, Script, KQL, Semantic model refresh; ForEach, If, Switch, Until, Wait, Filter, Set/Append variable, Invoke pipeline, Fail; Lookup, Get metadata; Web, Webhook, Azure Function, Outlook, Teams.</li>
+<li>Parameters fixed per run (<code>@pipeline().parameters.X</code>); variables mutable. Notebook activity base parameters override the parameters cell. Expressions: <code>@concat('raw/', formatDateTime(utcNow(), 'yyyy/MM/dd'))</code>.</li>
+<li>Copy activity: staging (e.g. on-prem → warehouse through a gateway), fault tolerance (skip + log bad rows), parallel copies, partitions, gzip/zip natively.</li>
+<li>Schedules per item with time zone; Copy jobs can have several. Event triggers (file arrives, job events) via Real-Time hub / Activator.</li>
+<li>Dataflow Gen2 (CI/CD) supports Git, deployment pipelines, public parameters, variable libraries. Destinations: lakehouse, warehouse, KQL DB, SQL DB, Azure SQL, ADX, ADLS Gen2, SharePoint, Snowflake, PostgreSQL; one per query. Existing table: dataflow never recreates a deleted table. Dynamic schema: table dropped/recreated on schema change.</li>
+<li>Split big work: query A (staging) ingests, query B references it and writes. Put foldable steps (filter, remove columns, group by) early; a non-folding step pulls everything before it into the mashup engine.</li>
+<li>Dataflow incremental refresh ≠ semantic model incremental refresh (RangeStart/RangeEnd).</li></ul></details>
+</section>
 
-<h2>OneLake integration for semantic models and KQL databases</h2>
-<ul>
-<li><strong>Semantic model OneLake integration</strong>: turn on <em>OneLake integration</em> in the settings of an <strong>Import</strong> model (P or F capacity). After the next refresh, import tables are written as <strong>Delta tables</strong> under <code>&lt;Model&gt;.SemanticModel</code> in OneLake; consume them through <strong>shortcuts</strong> in a lakehouse (Spark, SQL, other models). Measures, DirectQuery/hybrid tables and calculation groups aren't exported; old versions are kept 3 days; data reflects the last successful refresh.</li>
-<li><strong>Eventhouse / KQL database OneLake availability</strong>: enable it on the database or table and the KQL data is exposed as <strong>Delta tables in OneLake</strong>; create shortcuts in a lakehouse to query it from Spark, the SQL analytics endpoint or Direct Lake without a copy process.</li>
-<li><strong>Mirrored databases</strong> and <strong>Fabric SQL databases</strong> also land Delta in OneLake – use shortcuts for Spark.</li>
-</ul>
-
-<div class="reveal">
-<p><strong>Scenario:</strong> Contoso has (1) 15 TB of clickstream Parquet in Amazon S3 read several times per day by Spark, (2) an Azure SQL Database for orders that analysts need with minute-level latency, (3) IoT temperature telemetry in Azure Event Hubs that must trigger a Teams alert if a freezer is above 8 °C for 5 minutes, (4) monthly Excel budget files in SharePoint that finance analysts reshape with Power Query, and (5) an on-premises SQL Server ERP behind the corporate firewall loaded nightly with incremental changes. Choose an approach for each.</p>
-<div class="answer">
-<ol>
-<li><strong>Amazon S3 shortcut</strong> in a lakehouse (Files or Tables), with <strong>shortcut caching</strong> enabled (1–28 days) to reduce S3 egress for repeated reads.</li>
-<li><strong>Mirroring</strong> of the Azure SQL Database: no pipeline, near real-time Delta, read-only SQL analytics endpoint; replication compute free.</li>
-<li><strong>Eventstream</strong> from Event Hubs → <strong>eventhouse</strong> for history, plus an <strong>Activator</strong> rule (destination or alert) for the Teams notification; filter irrelevant events inside the eventstream.</li>
-<li><strong>Dataflow Gen2</strong> (Power Query Online) writing to a lakehouse or warehouse table (Replace each month, or Append).</li>
-<li><strong>On-premises data gateway</strong> (clustered for availability) + <strong>Copy job</strong> with incremental (watermark or CDC) copy – or a metadata-driven pipeline with Lookup/ForEach/Copy if orchestration with other steps is needed.</li>
-</ol>
+<!-- ============ L5 ============ -->
+<section class="lesson">
+<h2>Connections and gateways</h2>
+<p class="idea">Where the source lives decides the gateway: datacenter → on-premises gateway, Azure private network → VNet gateway, public → none.</p>
+<div class="sim">
+  <div class="wtitle">Gateway picker</div>
+  <div class="p04-ctl">
+    <label>Source lives <select id="p04-src">
+      <option value="onp">In our datacenter (SQL Server, file share, SAP)</option>
+      <option value="vnet">In an Azure VNet / private endpoint (SQL MI, storage)</option>
+      <option value="pub">On a public cloud endpoint (Azure SQL public, SaaS API)</option>
+      <option value="adls">ADLS Gen2 with public access disabled</option>
+      <option value="pers">On my laptop, one user's Power BI model</option>
+    </select></label>
+    <label>Fabric item <select id="p04-it"><option>Pipeline / Copy job</option><option>Dataflow Gen2</option><option>Mirroring</option><option>Semantic model</option><option>Shortcut</option></select></label>
+    <label><input type="checkbox" id="p04-noinst"> We can't install or patch software</label>
+  </div>
+  <div class="p04-gw" id="p04-gwv"></div>
+  <div class="out" id="p04-gout"></div>
 </div>
+<script>
+(function () {
+  function $(id) { return document.getElementById(id); }
+  function upd() {
+    var s = $('p04-src').value, it = $('p04-it').value, ni = $('p04-noinst').checked, g, h;
+    if (s === 'onp') {
+      g = 'onp'; h = '<span class="badge ok">On-premises data gateway</span> (standard mode) on a Windows machine in your network. Use a <b>cluster</b> for HA and load balancing; keep it updated.';
+      if (ni) h += '<br><span class="badge warn">Note</span> No managed alternative reaches a datacenter: someone must run the gateway.';
+      if (it === 'Shortcut') h += '<br>Shortcuts reach on-prem / S3-compatible storage through this gateway (cache helps).';
+    } else if (s === 'vnet') {
+      if (it === 'Shortcut') { g = 'none'; h = '<span class="badge warn">Not via VNet gateway</span> For firewalled ADLS use <b>trusted workspace access</b>; database sources use mirroring or copy instead.'; }
+      else if (ni) { g = 'vnet'; h = '<span class="badge ok">VNet data gateway</span> Microsoft-managed, injected into a <b>delegated subnet</b>. Nothing to install. Needs F/P capacity (F8+ recommended).'; }
+      else { g = 'vnet'; h = '<span class="badge ok">VNet data gateway</span> is the managed choice. An on-prem gateway on an Azure VM would also work, but you must install and patch it.'; }
+    } else if (s === 'pub') {
+      g = 'none'; h = '<span class="badge ok">No gateway</span> A cloud <b>connection</b> (OAuth, service principal, workspace identity, key…) is enough.';
+    } else if (s === 'adls') {
+      g = 'twa'; h = '<span class="badge ok">Trusted workspace access</span> Workspace identity + resource instance rule on the storage firewall (F SKU). Works for shortcuts, pipelines, COPY INTO.';
+    } else {
+      g = 'pers'; h = '<span class="badge warn">Personal mode gateway</span> Only for one user\'s Power BI semantic models, <b>never for Fabric items</b>. ' + (it === 'Semantic model' ? '' : 'For a ' + it + ' use a standard on-premises gateway.');
+    }
+    var names = { onp: '🏢 On-prem gateway', vnet: '🔒 VNet gateway', twa: '🪪 Trusted workspace access', pers: '👤 Personal gateway', none: '☁️ No gateway' };
+    $('p04-gwv').innerHTML = '<span class="n">🗄️ Source</span> ➜ <span class="n on">' + names[g] + '</span> ➜ <span class="n">🧩 ' + it + '</span>';
+    $('p04-gout').innerHTML = h;
+  }
+  ['p04-src', 'p04-it', 'p04-noinst'].forEach(function (id) { $(id).addEventListener('change', upd); });
+  upd();
+})();
+</script>
+<div class="vs">
+  <div><h4>🏢 On-premises data gateway</h4><ul><li>You install it (datacenter or Azure VM)</li><li>Clusters for HA</li><li>Any license</li><li>Pipelines, Copy job, Dataflow Gen2, mirroring, shortcuts, models</li></ul></div>
+  <div class="vsmark">VS</div>
+  <div><h4>🔒 VNet data gateway</h4><ul><li>Microsoft-managed, delegated subnet</li><li>Scale by node count</li><li>F / P / A4+ capacity</li><li>Pipelines, Copy job, Dataflow Gen2, mirroring, models</li></ul></div>
 </div>
+<div class="check" data-answer="2"><p>A pipeline must copy from Azure SQL MI reachable only inside a VNet. Nobody may install or maintain gateway software. Use?</p><ul><li>On-prem gateway on an Azure VM</li><li>VNet data gateway in a delegated subnet</li><li>Personal mode gateway</li><li>A shortcut to the managed instance</li></ul><p class="why">The VNet gateway is managed; shortcuts don't point at SQL databases.</p></div>
+<details><summary>Deep dive: connections</summary>
+<p>Settings → Manage connections and gateways. A connection stores endpoint, auth method (OAuth, service principal, workspace identity, key, SAS, basic) and privacy level. Roles: Owner, User, User with resharing. Binding an item or shortcut to a connection needs permission on it.</p></details>
+</section>
 
-<div class="match" data-task="Match each feature to the statement that describes it.">
+<!-- ============ L6 ============ -->
+<section class="lesson">
+<h2>Real-time: Real-Time hub and eventstreams</h2>
+<p class="idea">Events flow from a source through an eventstream to storage, and Activator acts on them.</p>
+<div class="flow" data-hint="Click each stage of the real-time path.">
+  <div data-info="Event Hubs, IoT Hub, Event Grid, Service Bus, Kafka/Confluent/MSK, Kinesis, Pub/Sub, MQTT, CDC from Azure SQL/PostgreSQL/MySQL/Cosmos DB/MongoDB, custom endpoint, Fabric and Azure Blob events. Discover them in the Real-Time hub."><span class="fi">📡</span>Source<small>Event Hubs, IoT, CDC</small></div>
+  <div data-info="No-code: filter, manage fields, aggregate, group by windows (tumbling, hopping, sliding, session, snapshot), union, expand, join; SQL operator. Filter heartbeats here: cheapest point."><span class="fi">⚡</span>Eventstream<small>transform + route</small></div>
+  <div data-info="KQL database: high-volume time series, logs, JSON. Direct ingestion or processing before ingestion. Lakehouse (Delta) is another destination; multiple at once."><span class="fi">🛰️</span>Eventhouse<small>or lakehouse</small></div>
+  <div data-info="Monitors conditions on streams or report data and triggers actions: Teams, email, pipelines. 'Alert when temperature &gt; 8 °C for 5 minutes'."><span class="fi">🔔</span>Activator<small>alerts, actions</small></div>
+</div>
+<div class="stats">
+  <div><b>1+</b><span>at-least-once delivery</span></div>
+  <div><b>1 MB</b><span>max message size</span></div>
+  <div><b>90 days</b><span>max retention</span></div>
+  <div><b>F4+</b><span>recommended capacity</span></div>
+</div>
+<div class="match" data-task="Match each real-time term to its role.">
 <dl>
-<dt>Shortcut caching</dt><dd>Keeps files read from S3 or GCS for 1–28 days to reduce egress</dd>
-<dt>Open mirroring</dt><dd>Your application writes change files into a landing zone that Fabric merges into Delta</dd>
-<dt>Metadata mirroring</dt><dd>Synchronizes catalog and table metadata and uses shortcuts instead of copying data</dd>
-<dt>Fast copy</dt><dd>Lets a dataflow use the pipeline copy engine for large volumes</dd>
-<dt>Fixed schema</dt><dd>Dataflow destination option that keeps relationships and only replaces rows</dd>
-<dt>OneLake availability</dt><dd>Exposes KQL database tables as Delta tables in OneLake</dd>
-<dt>VNet data gateway</dt><dd>Microsoft-managed gateway injected into a delegated subnet</dd>
+<dt>Real-Time hub</dt><dd>Catalog to discover streams and Fabric/Azure events</dd>
+<dt>Eventstream</dt><dd>No-code ingestion, transformation and routing</dd>
+<dt>Eventhouse</dt><dd>Store and analyze time-series events with KQL</dd>
+<dt>Activator</dt><dd>Watch conditions and trigger actions</dd>
+<dt>Derived stream</dt><dd>Transformed stream reusable by other destinations</dd>
+<dt>Custom endpoint</dt><dd>Connection string for your own app or Kafka client</dd>
 </dl>
 </div>
+</section>
 
-<h2>Key takeaways &amp; exam tips</h2>
-<ul>
-<li><strong>Don't move data you only need to read</strong>: shortcuts (files/Delta, other workspaces, other clouds) and mirroring (databases) come first. Copy when you need independence from the source, transformation, or a source shortcuts/mirroring don't support.</li>
-<li><strong>Shortcuts</strong>: lakehouse Tables (top level, Delta auto-discovered) or Files (any level), KQL databases; not warehouses. Internal = user identity passthrough (need permission on the target); external = connection credentials. Deleting the shortcut keeps the target; deleting files inside it deletes them in the target. Caching for S3/S3-compatible/GCS/gateway: 1–28 days, files &gt; 1 GB not cached.</li>
-<li><strong>Mirroring</strong>: database / metadata / open; near real-time Delta + read-only SQL analytics endpoint; replication compute free; 1 TB free storage per CU; queries billed; needs a running capacity.</li>
-<li><strong>Copy job</strong> = simplest full/incremental/CDC movement with append/merge/overwrite/SCD2. <strong>Copy activity</strong> = bulk throughput inside an orchestrated pipeline (staging, fault tolerance, mapping). <strong>Dataflow Gen2</strong> = Power Query low-code transformations. <strong>Notebook</strong> = code. <strong>Eventstream</strong> = streaming.</li>
-<li><strong>Gateways</strong>: on-premises data gateway for datacenter/network-isolated sources (cluster for HA); VNet data gateway for Azure private networks without installing anything. Firewalled ADLS → trusted workspace access with workspace identity.</li>
-<li><strong>Dataflow Gen2 destinations</strong>: Replace vs Append; automatic settings = replace + managed mapping + drop/recreate; warehouse needs staging and fixed schema; KQL/ADX append only. Incremental refresh: lakehouse/warehouse/Azure SQL, fixed schema, replace per bucket, fold the query. Fast copy: big files/tables, simple steps, lakehouse destination.</li>
-<li><strong>Pipelines</strong>: Lookup (watermark, <code>output.firstRow</code>), Get metadata + If (skip when empty), ForEach (Sequential / batch count), Invoke pipeline, Notebook base parameters, dependency conditions (success/fail/completion/skip), retries for transient errors, schedule per item with time zone; order-dependent steps belong in one pipeline.</li>
-<li><strong>Discovery</strong>: OneLake catalog (Explore/Govern, domains, endorsement), Real-Time hub for streams and events. Promoted = any writer; Certified = admin-authorized reviewers.</li>
-<li><strong>Destination choice</strong>: lakehouse (Spark, files + Delta, read-only SQL endpoint), warehouse (T-SQL DML, transactions, COPY INTO), eventhouse (streaming/time series, KQL), SQL database (OLTP, auto-mirrored).</li>
-<li><strong>OneLake integration</strong>: Import semantic models can export tables to Delta; KQL databases expose tables via OneLake availability – consume both through shortcuts.</li>
+<!-- ============ L7 ============ -->
+<section class="lesson">
+<h2>Destinations and discovery</h2>
+<p class="idea">Land data where your team's language lives: Spark → lakehouse, T-SQL → warehouse, KQL → eventhouse.</p>
+<div class="icards" data-hint="Click a destination.">
+  <div class="icard" data-info="Files of any format + Delta tables. Write: Spark, dataflows, pipelines, Copy job, shortcuts. Read: Spark, read-only SQL analytics endpoint, Direct Lake. Raw landing zone → Files."><div class="i">🏞️</div><h4>Lakehouse</h4><p>Spark teams, any file</p></div>
+  <div class="icard" data-info="Full T-SQL DML, multi-table transactions, COPY INTO. Read via T-SQL, Spark, Direct Lake. SQL developers / BI engineers."><div class="i">🏢</div><h4>Warehouse</h4><p>T-SQL, transactions</p></div>
+  <div class="icard" data-info="High-volume events, logs, time series, semi-structured JSON. Eventstream, KQL ingestion, pipelines. KQL, Real-Time dashboards. OneLake availability exposes tables as Delta."><div class="i">🛰️</div><h4>Eventhouse</h4><p>Streaming, KQL</p></div>
+  <div class="icard" data-info="Operational rows for apps (OLTP), T-SQL. Auto-mirrored to OneLake for analytics."><div class="i">🗃️</div><h4>SQL database</h4><p>OLTP apps</p></div>
+</div>
+<div class="remember"><b>"Don't move what you only need to read."</b> Shortcut or mirror first; copy only for independence, transformation or unsupported sources.</div>
+<div class="flips">
+  <div class="flip"><div class="front">Promoted vs Certified?</div><div class="back"><span><b>Promoted</b>: anyone with write on the item. <b>Certified</b>: only admin-authorized users. Master data: admin-designated owners.</span></div></div>
+  <div class="flip"><div class="front">Import model tables as Delta for Spark?</div><div class="back"><span>Turn on <b>OneLake integration</b> for the model; after refresh, shortcut the tables into a lakehouse.</span></div></div>
+</div>
+<div class="check" data-answer="4"><p>A team writes all logic in T-SQL and needs multi-table transactions and UPDATE/DELETE. Data arrives as Parquet in ADLS Gen2. Best fit?</p><ul><li>Lakehouse via Dataflow Gen2, edited through the SQL endpoint</li><li>Eventhouse with an eventstream</li><li>Files shortcut queried with T-SQL views</li><li>Warehouse loaded with COPY INTO</li></ul><p class="why">The lakehouse SQL endpoint is read-only; the warehouse has full DML.</p></div>
+<div class="reveal">
+<p><b>Scenario:</b> 15 TB S3 clickstream, Azure SQL orders at minute latency, freezer telemetry in Event Hubs (alert above 8 °C for 5 min), monthly SharePoint Excel budgets, nightly incremental on-prem SQL Server ERP. Pick each.</p>
+<div class="answer"><ul>
+<li>S3 → <b>shortcut</b> + caching.</li>
+<li>Azure SQL → <b>mirroring</b>.</li>
+<li>Telemetry → <b>eventstream → eventhouse</b> + <b>Activator</b>.</li>
+<li>Budgets → <b>Dataflow Gen2</b>.</li>
+<li>ERP → <b>on-prem gateway (cluster) + Copy job</b> incremental (or Lookup/ForEach pipeline).</li>
+</ul></div>
+</div>
+<details><summary>Deep dive: OneLake catalog and OneLake integration</summary>
+<ul><li>OneLake catalog (successor of the OneLake data hub): Explore (filter by type, workspace, domain, endorsement, tags; lineage, schema) and Govern tabs; embedded in Get data dialogs. Items can be discoverable for users without access, who then request it.</li>
+<li>Reuse a model: endorse, make discoverable, grant Build.</li>
+<li>Semantic model OneLake integration (Import, P/F capacity): measures, DirectQuery/hybrid tables and calc groups not exported; old versions kept 3 days.</li>
+<li>Mirrored DBs and SQL databases also land Delta in OneLake; one curated copy serves all engines (cross-database queries, shortcuts).</li></ul></details>
+</section>
+
+<section class="lesson">
+<h2>Exam traps</h2>
+<ul class="traps">
+  <li>Deleting a <b>shortcut</b> keeps the target; deleting <b>files inside</b> it deletes them in the target.</li>
+  <li>No shortcuts <b>in a warehouse</b>; Tables shortcuts only at the <b>top level</b>.</li>
+  <li>Internal shortcut = user needs permission on the <b>target</b>; external = <b>connection credentials</b>.</li>
+  <li>Mirroring replication is free; <b>queries are not</b>. Paused capacity = no replication.</li>
+  <li>Personal gateway never serves Fabric items.</li>
+  <li>Dataflow to warehouse needs <b>staging</b>; fast copy writes directly only to a <b>lakehouse</b>.</li>
+  <li>Lakehouse SQL analytics endpoint is <b>read-only</b>.</li>
+  <li>Separate schedules don't guarantee order: chain steps in one pipeline.</li>
 </ul>
-<p class="muted">Further reading (online): Microsoft Learn – <a href="https://learn.microsoft.com/fabric/onelake/onelake-shortcuts">OneLake shortcuts</a>, <a href="https://learn.microsoft.com/fabric/mirroring/overview">Mirroring</a>, <a href="https://learn.microsoft.com/fabric/data-factory/what-is-copy-job">Copy job</a>, <a href="https://learn.microsoft.com/fabric/data-factory/dataflow-gen2-data-destinations-and-managed-settings">Dataflow Gen2 destinations</a>, <a href="https://learn.microsoft.com/fabric/real-time-intelligence/event-streams/overview">Eventstreams</a>. Related pages: <a href="05-lakehouse-spark.html">Lakehouse &amp; Spark</a>, <a href="06-warehouse-tsql.html">Warehouse &amp; T-SQL</a>, <a href="08-kql-realtime.html">Eventhouse &amp; KQL</a>.</p>
+</section>
+
+<section class="lesson">
+<h2>Cheat sheet</h2>
+<div class="cheat">
+  <div><h4>🔗 No move</h4><ul><li>Shortcut: files/Delta, zero copy</li><li>Mirroring: database, near real-time</li><li>Cache 1–28 days</li></ul></div>
+  <div><h4>📋 Batch</h4><ul><li>Copy job: incremental/CDC, SCD2</li><li>Pipeline: orchestration, bulk</li><li>Dataflow Gen2: Power Query</li><li>Notebook: code</li></ul></div>
+  <div><h4>⚡ Streaming</h4><ul><li>Real-Time hub discovers</li><li>Eventstream routes</li><li>Eventhouse stores</li><li>Activator alerts</li></ul></div>
+  <div><h4>🌉 Gateways</h4><ul><li>On-prem: install, cluster</li><li>VNet: managed subnet</li><li>Firewalled ADLS: trusted workspace access</li></ul></div>
+</div>
+</section>
 </main>
 <script src="assets/app.js"></script>
 </body>

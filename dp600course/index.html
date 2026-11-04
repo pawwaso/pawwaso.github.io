@@ -5,84 +5,101 @@
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>DP-600 Study Portal</title>
 <link rel="stylesheet" href="assets/style.css">
+<style>
+  .path { display: grid; grid-template-columns: repeat(auto-fit, minmax(215px, 1fr)); gap: 14px; margin: 14px 0; }
+  .lane { border-radius: 14px; padding: 14px; border: 1px solid var(--line); border-top: 6px solid var(--lc); background: color-mix(in srgb, var(--lc) 5%, var(--bg)); }
+  .lane h3 { margin: 0 0 2px; font-size: 1.02em; } .lane .w { font-size: .85em; color: var(--lc); font-weight: 700; }
+  .lane a.step { display: flex; gap: 10px; align-items: center; margin: 8px 0 0; padding: 9px 11px; border-radius: 10px; background: var(--bg);
+    border: 1px solid var(--line); text-decoration: none; color: var(--fg); }
+  .lane a.step:hover { border-color: var(--lc); }
+  .lane a.step .e { font-size: 1.4em; } .lane a.step .t { flex: 1; font-weight: 600; font-size: .93em; line-height: 1.3; }
+  .lane a.step .ck { width: 22px; height: 22px; border-radius: 50%; border: 2px solid var(--line); flex: none; display: inline-flex; align-items: center; justify-content: center; font-size: .8em; }
+  .lane a.step.done .ck { background: var(--ok); border-color: var(--ok); color: var(--bg); }
+  .bar { height: 10px; border-radius: 5px; background: var(--soft); border: 1px solid var(--line); overflow: hidden; }
+  .bar > div { height: 100%; background: var(--lc); width: 0; }
+  .weights { display: flex; height: 34px; border-radius: 8px; overflow: hidden; margin: 10px 0 4px; font-size: .82em; font-weight: 700; color: #fff; }
+  .weights > div { display: flex; align-items: center; justify-content: center; text-align: center; padding: 0 6px; }
+  .actions { display: flex; gap: 10px; flex-wrap: wrap; margin: 12px 0; }
+  .actions .btn { padding: 10px 16px; font-weight: 600; }
+</style>
 </head>
-<body>
+<body data-domain="0">
 <main data-notoc>
-<h1>DP-600 Study Portal</h1>
-<p class="lead">A self-study course for Microsoft exam <strong>DP-600: Implementing Analytics Solutions Using Microsoft Fabric</strong>
-(Microsoft Certified: Fabric Analytics Engineer Associate). Works fully offline.</p>
+<header class="hero">
+  <div class="hi">🎓</div>
+  <div>
+    <h1>DP-600 Study Portal</h1>
+    <p class="lead">Learn <b>Microsoft Fabric analytics engineering</b> by seeing, clicking and practicing, then pass <b>exam DP-600</b>.</p>
+    <div class="meta"><span class="pill">14 visual lessons</span><span class="pill">🕹️ simulators</span><span class="pill">300 practice questions</span><span class="pill">267 glossary terms</span><span class="pill">📴 works offline</span></div>
+  </div>
+</header>
 
-<h2>Your progress</h2>
-<div class="progress" aria-hidden="true"><div id="bar" style="width:0"></div></div>
-<p id="progress-text" class="muted"></p>
-<p id="practice-text" class="muted"></p>
+<div class="actions">
+  <a class="btn primary" id="continue" href="00-exam-guide.html">▶ Start learning</a>
+  <a class="btn" href="practice.html">🎯 Practice questions</a>
+  <a class="btn" href="glossary.html">🃏 Flashcards</a>
+</div>
+
+<div class="stats" id="mystats"></div>
+
+<h2>Your learning path</h2>
+<p class="muted">Three exam domains. The bar shows how much of the exam each domain is worth.</p>
+<div class="weights" aria-label="Domain weights">
+  <div style="flex:27.5;background:var(--d1)">Maintain 25–30%</div>
+  <div style="flex:47.5;background:var(--d2)">Prepare data 45–50%</div>
+  <div style="flex:27.5;background:var(--d3)">Semantic models 25–30%</div>
+</div>
+<div class="path" id="path"></div>
 
 <h2>How to use this portal</h2>
-<ol>
-  <li>Start with the <a href="00-exam-guide.html">exam guide</a> to see the skills outline and how each skill maps to a page.</li>
-  <li>Work through the pages in order. Use the knowledge checks and the drag &amp; drop exercises on each page, and mark the page as studied at the bottom.</li>
-  <li>Use the <a href="glossary.html">glossary flashcards</a> to drill terminology.</li>
-  <li>Use <a href="practice.html">practice questions</a> per topic, then run timed <strong>exam simulations</strong> until you score above 80% consistently.</li>
-</ol>
-<div class="note"><p>Your progress is stored only in this browser (local storage). Nothing is sent anywhere.</p></div>
-
-<h2>Course pages</h2>
-<div id="sections"></div>
-
-<h2>Exam at a glance</h2>
-<div class="tw"><table>
-<tr><th>Domain (outline revised 20 April 2026)</th><th>Weight</th></tr>
-<tr><td>Maintain a data analytics solution</td><td>25–30%</td></tr>
-<tr><td>Prepare data</td><td>45–50%</td></tr>
-<tr><td>Implement and manage semantic models</td><td>25–30%</td></tr>
-</table></div>
-<p><button id="reset">Reset all progress</button> <span id="reset-msg" class="muted"></span></p>
+<div class="flow">
+  <div><span class="fi">🧭</span>Exam guide<small>rate yourself on every skill</small></div>
+  <div><span class="fi">🕹️</span>Lessons<small>see, click, try</small></div>
+  <div><span class="fi">✅</span>Self-checks<small>on every page</small></div>
+  <div><span class="fi">🃏</span>Flashcards<small>terms</small></div>
+  <div><span class="fi">🎯</span>Exam simulation<small>aim for 80%+</small></div>
+</div>
+<p class="muted">Progress is stored only in this browser. <button id="reset">Reset all progress</button> <span id="reset-msg"></span></p>
 </main>
 <script src="assets/app.js"></script>
 <script>
 (function () {
   var D = window.DP600, P = window.DP600_PAGES;
-  var desc = {
-    '00-exam-guide.html': 'Exam format, the 3 domains, a skill-by-skill checklist and a study plan.',
-    '01-fabric-platform.html': 'OneLake, items, capacities and SKUs, licensing, and choosing a data store.',
-    '02-security-governance.html': 'Workspace roles, item permissions, OneLake security, RLS/CLS/OLS, labels and endorsement.',
-    '03-lifecycle.html': 'Git integration, Power BI projects (PBIP/TMDL), deployment pipelines and the XMLA endpoint.',
-    '04-get-data.html': 'Pipelines, Copy job, Dataflow Gen2, shortcuts, mirroring, gateways, Real-Time hub.',
-    '05-lakehouse-spark.html': 'Lakehouse, Delta tables, V-Order/OPTIMIZE/VACUUM, PySpark and Spark SQL, medallion.',
-    '06-warehouse-tsql.html': 'Warehouse T-SQL, COPY INTO, CTAS, clone, time travel, SQL analytics endpoint.',
-    '07-transform-data.html': 'Star schema, surrogate keys, SCD types, cleansing, dedup, joins and aggregation.',
-    '08-kql-realtime.html': 'Eventstreams, eventhouses, KQL databases and KQL query syntax.',
-    '09-query-analyze.html': 'T-SQL analytics, visual query editor and DAX queries; choosing a query language.',
-    '10-semantic-model-design.html': 'Storage modes, relationships, composite models, date tables and model features.',
-    '11-direct-lake.html': 'Framing, fallback, guardrails, Direct Lake on OneLake vs on SQL endpoint, security.',
-    '12-dax.html': 'Contexts, CALCULATE, iterators, time intelligence, window functions, calculation groups.',
-    '13-performance.html': 'Performance tools, DAX and model optimization, aggregations, incremental refresh.',
-    'glossary.html': 'All terms, with search and flashcards.',
-    'practice.html': '300 exam-style questions: practice mode and timed exam simulation.'
-  };
-  var done = D.load('done', {});
-  var box = document.getElementById('sections'), g = null, grid = null, n = 0, d = 0;
-  P.forEach(function (p) {
-    if (p.file === 'index.html') return;
-    if (p.group !== g) { g = p.group; box.appendChild(D.el('h3', null, g)); grid = D.el('div', 'cards'); box.appendChild(grid); }
-    var a = D.el('a', 'card'); a.href = p.file;
-    a.appendChild(D.el('div', 't', p.title));
-    a.appendChild(D.el('div', 'd', desc[p.file] || ''));
-    if (!/^(glossary|practice)/.test(p.file)) { n++; if (done[p.file]) d++; a.appendChild(D.el('div', 's', done[p.file] ? '✓ studied' : 'not studied yet')); }
-    grid.appendChild(a);
+  var icon = { '00': '🧭', '01': '🏗️', '02': '🔐', '03': '🚀', '04': '📥', '05': '🏞️', '06': '🏢', '07': '🔧', '08': '🛰️', '09': '🔍', '10': '🧠', '11': '⚡', '12': '🧮', '13': '🏎️' };
+  var lanes = [
+    { t: 'Start here', w: 'Foundations', c: 'var(--d0)', g: 'Start here' },
+    { t: '1. Maintain a data analytics solution', w: '25–30% of the exam', c: 'var(--d1)', g: '1. Maintain a data analytics solution' },
+    { t: '2. Prepare data', w: '45–50% of the exam', c: 'var(--d2)', g: '2. Prepare data' },
+    { t: '3. Implement & manage semantic models', w: '25–30% of the exam', c: 'var(--d3)', g: '3. Implement & manage semantic models' }
+  ];
+  var done = D.load('done', {}), box = document.getElementById('path'), total = 0, d = 0, next = null;
+  lanes.forEach(function (L) {
+    var lane = D.el('div', 'lane'); lane.style.setProperty('--lc', L.c);
+    lane.appendChild(D.el('h3', null, L.t)); lane.appendChild(D.el('div', 'w', L.w));
+    var ps = P.filter(function (p) { return p.group === L.g; }), ld = 0;
+    var bar = D.el('div', 'bar'), fill = D.el('div'); bar.appendChild(fill); bar.style.margin = '8px 0 0'; lane.appendChild(bar);
+    ps.forEach(function (p) {
+      total++; var isDone = !!done[p.file]; if (isDone) { d++; ld++; } else if (!next) next = p;
+      var a = D.el('a', 'step' + (isDone ? ' done' : '')); a.href = p.file;
+      a.appendChild(D.el('span', 'e', icon[p.file.slice(0, 2)] || '📄'));
+      a.appendChild(D.el('span', 't', p.title));
+      a.appendChild(D.el('span', 'ck', isDone ? '✓' : ''));
+      lane.appendChild(a);
+    });
+    fill.style.width = Math.round(100 * ld / ps.length) + '%';
+    box.appendChild(lane);
   });
-  document.getElementById('bar').style.width = Math.round(100 * d / n) + '%';
-  document.getElementById('progress-text').textContent = d + ' of ' + n + ' course pages marked as studied.';
-  var st = D.load('qstats', {}), ids = Object.keys(st), ok = ids.filter(function (k) { return st[k].last; }).length;
-  var ex = D.load('exams', []);
-  var t = ids.length ? ('Practice: ' + ids.length + ' of 300 questions attempted, ' + ok + ' answered correctly on the last attempt.') : 'Practice: no questions attempted yet.';
-  if (ex.length) t += ' Last exam simulation: ' + ex[ex.length - 1].pct + '%.';
-  document.getElementById('practice-text').textContent = t;
+  if (next && d) { var c = document.getElementById('continue'); c.href = next.file; c.textContent = '▶ Continue: ' + next.title; }
+  var st = D.load('qstats', {}), ids = Object.keys(st), ok = ids.filter(function (k) { return st[k].last; }).length, ex = D.load('exams', []);
+  var tiles = [[d + ' / ' + total, 'lessons studied'], [ids.length + ' / 300', 'questions attempted'],
+    [ids.length ? Math.round(100 * ok / ids.length) + '%' : '–', 'correct on last attempt'], [ex.length ? ex[ex.length - 1].pct + '%' : '–', 'last exam simulation']];
+  var s = document.getElementById('mystats');
+  tiles.forEach(function (t) { var x = D.el('div'); x.appendChild(D.el('b', null, t[0])); x.appendChild(D.el('span', null, t[1])); s.appendChild(x); });
   var armed = false;
   document.getElementById('reset').onclick = function () {
     var m = document.getElementById('reset-msg');
-    if (!armed) { armed = true; m.textContent = 'Click again to confirm. This clears studied pages and practice history.'; return; }
-    ['done', 'qstats', 'exams', 'flags'].forEach(function (k) { D.save(k, k === 'exams' ? [] : {}); });
+    if (!armed) { armed = true; m.textContent = 'Click again to confirm: clears studied lessons, self-assessment and practice history.'; return; }
+    ['done', 'qstats', 'exams', 'flags', 'selfassess'].forEach(function (k) { D.save(k, k === 'exams' ? [] : {}); });
     location.reload();
   };
 })();

@@ -3,526 +3,466 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
-<title>Lakehouse, Delta &amp; Spark notebooks – DP-600</title>
+<title>Lakehouse, Delta &amp; Spark – DP-600</title>
 <link rel="stylesheet" href="assets/style.css">
+<style>
+/* page-specific visuals (p05) */
+.p05-svg { color: var(--fg); }
+.p05-svg text { fill: currentColor; font-size: 13px; }
+.p05-svg text.t { font-weight: 700; font-size: 15px; }
+.p05-svg text.s { fill: var(--muted); font-size: 12px; }
+.p05-svg .bx rect { fill: color-mix(in srgb, var(--k) 12%, var(--bg)); stroke: var(--k); stroke-width: 2; }
+.p05-svg .bx.sel rect { stroke-width: 5; }
+.p05-svg .cont { fill: none; stroke: var(--line); stroke-width: 2; stroke-dasharray: 6 4; }
+.p05-svg .ar { stroke: var(--muted); stroke-width: 2; fill: none; marker-end: url(#p05-ah); }
+.p05-svg #p05-ah path { fill: var(--muted); }
+.sim .wtitle { font-size: .78em; text-transform: uppercase; letter-spacing: .05em; color: var(--dom); font-weight: 700; margin-bottom: 8px; }
+.p05-btns { display: flex; flex-wrap: wrap; gap: 6px; margin: 6px 0 10px; }
+.p05-grid { display: grid; grid-template-columns: minmax(200px, 1fr) 2fr; gap: 14px; }
+@media (max-width: 700px) { .p05-grid { grid-template-columns: 1fr; } }
+.p05-h { font-size: .8em; font-weight: 700; color: var(--muted); text-transform: uppercase; margin: 2px 0 4px; }
+.p05-vers { display: flex; flex-direction: column; gap: 4px; }
+.p05-vers button { text-align: left; font-family: Consolas, Menlo, monospace; font-size: .8em; padding: 4px 8px; }
+.p05-vers button.on { border-color: var(--dom); background: color-mix(in srgb, var(--dom) 14%, var(--bg)); font-weight: 700; }
+.p05-files { display: flex; flex-wrap: wrap; gap: 6px; }
+.p05-f { font-family: Consolas, Menlo, monospace; font-size: .76em; padding: 5px 8px; border-radius: 6px; border: 2px solid var(--ok); background: var(--ok-soft); }
+.p05-f.rem { border: 2px dashed var(--muted); background: var(--soft); color: var(--muted); }
+.p05-f.gone { border: 2px solid var(--bad); background: var(--bad-soft); color: var(--bad); text-decoration: line-through; }
+.p05-f.inv { outline: 3px solid var(--dom); }
+.p05-legend { font-size: .8em; color: var(--muted); margin-top: 6px; }
+.p05-rows { display: flex; flex-wrap: wrap; gap: 4px; margin-top: 4px; }
+.p05-rows span { font-size: .8em; padding: 2px 8px; border-radius: 10px; background: var(--bg); border: 1px solid var(--line); }
+.p05-tiles { display: flex; flex-wrap: wrap; gap: 3px; align-items: flex-end; min-height: 70px; padding: 8px; border-radius: 8px; background: var(--bg); border: 1px solid var(--line); }
+.p05-tiles i { display: inline-block; width: 12px; height: 12px; border-radius: 2px; background: var(--c4); }
+.p05-tiles i.big { width: 64px; height: 60px; background: var(--c2); }
+.p05-tiles i.orph { background: var(--line); }
+.p05-bar { height: 12px; border-radius: 6px; background: var(--bad); transition: width .4s; }
+</style>
 </head>
-<body>
+<body data-domain="2">
 <main>
-<h1>Lakehouse, Delta &amp; Spark notebooks</h1>
-<p class="lead">How a Fabric lakehouse is organised, what Delta Lake gives you (ACID, time travel, schema enforcement, MERGE), how to keep Delta tables fast (OPTIMIZE, V-Order, Z-Order, VACUUM, partitioning), and how to write, parameterise and run Spark notebooks on the right compute. Maps to the exam skills <em>Prepare data → Get data / Transform data</em> (lakehouse, notebooks, PySpark, Spark SQL, medallion, loading patterns) and parts of <em>Maintain a data analytics solution</em>.</p>
+<header class="hero">
+  <div class="hi">🏞️</div>
+  <div>
+    <h1>Lakehouse, Delta &amp; Spark</h1>
+    <p class="lead">Land raw files, curate Delta tables with Spark and keep them fast.</p>
+    <div class="meta"><span class="pill">Domain 2 · Prepare data</span><span class="pill">⏱ 35 min</span><span class="pill">6 lessons</span></div>
+    <ul class="goals"><li>Place data in Files vs Tables</li><li>Predict what the Delta log, OPTIMIZE and VACUUM do</li><li>Read, write and MERGE with PySpark / Spark SQL</li><li>Pick Spark compute and a load pattern</li></ul>
+  </div>
+</header>
+<div class="tldr"><ul>
+  <li><b>Files/</b> = raw, any format. <b>Tables/</b> = Delta, visible in the read-only <b>SQL endpoint</b>.</li>
+  <li><b>Delta</b> = Parquet + <code>_delta_log</code> → ACID, time travel, schema enforcement, MERGE.</li>
+  <li>Small files → <b>OPTIMIZE</b> (compact), then <b>VACUUM</b> (delete old files, default 7 days).</li>
+  <li><b>V-Order</b> is off by default for Spark in new workspaces: turn it on for read-heavy gold tables.</li>
+  <li>Starter pool + high concurrency = fast, cheap dev.</li>
+</ul></div>
 
-<h2>Lakehouse structure: Tables vs Files</h2>
-<p>A <strong>lakehouse</strong> is a Fabric item that stores data in OneLake and combines a data-lake folder layout with a relational view of Delta tables. Creating a lakehouse automatically provisions a <strong>SQL analytics endpoint</strong> (read-only T-SQL). There is no automatic default semantic model any more – you create semantic models explicitly.</p>
-<div class="tw"><table>
-<thead><tr><th>Area</th><th>What lives there</th><th>Who sees it</th><th>Typical use</th></tr></thead>
-<tbody>
-<tr><td><code>Tables/</code> (managed area)</td><td>Delta tables (Parquet data files + <code>_delta_log</code>). In schema-enabled lakehouses: <code>Tables/&lt;schema&gt;/&lt;table&gt;</code>.</td><td>Spark, SQL analytics endpoint (auto-discovered), Direct Lake, other engines via OneLake</td><td>Silver/gold curated tables, anything analysts query</td></tr>
-<tr><td><code>Files/</code> (unmanaged area)</td><td>Any file in any format: CSV, JSON, Parquet, images, PDFs, zip…</td><td>Spark, pipelines, Dataflow Gen2, OPENROWSET; <em>not</em> auto-exposed as SQL tables</td><td>Landing/raw (bronze) zone, staging, unstructured data</td></tr>
-</tbody></table></div>
-<ul>
-<li>Only folders under <code>Tables/</code> that contain a valid Delta log are registered as tables. Non-Delta data dropped into <code>Tables/</code> shows up as an <em>Unidentified</em> folder.</li>
-<li>The portal action <strong>Load to Tables</strong> (right-click a CSV/Parquet file or folder in <code>Files</code>) converts files into a Delta table without code – handy for quick loads, but no transformations.</li>
-<li><strong>Shortcuts</strong> can be created in both areas. A shortcut under <code>Tables/</code> that points to a Delta table appears as a table (queryable with T-SQL); a shortcut under <code>Files/</code> is just a folder. See <a href="04-get-data.html">Get data</a>.</li>
-<li>Store curated data as <strong>Delta tables in the Tables section</strong>: columnar, compressed Parquet with column pruning and file skipping – the format the SQL analytics endpoint and Direct Lake read. Keep incoming raw files (CSV, JSON, images) in their original form in <strong>Files</strong>.</li>
-</ul>
-
-<h3>Managed vs external (unmanaged) tables</h3>
-<div class="tw"><table>
-<thead><tr><th></th><th>Managed table</th><th>External table</th></tr></thead>
-<tbody>
-<tr><td>Created by</td><td><code>df.write.saveAsTable("sales")</code> or <code>CREATE TABLE sales …</code> with no location</td><td><code>df.write.option("path", "Files/external/customers").saveAsTable("customers_ext")</code> or <code>CREATE TABLE … LOCATION '…'</code></td></tr>
-<tr><td>Data location</td><td>Under <code>Tables/</code>, chosen by the metastore</td><td>The path you specify (often under <code>Files/</code>)</td></tr>
-<tr><td><code>DROP TABLE</code></td><td>Removes metadata <strong>and</strong> data files</td><td>Removes <strong>only metadata</strong>; files stay in place</td></tr>
-<tr><td>SQL analytics endpoint</td><td>Discovered automatically</td><td>Not discovered unless the Delta folder is under <code>Tables/</code> (e.g. via a shortcut)</td></tr>
-</tbody></table></div>
-<div class="note">Schema-enabled lakehouses don't support external table metadata over ADLS directly – use shortcuts to reference external Delta tables instead.</div>
-
-<h3>Schema-enabled lakehouses</h3>
-<ul>
-<li><strong>Lakehouse schemas are enabled by default</strong> when you create a lakehouse in the portal (checkbox <em>Lakehouse schemas</em>). Through the REST API you must pass <code>"enableSchemas": true</code>.</li>
-<li>Every schema-enabled lakehouse has a <strong><code>dbo</code></strong> schema that can't be renamed or removed. A table written without a schema name lands in <code>dbo</code>: <code>saveAsTable("marketing.products")</code> writes to schema <code>marketing</code>.</li>
-<li>Spark uses a <strong>four-part name</strong> <code>workspace.lakehouse.schema.table</code>, enabling cross-workspace joins in a single Spark SQL query. Non-schema lakehouses use <code>workspace.lakehouse.table</code>.</li>
-<li><strong>Schema shortcuts</strong> map a whole schema to another lakehouse's schema or an ADLS Gen2 folder of Delta tables.</li>
-<li>Schemas enable schema-level security and are required by newer features such as <strong>materialized lake views</strong>.</li>
-<li>Existing non-schema lakehouses can't (yet) be converted in place; Spark can query and join both types in the same code. To use schemas in a notebook, the notebook's default lakehouse must be schema-enabled (or there is no default lakehouse).</li>
-</ul>
-
-<div class="match" data-task="Match each lakehouse concept to its description.">
-<dl>
-<dt>Files section</dt><dd>Holds raw files in any format; not auto-exposed as SQL tables</dd>
-<dt>Tables section</dt><dd>Delta tables that are discovered by the SQL analytics endpoint</dd>
-<dt>External table</dt><dd>DROP TABLE removes only metadata; the data files remain</dd>
-<dt>Managed table</dt><dd>DROP TABLE deletes both metadata and data</dd>
-<dt>dbo schema</dt><dd>Default schema in a schema-enabled lakehouse; cannot be removed</dd>
-<dt>Four-part name</dt><dd>workspace.lakehouse.schema.table used for cross-workspace Spark SQL</dd>
-</dl>
+<section class="lesson">
+<h2>Lakehouse anatomy</h2>
+<p class="idea">One lakehouse = a Files area, a Tables area, and a free read-only SQL endpoint over the tables.</p>
+<div class="diagram" data-infopanel data-hint="Click a box in the diagram.">
+<svg class="p05-svg" viewBox="0 0 730 300" width="730" role="img" aria-label="Lakehouse anatomy">
+  <defs><marker id="p05-ah" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto"><path d="M0,0 L10,5 L0,10 z"/></marker></defs>
+  <rect class="cont" x="20" y="14" width="470" height="196" rx="14"/>
+  <text class="t" x="36" y="40">🏞️ Lakehouse item · stored in OneLake</text>
+  <g class="bx" style="--k:var(--c4)" data-title="Files/ (unmanaged)" data-info="Any format: CSV, JSON, Parquet, images, PDFs. Landing/bronze zone. NOT exposed as SQL tables. Right-click → Load to Tables converts a file to a Delta table without code.">
+    <rect x="40" y="56" width="200" height="136" rx="10"/>
+    <text class="t" x="56" y="84">📁 Files/</text>
+    <text x="56" y="110">any format</text><text x="56" y="130">raw · bronze · staging</text><text class="s" x="56" y="170">not SQL tables</text>
+  </g>
+  <g class="bx" style="--k:var(--c2)" data-title="Tables/ (managed)" data-info="Delta tables = Parquet files + _delta_log. Only folders with a valid Delta log become tables (others show as 'Unidentified'). Schema-enabled lakehouses use Tables/&lt;schema&gt;/&lt;table&gt;. Silver/gold live here.">
+    <rect x="270" y="56" width="200" height="136" rx="10"/>
+    <text class="t" x="286" y="84">🧊 Tables/</text>
+    <text x="286" y="110">Delta = Parquet</text><text x="286" y="130">+ _delta_log</text><text class="s" x="286" y="170">silver · gold</text>
+  </g>
+  <g class="bx" style="--k:var(--c1)" data-title="SQL analytics endpoint" data-info="Created automatically with every lakehouse. Read-only T-SQL over Tables/: SELECT, views, functions, procedures, GRANT/RLS/CLS/masking. No INSERT/UPDATE/DELETE, no CREATE TABLE, no clones. Metadata sync can lag → Refresh button, REST API or pipeline activity.">
+    <rect x="540" y="30" width="182" height="74" rx="10"/>
+    <text class="t" x="552" y="58">🔎 SQL endpoint</text><text x="552" y="84">read-only T-SQL</text>
+  </g>
+  <g class="bx" style="--k:var(--c3)" data-title="Semantic model" data-info="Direct Lake models read the Delta tables directly. There is no automatic default semantic model any more: create models explicitly.">
+    <rect x="540" y="130" width="182" height="74" rx="10"/>
+    <text class="t" x="552" y="158">🧠 Semantic model</text><text x="552" y="184">Direct Lake</text>
+  </g>
+  <g class="bx" style="--k:var(--c5)" data-title="Writers" data-info="Spark notebooks, pipelines, Dataflow Gen2 and shortcuts write into the lakehouse. T-SQL cannot write lakehouse data.">
+    <rect x="150" y="236" width="220" height="56" rx="10"/>
+    <text class="t" x="164" y="262">✍️ Spark · pipelines</text><text class="s" x="164" y="282">Dataflow Gen2 · shortcuts</text>
+  </g>
+  <path class="ar" d="M210,236 L160,196"/><path class="ar" d="M310,236 L360,196"/>
+  <path class="ar" d="M470,100 L536,72"/><path class="ar" d="M470,150 L536,168"/>
+</svg>
 </div>
-
-<h2>SQL analytics endpoint</h2>
-<p>Every lakehouse (and every warehouse, mirrored database and SQL database) has exactly one SQL analytics endpoint. It runs on the same distributed engine as Fabric Data Warehouse and exposes each Delta table in <code>Tables/</code> as a SQL table.</p>
-<div class="tw"><table>
-<thead><tr><th>Can do</th><th>Cannot do</th></tr></thead>
-<tbody>
-<tr><td>
-<ul>
-<li><code>SELECT</code> with T-SQL from SSMS, VS Code, the query editor, visual query editor, Power BI</li>
-<li>Create <strong>views</strong>, inline/table-valued <strong>functions</strong>, <strong>stored procedures</strong> and custom schemas</li>
-<li>Security: <code>GRANT</code>/<code>DENY</code>, row-level security (security policies), column-level security, dynamic data masking</li>
-<li>Cross-database queries with three-part names to other warehouses/endpoints in the same workspace</li>
-<li>Read shortcuts that point to Delta tables</li>
-</ul></td>
-<td>
-<ul>
-<li><code>INSERT</code>, <code>UPDATE</code>, <code>DELETE</code>, <code>MERGE</code>, <code>COPY INTO</code> on lakehouse tables (data is <strong>read-only</strong>; write with Spark, pipelines or Dataflow Gen2)</li>
-<li><code>CREATE TABLE</code> / <code>ALTER TABLE</code> on the auto-generated tables</li>
-<li>Zero-copy table clone</li>
-<li>See non-Delta files in <code>Files/</code> as tables</li>
-</ul></td></tr>
-</tbody></table></div>
-<h3>Metadata sync</h3>
-<ul>
-<li>A background process reads the Delta logs under <code>/Tables</code> and keeps the SQL metadata current: new/dropped tables, data changes, schema changes. There can be a <strong>short lag</strong> – a table created by a Spark job may not be visible for a brief time.</li>
-<li>Force a sync with the <strong>Refresh</strong> button in the endpoint's Explorer, the <em>Refresh SQL analytics endpoint metadata</em> REST API, or the pipeline <em>Refresh SQL analytics endpoint</em> activity (common after a load, before reports run).</li>
-<li><strong>New metadata sync (preview, 2026)</strong>: enabled per workspace (Workspace settings → Warehouse settings), applies to <em>new</em> endpoints, keeps data queryable within seconds and adds <code>sys.sp_dw_refresh_ext_table</code> for per-table refresh. T-SQL time travel on SQL analytics endpoints requires it.</li>
-<li>Delta types map to SQL types: <code>STRING</code> → <code>varchar(8000)</code> (UTF-8 BIN2 collation), <code>TIMESTAMP</code> → <code>datetime2</code>, <code>DOUBLE</code> → <code>float</code>, <code>LONG</code> → <code>bigint</code>. Columns with unsupported types aren't shown.</li>
-</ul>
-<div class="exam">"Analysts must create reusable views over lakehouse tables" → SQL analytics endpoint (read-only data, but views/functions/procedures/security objects allowed). "Analysts must UPDATE rows with T-SQL" → that needs a <strong>warehouse</strong>, not the endpoint.</div>
-
-<div class="check" data-answer="3">
-<p>Analysts connect to the SQL analytics endpoint of Lakehouse1 from SSMS. Which operation succeeds?</p>
-<ul><li><code>UPDATE dbo.Sales SET Amount = 0 WHERE Id = 5</code></li><li><code>CREATE TABLE dbo.Staging (Id int)</code></li><li><code>CREATE VIEW dbo.vSales AS SELECT … FROM dbo.Sales</code></li><li><code>CREATE TABLE dbo.Sales2 AS CLONE OF dbo.Sales</code></li></ul>
-<p class="why">The endpoint is read-only for data but supports metadata objects such as views, functions, procedures and security. DML, CREATE TABLE and table clones need a Fabric warehouse.</p>
+<div class="tw"><table class="matrix">
+<tr><th>On the SQL analytics endpoint you can…</th><th>Allowed?</th></tr>
+<tr><td>SELECT (SSMS, Power BI…)</td><td>✓</td></tr>
+<tr><td>CREATE VIEW / FUNCTION / PROCEDURE</td><td>✓</td></tr>
+<tr><td>GRANT, RLS, CLS, dynamic data masking</td><td>✓</td></tr>
+<tr><td>Cross-database query (3-part names)</td><td>✓</td></tr>
+<tr><td>INSERT / UPDATE / DELETE / MERGE / COPY INTO</td><td>✗ write with Spark / pipelines</td></tr>
+<tr><td>CREATE TABLE, zero-copy clone</td><td>✗ needs a warehouse</td></tr>
+</table></div>
+<div class="vs">
+  <div><h4>🏠 Managed table</h4><ul><li><code>saveAsTable("sales")</code>, no path</li><li>Data under Tables/</li><li><b>DROP</b> deletes metadata <b>and files</b></li></ul></div>
+  <div class="vsmark">VS</div>
+  <div><h4>🔗 External table</h4><ul><li><code>.option("path", "Files/…")</code></li><li>Data where you point</li><li><b>DROP</b> removes metadata only; files stay</li></ul></div>
 </div>
-
-<h2>Delta Lake fundamentals</h2>
-<p>Delta Lake is the open table format used by every Fabric engine (Spark, warehouse, SQL endpoint, Direct Lake, KQL OneLake availability). A Delta table = Parquet data files + a <strong>transaction log</strong> in <code>_delta_log/</code>.</p>
-<h3>Transaction log &amp; ACID</h3>
+<div class="check" data-answer="3"><p>Analysts connect to Lakehouse1's SQL analytics endpoint from SSMS. Which statement succeeds?</p><ul><li>UPDATE dbo.Sales SET Amount = 0 WHERE Id = 5</li><li>CREATE TABLE dbo.Staging (Id int)</li><li>CREATE VIEW dbo.vSales AS SELECT … FROM dbo.Sales</li><li>CREATE TABLE dbo.Sales2 AS CLONE OF dbo.Sales</li></ul><p class="why">Read-only for data, but metadata objects (views, functions, procedures, security) are allowed. DML, CREATE TABLE and clones need a warehouse.</p></div>
+<details><summary>Deep dive: schemas, metadata sync, shortcuts</summary>
 <ul>
-<li>Each commit writes an ordered JSON file (<code>00000000000000000000.json</code>, <code>…01.json</code> …) listing files <em>added</em> and <em>removed</em>, plus metadata and commit info. Periodic <strong>checkpoint</strong> Parquet files summarise the log so readers don't replay every JSON.</li>
-<li><strong>Atomicity</strong>: a write is visible only when its commit file is written; failed jobs leave no partial data. <strong>Isolation</strong>: readers see a consistent snapshot (a specific table version).</li>
-<li><strong>Optimistic concurrency</strong>: concurrent writers both prepare files; the log serialises commits. If the second writer's changes conflict with what the first committed (e.g. same files), it fails with a concurrency exception and can be <strong>retried</strong>. Appends rarely conflict.</li>
-<li>Updates/deletes rewrite files (copy-on-write) unless <strong>deletion vectors</strong> are enabled: they mark rows as deleted without rewriting whole files, speeding up DELETE/UPDATE/MERGE; OPTIMIZE (or the maintenance option to purge deletion vectors) later materialises the changes.</li>
-</ul>
-<h3>Time travel</h3>
-<pre><code>-- Spark SQL
-DESCRIBE HISTORY sales;                               -- versions, operations, timestamps
+<li><b>Lakehouse schemas</b> are on by default in the portal (REST API: <code>"enableSchemas": true</code>). <code>dbo</code> always exists and can't be removed; <code>saveAsTable("marketing.products")</code> writes to schema marketing.</li>
+<li>Spark four-part name <code>workspace.lakehouse.schema.table</code> enables cross-workspace joins (non-schema: <code>workspace.lakehouse.table</code>). Schema shortcuts map a whole schema; schemas enable schema-level security and are required by materialized lake views.</li>
+<li>Non-schema lakehouses can't be converted in place. In a notebook, the default lakehouse must be schema-enabled (or none) to use schemas. Schema-enabled lakehouses don't support external table metadata over ADLS directly: use shortcuts.</li>
+<li>A shortcut under Tables/ pointing to a Delta table appears as a table; under Files/ it's just a folder. External tables are not discovered by the endpoint unless the Delta folder is under Tables/.</li>
+<li><b>Metadata sync</b>: a background process reads Delta logs; short lag possible. Force it: Explorer <i>Refresh</i>, the <i>Refresh SQL analytics endpoint metadata</i> REST API, or the pipeline activity. New metadata sync (preview, per workspace) adds <code>sys.sp_dw_refresh_ext_table</code> and is required for T-SQL time travel on endpoints.</li>
+<li>Type mapping: STRING → varchar(8000) (UTF-8 BIN2), TIMESTAMP → datetime2, DOUBLE → float, LONG → bigint; unsupported types are hidden.</li>
+</ul></details>
+</section>
+
+<section class="lesson">
+<h2>Delta Lake: the transaction log</h2>
+<p class="idea">Every write adds a commit to <code>_delta_log</code>; a version is just a list of active Parquet files.</p>
+<div class="sim">
+  <div class="wtitle">Delta log simulator</div>
+  <div class="p05-btns">
+    <button id="p05-ins">➕ INSERT</button><button id="p05-upd">✏️ UPDATE</button><button id="p05-del">🗑️ DELETE</button>
+    <button id="p05-opt">🧩 OPTIMIZE</button><button id="p05-vac">🧹 VACUUM (7 days)</button><button id="p05-wait">⏩ +3 days</button><button id="p05-rst">↺ Reset</button>
+  </div>
+  <div class="p05-grid">
+    <div><div class="p05-h">_delta_log · click a version to time travel</div><div class="p05-vers" id="p05-vers"></div></div>
+    <div><div class="p05-h" id="p05-day"></div><div class="p05-files" id="p05-files"></div>
+      <div class="p05-legend">🟩 active in latest version · ⬜ dashed = removed from log, still on disk · 🟥 deleted by VACUUM · outlined = read by the selected version</div>
+      <div class="out" id="p05-out"></div></div>
+  </div>
+</div>
+<script>
+(function () {
+  var $ = function (id) { return document.getElementById(id); };
+  var cities = ['Oslo', 'Lyon', 'Graz', 'Porto', 'Turku', 'Ghent', 'Bern', 'Riga'];
+  var files, versions, day, nf, nid, sel, msg;
+  function byN(n) { for (var i = 0; i < files.length; i++) if (files[i].n === n) return files[i]; }
+  function latest() { return versions.length ? versions[versions.length - 1].files : []; }
+  function mk(rows) { var f = { n: ++nf, rows: rows, rem: null, gone: false }; files.push(f); return f.n; }
+  function commit(op, add, rem) {
+    rem.forEach(function (n) { byN(n).rem = day; });
+    var cur = latest().filter(function (n) { return rem.indexOf(n) < 0; }).concat(add);
+    versions.push({ op: op, add: add.length, rem: rem.length, files: cur });
+    sel = versions.length - 1;
+  }
+  function row() { var r = { id: nid++, c: cities[(nid * 3) % cities.length] }; return r; }
+  function reset() { files = []; versions = []; day = 0; nf = -1; nid = 1; msg = ''; commit('CREATE + WRITE', [mk([row(), row()])], []); render(); }
+  function act(op) {
+    var cur = latest();
+    if (op === 'ins') { commit('WRITE (append)', [mk([row(), row()])], []); msg = 'Append = a new file + a new commit. Old files untouched.'; }
+    else if (op === 'upd' || op === 'del') {
+      if (!cur.length) { msg = 'Table is empty: insert first.'; }
+      else {
+        var f = byN(cur[cur.length - 1]), rows = f.rows.map(function (r) { return { id: r.id, c: r.c }; });
+        if (op === 'upd') { rows[0].c = cities[(rows[0].id + day + versions.length) % cities.length]; commit('UPDATE', [mk(rows)], [f.n]); msg = 'Copy-on-write: the whole file is rewritten; the old file is only <i>marked removed</i>.'; }
+        else { rows.shift(); commit('DELETE', rows.length ? [mk(rows)] : [], [f.n]); msg = 'DELETE also rewrites (or drops) the file; old file stays on disk for time travel.'; }
+      }
+    }
+    else if (op === 'opt') {
+      if (cur.length < 2) { msg = 'Nothing to compact: only ' + cur.length + ' active file.'; }
+      else { var all = []; cur.forEach(function (n) { all = all.concat(byN(n).rows); }); commit('OPTIMIZE', [mk(all)], cur.slice()); msg = 'OPTIMIZE: ' + cur.length + ' small files → 1 big file. Same data, new version. Old files NOT deleted.'; }
+    }
+    else if (op === 'vac') {
+      var k = 0; files.forEach(function (f) { if (f.rem !== null && !f.gone && day - f.rem >= 7) { f.gone = true; k++; } });
+      msg = k ? '🧹 VACUUM physically deleted ' + k + ' file(s) removed ≥ 7 days ago. Current data unchanged.' : 'VACUUM deleted nothing: no removed file is older than 7 days yet. Try ⏩.';
+    }
+    else if (op === 'wait') { day += 3; msg = 'Time passes…'; }
+    render();
+  }
+  function render() {
+    var vh = '';
+    versions.forEach(function (v, i) {
+      vh += '<button data-v="' + i + '" class="' + (i === sel ? 'on' : '') + '">v' + i + ' · ' + v.op + ' <span style="color:var(--ok)">+' + v.add + '</span> <span style="color:var(--bad)">−' + v.rem + '</span></button>';
+    });
+    $('p05-vers').innerHTML = vh;
+    var cur = latest(), selFiles = versions[sel].files, fh = '';
+    files.forEach(function (f) {
+      var cls = f.gone ? 'gone' : (cur.indexOf(f.n) >= 0 ? '' : 'rem');
+      if (selFiles.indexOf(f.n) >= 0) cls += ' inv';
+      fh += '<span class="p05-f ' + cls + '">part-' + ('000' + f.n).slice(-4) + '.parquet · ' + f.rows.length + ' rows</span>';
+    });
+    $('p05-files').innerHTML = fh;
+    $('p05-day').textContent = '📅 Day ' + day + ' · Parquet files on disk';
+    var broken = selFiles.some(function (n) { return byN(n).gone; }), out;
+    if (broken) out = '<span class="badge bad">Time travel fails</span> <code>VERSION AS OF ' + sel + '</code> needs files that VACUUM deleted.';
+    else {
+      var rows = []; selFiles.forEach(function (n) { rows = rows.concat(byN(n).rows); });
+      out = '<span class="badge ' + (sel === versions.length - 1 ? 'ok' : 'warn') + '">' + (sel === versions.length - 1 ? 'Current version' : 'Time travel: VERSION AS OF ' + sel) + '</span> reads ' + selFiles.length + ' file(s):<div class="p05-rows">' +
+        (rows.length ? rows.map(function (r) { return '<span>#' + r.id + ' ' + r.c + '</span>'; }).join('') : '<span>(empty)</span>') + '</div>';
+    }
+    $('p05-out').innerHTML = (msg ? '<div>' + msg + '</div>' : '') + out;
+  }
+  $('p05-vers').addEventListener('click', function (e) { var b = e.target.closest('button[data-v]'); if (!b) return; sel = +b.getAttribute('data-v'); msg = ''; render(); });
+  ['ins', 'upd', 'del', 'opt', 'vac', 'wait'].forEach(function (k) { $('p05-' + k).addEventListener('click', function () { act(k); }); });
+  $('p05-rst').addEventListener('click', reset);
+  reset();
+})();
+</script>
+<p>Try: INSERT ×3 → OPTIMIZE → VACUUM → ⏩⏩⏩ → VACUUM → click v0.</p>
+<div class="tabset">
+  <section data-tab="⏪ Time travel">
+<pre><code>DESCRIBE HISTORY sales;                      -- versions + operations
 SELECT * FROM sales VERSION AS OF 12;
 SELECT * FROM sales TIMESTAMP AS OF '2026-11-03 08:00:00';
-RESTORE TABLE sales TO VERSION AS OF 12;              -- roll the table back
-
-# PySpark
-df = spark.read.format("delta").option("versionAsOf", 12).load("Tables/sales")
-df = spark.read.option("timestampAsOf", "2026-11-03").table("sales")</code></pre>
-<p>Time travel works only while the old data files still exist – <strong>VACUUM</strong> removes files older than the retention threshold, which ends time travel to those versions.</p>
-<h3>Schema enforcement &amp; evolution</h3>
+RESTORE TABLE sales TO VERSION AS OF 12;     -- roll back</code></pre>
+    <p>PySpark: <code>.option("versionAsOf", 12)</code> or <code>.option("timestampAsOf", "2026-11-03")</code>. Works only while old files exist.</p>
+  </section>
+  <section data-tab="🧱 Schema enforcement">
+    <ul><li>Writes with mismatching columns/types <b>fail</b> by default.</li>
+    <li><code>mergeSchema = true</code> → add new columns (old rows get NULL).</li>
+    <li><code>overwriteSchema = true</code> + overwrite → replace the schema.</li></ul>
+  </section>
+  <section data-tab="👥 Concurrency">
+    <ul><li><b>Atomic</b>: visible only once the commit file exists.</li>
+    <li><b>Optimistic</b>: a conflicting second writer fails and retries; appends rarely conflict.</li>
+    <li>Readers always see one consistent version.</li></ul>
+  </section>
+</div>
+<div class="check" data-answer="2"><p>A daily append fails: the source added a column <code>discount_code</code>. Existing data must stay. What do you do?</p><ul><li>Switch to mode("overwrite")</li><li>Add .option("mergeSchema", "true")</li><li>Drop and recreate the table</li><li>Cast discount_code to string</li></ul><p class="why">mergeSchema allows evolution: new column added, old rows NULL. Overwrite/drop lose data.</p></div>
+<div class="check" data-answer="1"><p>Two hours ago a notebook wrongly deleted rows from Orders. VACUUM hasn't run since. Least effort to see the old data?</p><ul><li>VERSION AS OF / TIMESTAMP AS OF</li><li>Restore the workspace from backup</li><li>Re-ingest bronze files</li><li>Create a warehouse restore point</li></ul><p class="why">Delta time travel reads the earlier version; RESTORE TABLE can roll back. Restore points are a warehouse feature.</p></div>
+<details><summary>Deep dive: log files, checkpoints, deletion vectors</summary>
 <ul>
-<li><strong>Schema enforcement</strong> (on by default): a write whose columns or types don't match the table fails – protecting the table from bad data.</li>
-<li><strong>Schema evolution</strong> must be requested explicitly:
-<ul><li><code>.option("mergeSchema", "true")</code> – adds new columns (existing rows get NULL). Use for an append that brings a new column.</li>
-<li><code>.option("overwriteSchema", "true")</code> with <code>mode("overwrite")</code> – replaces the schema (e.g. type changes, dropped columns).</li></ul></li>
-</ul>
-<pre><code>(df.write.format("delta")
-   .mode("append")
-   .option("mergeSchema", "true")      # accept the new discount_code column
-   .saveAsTable("sales"))</code></pre>
-<h3>MERGE (upsert)</h3>
-<p><code>MERGE</code> matches source rows to target rows on a key and performs insert, update and delete in a <strong>single atomic, set-based operation</strong> – the tool for upserts, CDC application (including soft/hard deletes) and SCD logic.</p>
+<li>Commits are ordered JSON files (<code>00000000000000000000.json</code>…) listing added/removed files + metadata; periodic checkpoint Parquet files summarise the log.</li>
+<li><b>Deletion vectors</b> mark rows deleted without rewriting whole files (faster DELETE/UPDATE/MERGE); OPTIMIZE or "purge deletion vectors" later materialises them.</li>
+<li>Delta is the format every Fabric engine reads: Spark, warehouse, SQL endpoint, Direct Lake, KQL OneLake availability.</li>
+</ul></details>
+</section>
+
+<section class="lesson">
+<h2>Keep Delta tables fast</h2>
+<p class="idea">Many small files = slow reads. Compact them (OPTIMIZE), then clean up (VACUUM).</p>
+<div class="sim">
+  <div class="wtitle">Small files vs OPTIMIZE</div>
+  <div class="p05-btns"><button id="p05-mb">📥 10 micro-batches</button><button id="p05-o2">🧩 OPTIMIZE</button><button id="p05-v2">🧹 VACUUM</button><button id="p05-r2">↺ Reset</button></div>
+  <div class="p05-tiles" id="p05-tiles"></div>
+  <div class="out" id="p05-o2out"></div>
+</div>
+<script>
+(function () {
+  var $ = function (id) { return document.getElementById(id); };
+  var small, big, orph;
+  function draw(note) {
+    var h = '';
+    for (var i = 0; i < big; i++) h += '<i class="big" title="compacted ~1 GB file"></i>';
+    for (i = 0; i < small; i++) h += '<i title="tiny 2 MB file"></i>';
+    for (i = 0; i < Math.min(orph, 300); i++) h += '<i class="orph" title="orphaned (removed from log)"></i>';
+    $('p05-tiles').innerHTML = h || '<span class="muted">empty table</span>';
+    var active = small + big, cost = Math.min(100, active * 1.2 + 4);
+    $('p05-o2out').innerHTML = (note ? note + '<br>' : '') + 'Active files: <b>' + active + '</b> · orphaned on disk: <b>' + orph + '</b><br>Read overhead<div class="p05-bar" style="width:' + cost + '%"></div>';
+  }
+  function reset() { small = 40; big = 0; orph = 0; draw('Each micro-batch writes ~8 tiny files.'); }
+  $('p05-mb').onclick = function () { small += 80; draw('More tiny files: every reader opens all of them. SQL endpoint sync and Direct Lake slow down.'); };
+  $('p05-o2').onclick = function () { if (!small) return draw('Nothing to compact.'); orph += small; big += Math.max(1, Math.round(small / 80)); small = 0; draw('Compacted into big files. Old files are only <i>marked removed</i>: still on disk.'); };
+  $('p05-v2').onclick = function () { var k = orph; orph = 0; draw(k ? 'VACUUM deleted ' + k + ' orphaned files (once older than retention).' : 'Nothing to vacuum: run OPTIMIZE first.'); };
+  $('p05-r2').onclick = reset; reset();
+})();
+</script>
+<div class="icards" data-hint="Click a tool for details.">
+  <div class="icard" data-title="OPTIMIZE" data-info="Bin compaction: rewrites many small files into fewer large ones. Can target partitions: OPTIMIZE sales WHERE OrderYear = 2026 (partition columns only). Never deletes files itself."><div class="i">🧩</div><h4>OPTIMIZE</h4><p>Compact small files</p></div>
+  <div class="icard" data-title="V-Order" data-info="Write-time Parquet sorting + encoding that makes Direct Lake and SQL reads much faster. ~15% slower writes, up to ~50% better compression. OFF for Spark in new workspaces (writeHeavy profile); ON by default in the warehouse. Affects future writes only: rewrite with OPTIMIZE … VORDER."><div class="i">⚡</div><h4>V-Order</h4><p>Faster reads for Direct Lake / SQL</p></div>
+  <div class="icard" data-title="Z-Order" data-info="OPTIMIZE sales ZORDER BY (CustomerID): co-locates similar values so min/max file stats allow data skipping. Use for high-cardinality columns that queries filter on. Liquid clustering (CLUSTER BY) is the flexible newer alternative."><div class="i">🎯</div><h4>Z-Order</h4><p>Skip files on filter columns</p></div>
+  <div class="icard" data-title="VACUUM" data-info="Deletes files no longer referenced by the log AND older than retention: default 7 days (168 h). Below 7 days is blocked unless spark.databricks.delta.retentionDurationCheck.enabled=false. Ends time travel to older versions."><div class="i">🧹</div><h4>VACUUM</h4><p>Delete unreferenced old files</p></div>
+  <div class="icard" data-title="Optimize write" data-info="Pre-write shuffle producing fewer, larger files (~bin size). writeHeavy enables it for partitioned tables (128 MB bins); readHeavyForPBI uses 1 GB bins."><div class="i">📦</div><h4>Optimize write</h4><p>Fewer files at write time</p></div>
+  <div class="icard" data-title="Auto compaction" data-info="After a successful write, compacts small files synchronously if a threshold is exceeded. Setting: spark.databricks.delta.autoCompact.enabled. Reduces the need for manual OPTIMIZE."><div class="i">🔁</div><h4>Auto compaction</h4><p>Compact after each write</p></div>
+</div>
+<div class="stats">
+  <div><b>7 days</b><span>default VACUUM retention</span></div>
+  <div><b>OFF</b><span>Spark V-Order in new workspaces</span></div>
+  <div><b>~15%</b><span>slower writes with V-Order</span></div>
+  <div><b>≥ 1 GB</b><span>data per partition (rule of thumb)</span></div>
+</div>
+<div class="remember"><b>"Compact, then clean."</b> OPTIMIZE first (makes orphans), VACUUM second (deletes orphans).</div>
+<div class="match" data-task="Match each symptom to the fix.">
+<dl>
+<dt>60,000 files of 50 KB after micro-batches</dt><dd>OPTIMIZE (+ optimize write / auto compaction)</dd>
+<dt>Filter on CustomerID scans nearly all files</dt><dd>Z-Order or liquid clustering on CustomerID</dd>
+<dt>Gold table for Direct Lake, read constantly</dt><dd>Enable V-Order and rewrite files</dd>
+<dt>Storage grows with unreferenced old files</dt><dd>VACUUM with default retention</dd>
+<dt>1,800 day-level partitions with tiny files</dt><dd>Partition by month/year or cluster, then compact</dd>
+</dl></div>
+<div class="check" data-answer="4"><p>A 2026 workspace writes gold tables with default Spark settings. Direct Lake reports are slow; tables are rarely written. Best fix?</p><ul><li>VACUUM with 0 hours retention</li><li>Partition by CustomerID</li><li>Disable optimize write</li><li>Enable V-Order and rewrite, e.g. OPTIMIZE … VORDER</li></ul><p class="why">New workspaces use writeHeavy (V-Order off). Enable it (table property, session or readHeavyForPBI) and rewrite existing files.</p></div>
+<div class="check" data-answer="2"><p>Correct maintenance sequence for a heavily appended Delta table?</p><ul><li>VACUUM, then OPTIMIZE</li><li>OPTIMIZE, then VACUUM with appropriate retention</li><li>VACUUM RETAIN 0 HOURS after every load</li><li>OPTIMIZE alone deletes old files</li></ul><p class="why">OPTIMIZE leaves old files unreferenced; VACUUM removes them after retention.</p></div>
+<details><summary>Deep dive: V-Order controls, partitioning, running maintenance</summary>
+<pre><code>SET spark.sql.parquet.vorder.default = TRUE;                                     -- session
+ALTER TABLE gold.fact_sales SET TBLPROPERTIES ("delta.parquet.vorder.enabled" = "true"); -- table
+OPTIMIZE gold.fact_sales ZORDER BY (CustomerID) VORDER;                          -- rewrite existing
+df.write.option("parquet.vorder.enabled", "true").saveAsTable("gold.fact_sales") # per write
+spark.conf.set("spark.fabric.resourceProfile", "readHeavyForPBI")               # profile
+VACUUM sales RETAIN 240 HOURS;                                                   -- keep 10 days</code></pre>
+<ul>
+<li>Profiles: writeHeavy (default, V-Order off), readHeavyForPBI (V-Order on, 1 GB bins), readHeavyForSpark, custom. Warehouse V-Order can only be disabled at warehouse level, irreversibly.</li>
+<li>Partition only large tables on low-cardinality filter columns (year, month, region). Pruning skips folders; Z-Order/V-Order help inside partitions.</li>
+<li><code>.option("replaceWhere", "OrderDate &gt;= '2026-11-01'")</code> overwrites just one window: idempotent reloads.</li>
+<li>No-code: Lakehouse explorer → table → <b>Maintenance</b> (OPTIMIZE ± V-Order, VACUUM, purge deletion vectors), shown as TableMaintenance in Monitoring hub. Pipelines: <b>Lakehouse Maintenance</b> activity (preview), then <i>Refresh SQL analytics endpoint</i>. Also notebooks and REST API.</li>
+<li>Small files hurt: file-open overhead, slow endpoint sync, slow Direct Lake transcoding (guardrails count files), poor compression. Fix order: batch ingestion, optimize write, auto compaction, scheduled OPTIMIZE, then VACUUM.</li>
+<li>Aggressive VACUUM breaks time travel and can fail long-running readers.</li>
+</ul></details>
+</section>
+
+<section class="lesson">
+<h2>Spark notebooks</h2>
+<p class="idea">Read → transform → write Delta. PySpark and Spark SQL compile to the same plan: pick by skills.</p>
+<div class="walk">
+<pre><code>from pyspark.sql import functions as F
+df = (spark.read.format("csv")
+        .option("header", "true")
+        .schema(schema)
+        .load("Files/raw/sales/2026/*.csv"))
+clean = (df.dropDuplicates(["OrderID"])
+           .filter(F.col("Amount") &gt; 0)
+           .withColumn("OrderYear", F.year("OrderDate")))
+clean.write.mode("overwrite").saveAsTable("silver.orders")
+clean.write.mode("append").saveAsTable("silver.orders")
+clean.write.option("path", "Files/ext/orders").saveAsTable("orders_ext")
+(clean.write.mode("append")
+      .option("mergeSchema", "true")
+      .saveAsTable("silver.orders"))</code></pre>
+<ol>
+  <li data-lines="2-5">Read raw CSVs from Files/ with an <b>explicit schema</b> (no inference pass, stable types).</li>
+  <li data-lines="6-8">Transformations are <b>lazy</b>: nothing runs until an action (write, count, display).</li>
+  <li data-lines="9">Overwrite a <b>managed</b> Delta table (replace contents).</li>
+  <li data-lines="10">Append rows (default mode "error" fails if the table exists).</li>
+  <li data-lines="11">A path makes it an <b>external</b> table.</li>
+  <li data-lines="12-14">Allow a new column with schema evolution.</li>
+</ol>
+</div>
+<div class="walk">
 <pre><code>%%sql
 MERGE INTO silver.customers AS t
 USING staging_customers AS s
   ON t.CustomerID = s.CustomerID
 WHEN MATCHED AND s.IsDeleted = 1 THEN DELETE
 WHEN MATCHED THEN UPDATE SET
-     t.Name = s.Name, t.City = s.City, t.ModifiedAt = s.ModifiedAt
+     t.Name = s.Name, t.City = s.City
 WHEN NOT MATCHED AND s.IsDeleted = 0 THEN INSERT *;</code></pre>
-<pre><code># PySpark DeltaTable API
-from delta.tables import DeltaTable
-tgt = DeltaTable.forName(spark, "silver.customers")
-(tgt.alias("t")
-    .merge(src_df.alias("s"), "t.CustomerID = s.CustomerID")
-    .whenMatchedDelete(condition="s.IsDeleted = 1")
-    .whenMatchedUpdateAll()
-    .whenNotMatchedInsertAll()
-    .execute())</code></pre>
-<div class="warn">MERGE fails if more than one source row matches the same target row. <strong>Deduplicate the source first</strong> (e.g. <code>row_number()</code> over the key ordered by timestamp, keep 1) – see <a href="07-transform-data.html">Transform data</a>.</div>
-
-<div class="check" data-answer="2">
-<p>A notebook appends a daily DataFrame to the Delta table <code>sales</code>. The source adds a new column <code>discount_code</code> and the append now fails with a schema mismatch. You must keep existing data. What should you do?</p>
-<ul><li>Switch to <code>mode("overwrite")</code></li><li>Add <code>.option("mergeSchema", "true")</code> to the write</li><li>Drop the table and let the write recreate it</li><li>Cast <code>discount_code</code> to string</li></ul>
-<p class="why">Delta enforces the schema by default; <code>mergeSchema</code> explicitly allows evolution so the new column is added and old rows receive NULL. Overwrite or drop would lose data; casting doesn't remove the extra column.</p>
-</div>
-
-<div class="check" data-answer="1">
-<p>Two hours ago a notebook mistakenly deleted rows from the Delta table <code>Orders</code>. VACUUM hasn't run since. What is the least-effort way to see the data before the delete?</p>
-<ul><li>Query with <code>VERSION AS OF</code> / <code>TIMESTAMP AS OF</code></li><li>Restore the workspace from backup</li><li>Re-ingest the source files from bronze</li><li>Create a warehouse restore point</li></ul>
-<p class="why">Delta time travel reads an earlier table version while its files are still retained; <code>RESTORE TABLE</code> can then roll back. Restore points are a warehouse feature, and re-ingesting is far more work.</p>
-</div>
-
-<h2>Table maintenance: OPTIMIZE, V-Order, Z-Order, VACUUM</h2>
-<h3>The small-files problem</h3>
-<p>Every Spark write produces at least one file per output partition. Frequent micro-batches, streaming, over-partitioning or many small appends produce thousands of tiny Parquet files. Effects: more file-open and metadata overhead for every reader, slower SQL endpoint metadata sync, slower Direct Lake transcoding (and Direct Lake guardrails count <em>Parquet files</em> per table), poor compression.</p>
-<p>Fixes, in order of preference: <strong>batch the ingestion</strong>, keep <strong>optimize write</strong> on, enable <strong>auto compaction</strong> where appropriate, and run scheduled <strong>OPTIMIZE</strong>, followed by <strong>VACUUM</strong>.</p>
-
-<h3>V-Order</h3>
-<ul>
-<li>A <strong>write-time</strong> optimisation of Parquet (special sorting, row-group distribution, dictionary encoding and compression) that makes reads much faster for VertiPaq-style engines – <strong>Power BI Direct Lake</strong> and the <strong>SQL engine</strong> – and also helps Spark. Files stay open-source Parquet compliant.</li>
-<li>Cost: writes are typically ~15% slower; compression can improve up to ~50%.</li>
-<li><strong>Default in new workspaces: OFF for Spark.</strong> New workspaces use the <code>writeHeavy</code> resource profile with <code>spark.sql.parquet.vorder.default=false</code>. (Older workspaces had it on.) The <strong>Fabric warehouse writes V-Order by default</strong>; it can only be disabled at warehouse level and that is irreversible.</li>
-<li>Control levels (most specific to broad): write option <code>parquet.vorder.enabled</code>; table property <code>delta.parquet.vorder.enabled</code>; session <code>spark.sql.parquet.vorder.default</code>; or switch resource profile to <code>readHeavyForPBI</code> (V-Order on, 1 GB bin size) / <code>readHeavyForSpark</code>.</li>
-<li>Changing the setting affects <strong>future writes only</strong>. To V-Order existing files, rewrite them: <code>OPTIMIZE table VORDER</code>.</li>
-<li>Use it for read-heavy gold tables feeding Direct Lake/SQL; consider leaving it off for write-heavy bronze/staging tables that are rarely queried.</li>
-</ul>
-<pre><code>%%sql
-SET spark.sql.parquet.vorder.default = TRUE;                         -- session
-ALTER TABLE gold.fact_sales SET TBLPROPERTIES ("delta.parquet.vorder.enabled" = "true");  -- table
-OPTIMIZE gold.fact_sales VORDER;                                     -- rewrite existing files
-
-# per write
-df.write.format("delta").option("parquet.vorder.enabled", "true").mode("overwrite").saveAsTable("gold.fact_sales")
-
-# resource profile for the session (environment setting takes effect unless overridden at runtime)
-spark.conf.set("spark.fabric.resourceProfile", "readHeavyForPBI")</code></pre>
-
-<h3>OPTIMIZE (bin compaction) and Z-Order</h3>
-<pre><code>%%sql
-OPTIMIZE sales;                                   -- compact small files into larger ones
-OPTIMIZE sales WHERE OrderYear = 2026;            -- only some partitions (partition columns only)
-OPTIMIZE sales ZORDER BY (CustomerID);            -- compact + co-locate values of CustomerID
-OPTIMIZE sales ZORDER BY (CustomerID) VORDER;     -- Z-Order and V-Order together</code></pre>
-<ul>
-<li>OPTIMIZE writes new, larger files and marks the small ones as removed in the log; old files remain until VACUUM.</li>
-<li><strong>Z-Order</strong> clusters rows with similar values of the chosen (high-cardinality, frequently filtered) column(s) into the same files, so min/max <strong>file statistics</strong> let readers skip files (data skipping). If a filtered column's values are spread across all files, min/max ranges overlap and almost nothing can be skipped.</li>
-<li><strong>Liquid clustering</strong> (<code>CLUSTER BY</code>) is a newer, flexible alternative to Hive-style partitioning + Z-Order: it adapts layout to clustering keys without the small-file and skew problems of over-partitioning.</li>
-</ul>
-
-<h3>VACUUM and retention</h3>
-<pre><code>%%sql
-VACUUM sales;                       -- default retention: 7 days (168 hours)
-VACUUM sales RETAIN 240 HOURS;      -- keep 10 days of history</code></pre>
-<ul>
-<li>Removes data files <strong>no longer referenced</strong> by the log <em>and</em> older than the retention threshold. Default and recommended minimum: <strong>7 days</strong>.</li>
-<li>Portal/API maintenance requests with retention under 7 days fail by default; you must set <code>spark.databricks.delta.retentionDurationCheck.enabled=false</code> in the environment to go lower.</li>
-<li>Risks of aggressive vacuuming (e.g. 1 day after every load): time travel and recovery beyond that window become impossible, and <strong>long-running readers</strong> still using old files may fail.</li>
-<li>Correct order: <strong>OPTIMIZE first</strong> (creates big files, orphans small ones), <strong>then VACUUM</strong> (deletes orphaned files once the retention allows).</li>
-</ul>
-
-<h3>Running maintenance without code</h3>
-<ul>
-<li><strong>Lakehouse explorer → table … → Maintenance</strong>: run OPTIMIZE (optionally <em>Apply V-order</em>), VACUUM with a retention threshold, and purge deletion vectors. Runs show as <code>TableMaintenance</code> in the Monitoring hub. Delta tables only.</li>
-<li><strong>Lakehouse Maintenance activity</strong> (pipelines, preview) for scheduled maintenance chained after loads, optionally followed by a <em>Refresh SQL analytics endpoint</em> activity.</li>
-<li>Also: notebooks (code above) and the lakehouse REST API.</li>
-</ul>
-
-<h3>Optimize write &amp; auto compaction</h3>
-<div class="tw"><table>
-<thead><tr><th>Feature</th><th>When it acts</th><th>Setting</th><th>Notes</th></tr></thead>
-<tbody>
-<tr><td>Optimize write</td><td>During the write (pre-write shuffle to produce fewer, larger files, ~bin size)</td><td><code>spark.databricks.delta.optimizeWrite.enabled</code>, <code>…optimizeWrite.binSize</code></td><td>Great for partitioned tables and many small appends; adds a shuffle. <code>writeHeavy</code> enables it for partitioned tables (bin 128 MB); <code>readHeavyForPBI</code> enables it with 1 GB bins.</td></tr>
-<tr><td>Auto compaction</td><td>After a successful write, compacts small files synchronously if a threshold is exceeded</td><td><code>spark.databricks.delta.autoCompact.enabled</code> (or table property <code>delta.autoOptimize.autoCompact</code>)</td><td>Reduces the need for manual OPTIMIZE on frequently appended tables.</td></tr>
-<tr><td>OPTIMIZE</td><td>On demand / scheduled</td><td>SQL command or Maintenance UI</td><td>Full control; can add Z-Order/V-Order.</td></tr>
-</tbody></table></div>
-
-<h3>Partitioning guidance</h3>
-<ul>
-<li>Partition only <strong>large</strong> tables, on <strong>low-cardinality</strong> columns that queries <strong>commonly filter</strong> on (year, month, region). Each partition should still hold substantial data (think ≥ 1 GB).</li>
-<li>Don't partition by high-cardinality columns (customer ID, timestamp, day over many years): 1,800 daily partitions with tiny files make month queries slow. Repartition by month/year or use clustering, then compact.</li>
-<li>Partition pruning skips whole folders; Z-Order/clustering/V-Order improve skipping inside partitions.</li>
-<li>Selective overwrite: <code>.option("replaceWhere", "OrderDate &gt;= '2026-11-01'")</code> rewrites just one window – an idempotent reload pattern.</li>
-</ul>
-<pre><code>(df.write.format("delta")
-   .mode("overwrite")
-   .partitionBy("OrderYear", "OrderMonth")
-   .saveAsTable("silver.orders"))</code></pre>
-
-<div class="sort" data-task="Which maintenance technique addresses each symptom or goal?">
-<ul data-bucket="OPTIMIZE (compaction)"><li>Thousands of 50 KB Parquet files after micro-batches</li><li>Slow metadata sync caused by too many small files</li></ul>
-<ul data-bucket="Z-Order / clustering"><li>Queries filter on CustomerID but scan nearly all files</li><li>Min/max file statistics overlap for the filtered column</li></ul>
-<ul data-bucket="V-Order"><li>Direct Lake gold table is read constantly and rarely written</li><li>Improve VertiPaq-style compression and read speed</li></ul>
-<ul data-bucket="VACUUM"><li>Storage keeps growing with unreferenced old files</li><li>Remove files orphaned by last week's compaction</li></ul>
-</div>
-
-<div class="check" data-answer="4">
-<p>A workspace created in 2026 writes gold tables with default Spark settings. Direct Lake reports are slower than expected; the tables are rarely written but read constantly. What should you do?</p>
-<ul><li>Run VACUUM with 0 hours retention</li><li>Partition the gold tables by CustomerID</li><li>Disable optimize write</li><li>Enable V-Order for the gold tables and rewrite the files, e.g. <code>OPTIMIZE … VORDER</code></li></ul>
-<p class="why">New workspaces use the writeHeavy profile with V-Order disabled. Enabling V-Order (table property, session setting or readHeavyForPBI profile) and rewriting existing files improves Direct Lake and SQL reads. The other options either destroy history or create small files.</p>
-</div>
-
-<div class="check" data-answer="2">
-<p>Which sequence of maintenance operations on a heavily appended Delta table is correct?</p>
-<ul><li>VACUUM, then OPTIMIZE</li><li>OPTIMIZE, then VACUUM with an appropriate retention</li><li>VACUUM RETAIN 0 HOURS after every load</li><li>OPTIMIZE alone deletes the old small files</li></ul>
-<p class="why">OPTIMIZE writes compacted files and leaves the old ones unreferenced; VACUUM then removes unreferenced files older than the retention period. OPTIMIZE never deletes files itself.</p>
-</div>
-
-<h2>Spark notebooks: PySpark &amp; Spark SQL</h2>
-<p>Notebooks support PySpark (Python), Spark SQL, Scala and SparkR, plus <strong>Python notebooks</strong> (single-node, no Spark – cheap for small data with pandas/polars/DuckDB). Attach a <strong>default lakehouse</strong> so relative paths (<code>Files/…</code>, <code>Tables/…</code>) and unqualified table names resolve to it. Each cell can switch language with a magic: <code>%%pyspark</code>, <code>%%sql</code>, <code>%%spark</code> (Scala), <code>%%sparkr</code>, <code>%%configure</code> (session config), <code>%run</code> (inline another notebook).</p>
-
-<h3>Reading data</h3>
-<pre><code>from pyspark.sql.types import StructType, StructField, IntegerType, StringType, DecimalType, DateType
-
-schema = StructType([
-    StructField("OrderID",    IntegerType(), False),
-    StructField("CustomerID", StringType(),  True),
-    StructField("OrderDate",  DateType(),    True),
-    StructField("Amount",     DecimalType(18, 2), True)
-])
-
-# CSV with an explicit schema (no inference pass, stable types between runs)
-df = (spark.read.format("csv")
-        .option("header", "true")
-        .schema(schema)
-        .load("Files/raw/sales/2026/*.csv"))
-
-# Parquet / JSON
-pq  = spark.read.parquet("Files/raw/products/")
-js  = spark.read.option("multiline", "true").json("Files/raw/api/orders.json")
-
-# Delta table in the default lakehouse, or by full OneLake path
-cust = spark.read.table("silver.customers")
-abfs = spark.read.format("delta").load(
-    "abfss://Sales@onelake.dfs.fabric.microsoft.com/LH_Silver.Lakehouse/Tables/customers")
-
-display(df.limit(100))   # rich table/chart output in the notebook</code></pre>
-<div class="tip"><code>inferSchema=true</code> costs an extra pass over the data and can change types between runs (e.g. a column that is all digits today but has a letter tomorrow). For production, supply an explicit schema.</div>
-
-<h3>Transforming and writing</h3>
-<pre><code>from pyspark.sql import functions as F
-
-clean = (df
-    .dropDuplicates(["OrderID"])
-    .filter(F.col("Amount") &gt; 0)
-    .withColumn("OrderYear", F.year("OrderDate"))
-    .withColumn("LoadTs", F.current_timestamp()))
-
-# Managed Delta table (format defaults to delta in Fabric)
-clean.write.mode("overwrite").saveAsTable("silver.orders")   # replace contents
-clean.write.mode("append").saveAsTable("silver.orders")      # add rows
-# Other modes: "error"/"errorifexists" (default – fail if exists), "ignore"
-
-# Write to a path in Files (e.g. a non-table export)
-clean.write.mode("overwrite").parquet("Files/export/orders")</code></pre>
-
-<h3>Spark SQL in a notebook</h3>
-<pre><code>%%sql
-CREATE TABLE IF NOT EXISTS gold.dim_product
-USING DELTA
-AS SELECT ProductID, ProductName, Category FROM silver.products;
-
--- CTAS / INSERT
-INSERT INTO gold.fact_sales
-SELECT o.OrderID, p.ProductKey, o.Amount
-FROM silver.orders o JOIN gold.dim_product p ON o.ProductID = p.ProductID;
-
--- temp views bridge PySpark and SQL
--- (in a PySpark cell: clean.createOrReplaceTempView("v_clean"))
-SELECT OrderYear, SUM(Amount) AS Total FROM v_clean GROUP BY OrderYear;</code></pre>
-<p>PySpark DataFrame code and Spark SQL compile through the same <strong>Catalyst optimizer</strong> to the same physical plans – choose by team skills and readability, not performance.</p>
-
-<h3>Spark performance basics the exam likes</h3>
-<ul>
-<li><strong>Lazy evaluation</strong>: transformations (select, filter, join) only build a plan; execution starts on an <strong>action</strong> (write, count, collect, display).</li>
-<li><strong>Cache/persist</strong> a DataFrame reused by several actions (e.g. three aggregations written from one cleansed DataFrame) to avoid recomputing the source.</li>
-<li><strong>Broadcast join</strong>: <code>fact.join(F.broadcast(dim), "ProductID")</code> ships a small table to every executor – no shuffle of the large table.</li>
-<li><strong>Data skew</strong>: one task running far longer than the others in the Spark UI = one key holds a disproportionate share of rows (salting, AQE skew-join handling).</li>
-<li>Number of output files = number of output partitions; <code>repartition</code>/<code>coalesce</code> and optimize write influence it.</li>
-<li>Diagnose with the <strong>Spark UI</strong> (jobs, stages, tasks, shuffle), reachable from the Monitoring hub or the notebook run.</li>
-</ul>
-
-<h3>notebookutils (formerly mssparkutils)</h3>
-<pre><code># notebookutils is built in; mssparkutils remains as a legacy alias
-notebookutils.fs.ls("Files/raw")                        # list files
-notebookutils.fs.cp("Files/raw/a.csv", "Files/archive/a.csv")
-notebookutils.fs.mkdirs("Files/archive/2026-11-04")
-
-# Run another notebook with a timeout (seconds) and parameters; returns its exit value
-result = notebookutils.notebook.run("NB_Load_Customers", 600, {"load_date": "2026-11-04"})
-
-# Run several notebooks in parallel / as a DAG
-notebookutils.notebook.runMultiple(["NB_Dim_Customer", "NB_Dim_Product"])
-
-notebookutils.notebook.exit("rows=1250")                # value returned to caller / pipeline
-token = notebookutils.credentials.getToken("storage")   # Entra token for a resource
-secret = notebookutils.credentials.getSecret("https://myvault.vault.azure.net/", "api-key")</code></pre>
-<ul>
-<li><code>%run NB_Common</code> executes another notebook <strong>inline in the same session</strong> (its functions/variables become available). <code>notebookutils.notebook.run</code> runs it as a separate execution with its own parameters and returns an exit value.</li>
-</ul>
-
-<h3>Parameters cell &amp; running from pipelines</h3>
 <ol>
-<li>Put default values in one cell, e.g. <code>load_date = "2026-01-01"</code>, and use <strong>… → Toggle parameter cell</strong> to mark it as the <strong>parameters cell</strong>.</li>
-<li>In a pipeline, add a <strong>Notebook activity</strong> and define <strong>base parameters</strong> with the same names (e.g. <code>load_date</code> = <code>@formatDateTime(pipeline().TriggerTime, 'yyyy-MM-dd')</code>).</li>
-<li>At run time Fabric injects a new cell <em>after</em> the parameters cell that overrides the defaults.</li>
-<li>Call <code>notebookutils.notebook.exit(value)</code> to return a value; downstream activities read it from the activity output (<code>exitValue</code>).</li>
-<li><strong>Raise an exception</strong> (e.g. when a duplicate check fails) to fail the Notebook activity – dependent "on success" activities (gold build, model refresh) then don't run. This is a simple data-quality gate.</li>
-</ol>
-<pre><code># parameters cell
-load_date = "2026-01-01"
-
-# later cell – data quality gate
-dups = spark.sql(f"""
-    SELECT OrderID FROM silver.orders WHERE LoadDate = '{load_date}'
-    GROUP BY OrderID HAVING COUNT(*) &gt; 1""").count()
-if dups &gt; 0:
-    raise ValueError(f"{dups} duplicate OrderID values for {load_date}")</code></pre>
-<p>Notebooks can also be scheduled directly, run by the REST API (job scheduler), or orchestrated in pipelines alongside Copy, Dataflow, Stored procedure and Semantic model refresh activities.</p>
-
-<div class="order" data-task="Order the steps to make a pipeline pass a load date into a notebook.">
-<ol>
-<li>Assign a default value such as load_date = "2026-01-01" in a notebook cell</li>
-<li>Mark that cell as the parameters cell</li>
-<li>Add a Notebook activity to the pipeline and select the notebook</li>
-<li>Define a base parameter named load_date with a dynamic expression</li>
-<li>At run time Fabric injects a cell that overrides the default</li>
-<li>The notebook calls notebookutils.notebook.exit to return a result</li>
+  <li data-lines="1">Magic switches the cell language to Spark SQL.</li>
+  <li data-lines="2-4">Match on the business key. <b>Dedupe the source first</b>: MERGE fails if 2 source rows hit one target row.</li>
+  <li data-lines="5">Apply CDC deletes.</li>
+  <li data-lines="6-7">Upsert: update changed rows.</li>
+  <li data-lines="8">Insert new rows. All in one atomic commit.</li>
 </ol>
 </div>
-
-<div class="check" data-answer="3">
-<p>A pipeline runs notebook <code>NB_Load</code> with a Notebook activity. The notebook must process only the date the pipeline passes; it contains <code>load_date = "2026-01-01"</code>. What should you do?</p>
-<ul><li>Read the date from an environment variable</li><li>Use <code>%run</code> in the pipeline</li><li>Mark the cell as the parameters cell and add a base parameter <code>load_date</code> to the Notebook activity</li><li>Store the date in a Files/config.json file</li></ul>
-<p class="why">Base parameters of the Notebook activity override assignments in the cell marked as the parameters cell (via an injected cell). The other approaches don't use the built-in parameter mechanism.</p>
+<div class="stepper" data-task="How a pipeline passes a parameter to a notebook">
+  <section data-step="Default value"><p>📝 A cell holds <code>load_date = "2026-01-01"</code>.</p></section>
+  <section data-step="Parameters cell"><p>🏷️ … → <b>Toggle parameter cell</b> on that cell.</p></section>
+  <section data-step="Notebook activity"><p>🧩 Pipeline Notebook activity → <b>base parameter</b> <code>load_date</code> = <code>@formatDateTime(pipeline().TriggerTime,'yyyy-MM-dd')</code>.</p></section>
+  <section data-step="Injected cell"><p>💉 At run time Fabric injects a cell after the parameters cell that overrides the default.</p></section>
+  <section data-step="Return or fail"><p>↩️ <code>notebookutils.notebook.exit("rows=1250")</code> returns <i>exitValue</i>. <code>raise ValueError(…)</code> fails the activity: a data-quality gate.</p></section>
 </div>
-
-<h2>Spark compute: pools, environments, concurrency, NEE</h2>
-<div class="tw"><table>
-<thead><tr><th>Option</th><th>Key facts</th><th>Choose when</th></tr></thead>
-<tbody>
-<tr><td><strong>Starter pool</strong></td><td>Pre-warmed, Microsoft-managed, <strong>Medium</strong> nodes, session typically starts in <strong>5–10 s</strong> (best effort). Adding libraries/custom Spark properties adds 30 s–5 min personalisation. Not used with Private Link/managed VNet (on-demand 2–5 min).</td><td>Default; interactive dev; most jobs</td></tr>
-<tr><td><strong>Custom Spark pool</strong></td><td>Workspace admin creates it: choose <strong>node family &amp; size</strong> (Small 4 vCore/32 GB … XX-Large 64 vCore/512 GB), <strong>autoscale</strong> min/max nodes, <strong>dynamic executor allocation</strong>, single-node option. On-demand start ≈ 2–5 min (≈3 min typical).</td><td>Heavy jobs needing bigger/more nodes, specific sizing</td></tr>
-<tr><td><strong>Custom live pool</strong></td><td>Keeps clusters warm during a scheduled active window; with a Full-mode environment sessions start in ≈5 s with libraries preinstalled.</td><td>Predictable fast start for scheduled jobs with libraries</td></tr>
-<tr><td><strong>Environment</strong> item</td><td>Packages <strong>Spark runtime version</strong>, Spark properties (incl. resource profile, NEE), <strong>libraries</strong> (public/custom), compute settings. Attach to notebooks/Spark job definitions or set as workspace default.</td><td>Reproducible, shared configuration</td></tr>
-<tr><td><strong>High concurrency mode</strong></td><td>Several notebooks share <strong>one Spark session</strong> (same user, same default lakehouse, same environment/compute config); pipelines can share sessions via session tags. Faster start for 2nd+ notebook and lower CU use.</td><td>Many notebooks / pipeline notebooks with same config</td></tr>
-<tr><td><strong>Native Execution Engine</strong></td><td>Vectorised C++ engine (Velox + Apache Gluten) for Runtime 1.3 (Spark 3.5) and 2.0 (Spark 4.1). Enable in the environment (<em>Acceleration</em> tab) or <code>%%configure {"conf": {"spark.native.enabled": "true"}}</code>. No code changes; unsupported operators (e.g. structured streaming, JSON/XML scans) <strong>fall back automatically</strong> to JVM Spark. Plan nodes ending in <em>Transformer</em> run natively.</td><td>Heavy Parquet/Delta ETL and aggregations</td></tr>
-</tbody></table></div>
+<div class="check" data-answer="3"><p>A pipeline must pass a date to notebook NB_Load, which contains <code>load_date = "2026-01-01"</code>. What should you do?</p><ul><li>Read an environment variable</li><li>Use %run in the pipeline</li><li>Mark the cell as parameters cell + add base parameter load_date</li><li>Store the date in Files/config.json</li></ul><p class="why">Base parameters override the parameters cell through an injected cell.</p></div>
+<details><summary>Deep dive: notebookutils, magics, performance basics</summary>
 <ul>
-<li>Capacity math: <strong>1 CU = 2 Spark vCores</strong>, with a <strong>3× burst</strong> factor for Spark. F64 → 128 vCores, up to 384 with burst (e.g. 48 Medium nodes).</li>
-<li>Billing is only for active session time – not idle pool time or cluster provisioning. Sessions expire after <strong>20 minutes</strong> of inactivity by default.</li>
-<li>Workspace setting <em>Spark settings</em>: default pool, default environment, high concurrency, whether users may customise compute per item. Capacity admins can restrict pool sizes.</li>
-<li>Resource profiles (<code>spark.fabric.resourceProfile</code>): <code>writeHeavy</code> (default for new workspaces), <code>readHeavyForSpark</code>, <code>readHeavyForPBI</code>, <code>custom</code>. A runtime <code>spark.conf.set</code> overrides the environment value.</li>
-</ul>
+<li>Languages: PySpark, Spark SQL, Scala, SparkR; magics <code>%%pyspark %%sql %%spark %%sparkr %%configure</code>. Python notebooks = single node, no Spark (pandas/polars/DuckDB, cheap for small data).</li>
+<li>Attach a <b>default lakehouse</b> so <code>Files/…</code>, <code>Tables/…</code> and unqualified names resolve. Full path: <code>abfss://Sales@onelake.dfs.fabric.microsoft.com/LH_Silver.Lakehouse/Tables/customers</code>.</li>
+<li><code>notebookutils</code> (legacy alias mssparkutils): <code>fs.ls/cp/mkdirs</code>, <code>notebook.run("NB", 600, {"load_date": …})</code> (separate run, returns exit value), <code>notebook.runMultiple([...])</code> (parallel/DAG), <code>credentials.getToken / getSecret</code>.</li>
+<li><code>%run NB_Common</code> runs another notebook inline in the same session (its functions become available).</li>
+<li>Temp views bridge PySpark and SQL: <code>df.createOrReplaceTempView("v_clean")</code>. CTAS: <code>CREATE TABLE … USING DELTA AS SELECT …</code>.</li>
+<li>Performance: cache a DataFrame reused by several actions; <code>F.broadcast(dim)</code> avoids shuffling the big table; one very long task = data skew; output files = output partitions. Diagnose in the Spark UI.</li>
+<li>DeltaTable API MERGE: <code>DeltaTable.forName(spark, "silver.customers").alias("t").merge(src.alias("s"), "t.CustomerID = s.CustomerID").whenMatchedDelete("s.IsDeleted = 1").whenMatchedUpdateAll().whenNotMatchedInsertAll().execute()</code>.</li>
+<li>Notebooks can also be scheduled directly or run via REST API.</li>
+</ul></details>
+</section>
 
-<div class="check" data-answer="1">
-<p>A team wants the fastest notebook start-up for interactive development at the lowest capacity cost. Which combination fits?</p>
-<ul><li>Starter pool with high concurrency mode</li><li>A custom XX-Large pool with autoscale to 50 nodes</li><li>A new environment with 40 custom libraries</li><li>Disable the starter pool and use on-demand clusters</li></ul>
-<p class="why">Pre-warmed starter pools start in seconds; high concurrency lets several notebooks share one session, reducing consumption. Large custom pools and many libraries increase start time.</p>
+<section class="lesson">
+<h2>Spark compute</h2>
+<p class="idea">Starter pool for speed, custom pool for size, environment for reproducibility, high concurrency for cost.</p>
+<div class="tw"><table class="matrix">
+<tr><th>Option</th><th>Starts in seconds</th><th>Custom node size</th><th>Libraries preinstalled</th><th>Best for</th></tr>
+<tr><td>🚀 Starter pool</td><td>✓ 5–10 s</td><td>✗ Medium nodes</td><td>~ +30 s–5 min to add</td><td>Default, interactive dev</td></tr>
+<tr><td>🛠️ Custom pool</td><td>✗ ~2–5 min</td><td>✓ Small…XX-Large, autoscale</td><td>~ via environment</td><td>Heavy jobs (admin creates)</td></tr>
+<tr><td>🔥 Custom live pool</td><td>✓ ~5 s in window</td><td>✓</td><td>✓ Full-mode env</td><td>Scheduled jobs with libraries</td></tr>
+<tr><td>🤝 High concurrency</td><td>✓ 2nd+ notebook</td><td>~ shared session</td><td>~ same env</td><td>Many notebooks, lower CU</td></tr>
+<tr><td>🏎️ Native Execution Engine</td><td>~ n/a</td><td>~ n/a</td><td>✓ no code change</td><td>Heavy Parquet/Delta ETL</td></tr>
+</table></div>
+<div class="stats">
+  <div><b>1 CU = 2</b><span>Spark vCores</span></div>
+  <div><b>3×</b><span>Spark burst factor</span></div>
+  <div><b>F64</b><span>128 vCores, 384 with burst</span></div>
+  <div><b>20 min</b><span>idle session timeout</span></div>
 </div>
+<div class="flips">
+  <div class="flip"><div class="front">🌍 Environment item</div><div class="back">Bundles runtime version, Spark properties and libraries. Attach to notebooks or set as workspace default.</div></div>
+  <div class="flip"><div class="front">🤝 High concurrency</div><div class="back">Notebooks share one session: same user, default lakehouse and environment. Pipelines share via session tags.</div></div>
+  <div class="flip"><div class="front">🏎️ Native Execution Engine</div><div class="back">Vectorised C++ (Velox + Gluten). Unsupported operators fall back to JVM Spark automatically.</div></div>
+  <div class="flip"><div class="front">🎛️ Resource profile</div><div class="back">writeHeavy (default), readHeavyForSpark, readHeavyForPBI, custom. Runtime spark.conf.set overrides the environment.</div></div>
+  <div class="flip"><div class="front">💰 What do you pay for?</div><div class="back">Active session time only: not idle pool time or provisioning.</div></div>
+  </div>
+<div class="check" data-answer="1"><p>Fastest notebook start-up for interactive development at the lowest capacity cost?</p><ul><li>Starter pool with high concurrency mode</li><li>Custom XX-Large pool autoscaling to 50 nodes</li><li>New environment with 40 custom libraries</li><li>Disable the starter pool, use on-demand clusters</li></ul><p class="why">Pre-warmed starter pools start in seconds; high concurrency shares one session.</p></div>
+<details><summary>Deep dive: compute details</summary>
+<ul>
+<li>Node sizes: Small 4 vCore/32 GB … XX-Large 64 vCore/512 GB; dynamic executor allocation; single-node option. Private Link / managed VNet → no starter pool (on-demand 2–5 min).</li>
+<li>NEE supports Runtime 1.3 (Spark 3.5) and 2.0 (Spark 4.1). Enable in environment (Acceleration) or <code>%%configure {"conf": {"spark.native.enabled": "true"}}</code>. Falls back for streaming, JSON/XML scans; plan nodes ending in <i>Transformer</i> run natively.</li>
+<li>Workspace <b>Spark settings</b>: default pool, default environment, high concurrency, per-item customisation.</li>
+</ul></details>
+</section>
 
-<div class="match" data-task="Match each Spark compute feature to what it does.">
-<dl>
-<dt>Starter pool</dt><dd>Pre-warmed Medium-node clusters that start in seconds</dd>
-<dt>Custom Spark pool</dt><dd>Admin-defined node size, autoscale range and dynamic allocation</dd>
-<dt>Environment</dt><dd>Bundles runtime version, Spark properties and libraries for reproducible runs</dd>
-<dt>High concurrency</dt><dd>Lets multiple notebooks share one Spark session</dd>
-<dt>Native Execution Engine</dt><dd>Vectorised C++ execution with automatic fallback to JVM Spark</dd>
-<dt>Resource profile</dt><dd>Predefined config set such as writeHeavy or readHeavyForPBI</dd>
-</dl>
+<section class="lesson">
+<h2>Medallion &amp; load patterns</h2>
+<p class="idea">Bronze keeps raw history, silver cleans once, gold is shaped for reports.</p>
+<div class="flow" data-hint="Click a layer.">
+  <div data-title="Sources" data-info="Databases, APIs, files, CDC streams."><span class="fi">🛢️</span>Sources<small>DBs, APIs, files</small></div>
+  <div data-title="Bronze" data-info="Data exactly as received + load metadata. Files/raw/&lt;system&gt;/&lt;entity&gt;/&lt;date&gt;, shortcuts, mirroring, append-only Delta. Immutable: lets you rebuild silver/gold after a defect; audit trail."><span class="fi">🥉</span>Bronze<small>raw, append-only</small></div>
+  <div data-title="Silver" data-info="Typed, deduplicated, conformed; updates/deletes applied (MERGE); often SCD history. Apply each cleansing rule ONCE here so every consumer agrees."><span class="fi">🥈</span>Silver<small>clean, deduped</small></div>
+  <div data-title="Gold" data-info="Star schemas, aggregates, materialised calculated columns. V-Ordered lakehouse Delta or warehouse tables (if the team prefers T-SQL). Materialized lake views can declare silver/gold in Spark SQL."><span class="fi">🥇</span>Gold<small>star schema</small></div>
+  <div data-title="BI" data-info="Semantic models (Direct Lake), reports, SQL users."><span class="fi">📊</span>BI<small>Direct Lake</small></div>
 </div>
-
-<h2>Medallion architecture</h2>
-<div class="diagram">
-<svg viewBox="0 0 760 170" role="img" aria-label="Medallion architecture: sources to bronze, silver, gold, consumers">
-<g fill="none" stroke="currentColor" stroke-width="1.5">
-<rect x="10" y="50" width="120" height="70" rx="8"/>
-<rect x="170" y="50" width="140" height="70" rx="8"/>
-<rect x="350" y="50" width="140" height="70" rx="8"/>
-<rect x="530" y="50" width="140" height="70" rx="8"/>
-<path d="M130 85 H165 M310 85 H345 M490 85 H525 M670 85 H705"/>
-<path d="M160 80 l5 5 l-5 5 M340 80 l5 5 l-5 5 M520 80 l5 5 l-5 5 M700 80 l5 5 l-5 5"/>
-</g>
-<g fill="currentColor" font-size="13" text-anchor="middle" font-family="sans-serif">
-<text x="70" y="80">Sources</text><text x="70" y="98" font-size="11">DBs, APIs, files</text>
-<text x="240" y="76" font-weight="bold">Bronze</text><text x="240" y="94" font-size="11">raw, as received</text><text x="240" y="109" font-size="11">Files/ + append</text>
-<text x="420" y="76" font-weight="bold">Silver</text><text x="420" y="94" font-size="11">cleansed, deduped,</text><text x="420" y="109" font-size="11">conformed Delta</text>
-<text x="600" y="76" font-weight="bold">Gold</text><text x="600" y="94" font-size="11">star schema,</text><text x="600" y="109" font-size="11">aggregates</text>
-<text x="735" y="80">BI</text><text x="735" y="98" font-size="11">Direct Lake</text>
-</g>
-</svg>
+<div class="icards" data-hint="Click a load pattern.">
+  <div class="icard" data-title="Full load" data-info="mode('overwrite'), Dataflow Gen2 Replace, TRUNCATE+INSERT or CTAS. Simple, idempotent, catches deletes; expensive for big tables."><div class="i">🔄</div><h4>Full load</h4><p>Truncate &amp; reload</p></div>
+  <div class="icard" data-title="Append" data-info="mode('append') of new rows only. Cheap, but resent rows become duplicates."><div class="i">➕</div><h4>Append</h4><p>New rows only</p></div>
+  <div class="icard" data-title="Watermark upsert" data-info="Read last watermark (max ModifiedDate) → extract newer rows → MERGE on business key → advance watermark. Hard deletes need CDC or soft-delete flags."><div class="i">🌊</div><h4>Watermark upsert</h4><p>Changed rows + MERGE</p></div>
+  <div class="icard" data-title="Window replace" data-info="replaceWhere or delete-then-insert for the affected date range: idempotent reloads of late data."><div class="i">🪟</div><h4>Window replace</h4><p>Reload one date range</p></div>
+  <div class="icard" data-title="CDC / mirroring" data-info="Mirroring, Copy job incremental, change feeds: near real-time, captures deletes."><div class="i">📡</div><h4>CDC / mirroring</h4><p>Change stream</p></div>
 </div>
-<div class="tw"><table>
-<thead><tr><th>Layer</th><th>Content</th><th>Typical tech</th><th>Rules</th></tr></thead>
-<tbody>
-<tr><td><strong>Bronze</strong> (raw)</td><td>Data exactly as received: files, API JSON, CDC rows; plus load metadata</td><td>Files area (<code>Files/raw/&lt;system&gt;/&lt;entity&gt;/&lt;date&gt;</code>), shortcuts, mirroring, append-only Delta</td><td>Immutable/append-only; keep history so silver/gold can be <strong>rebuilt</strong> after a defect or rule change; audit trail</td></tr>
-<tr><td><strong>Silver</strong> (validated)</td><td>Cleansed, typed, deduplicated, conformed; deletes/updates applied; often SCD history</td><td>Delta tables, notebooks/Dataflow Gen2/T-SQL, MERGE</td><td>Apply each cleansing rule <strong>once</strong> here so every consumer reads the same result</td></tr>
-<tr><td><strong>Gold</strong> (enriched)</td><td>Business-ready star schemas, aggregates, calculated columns (e.g. Margin) materialised</td><td>Lakehouse Delta (V-Ordered) or warehouse tables</td><td>Shaped for consumption; feeds Direct Lake/semantic models</td></tr>
-</tbody></table></div>
-<p>Common layouts: one lakehouse per layer (separate workspaces for security/governance), or schemas (<code>bronze</code>, <code>silver</code>, <code>gold</code>) in one schema-enabled lakehouse. Gold is frequently a <strong>warehouse</strong> when the team prefers T-SQL. Materialized lake views (schema-enabled lakehouses) can declare silver/gold transformations in Spark SQL with managed refresh.</p>
-
-<h2>Load patterns: full vs incremental</h2>
-<div class="tw"><table>
-<thead><tr><th>Pattern</th><th>How</th><th>Pros / cons</th></tr></thead>
-<tbody>
-<tr><td>Full load (truncate &amp; reload)</td><td><code>mode("overwrite")</code>, Dataflow Gen2 <em>Replace</em>, <code>TRUNCATE</code>+<code>INSERT</code> or CTAS</td><td>Simple, naturally idempotent, catches deletes; expensive for big tables</td></tr>
-<tr><td>Incremental append</td><td>Load only new rows (e.g. by ID or date) with <code>mode("append")</code></td><td>Cheap; resent rows create <strong>duplicates</strong> unless de-duplicated/merged</td></tr>
-<tr><td>Incremental upsert (watermark)</td><td>Read last watermark (max ModifiedDate) → extract rows <code>&gt;</code> watermark → MERGE on business key → update watermark</td><td>Efficient and idempotent; needs a reliable change column; hard deletes need CDC or soft-delete flags</td></tr>
-<tr><td>Window replace</td><td><code>replaceWhere</code> / delete-then-insert for the affected date range</td><td>Idempotent reloads of late-arriving data</td></tr>
-<tr><td>CDC / mirroring</td><td>Mirroring, Copy job incremental, change feeds</td><td>Near real-time, captures deletes</td></tr>
-</tbody></table></div>
-<h3>Watermark pattern (pipeline)</h3>
+<div class="order" data-task="Order the watermark pipeline steps.">
 <ol>
-<li><strong>Lookup</strong> activity reads the last watermark from a control table (e.g. <code>dbo.Watermark</code> in a warehouse).</li>
-<li><strong>Copy data</strong> activity extracts <code>WHERE ModifiedDate &gt; @{activity('Lookup').output.firstRow.Watermark}</code>.</li>
-<li>Notebook / stored procedure MERGEs into silver.</li>
-<li><strong>Only on success</strong>, a Stored procedure activity sets the watermark to the <strong>highest ModifiedDate actually copied</strong> (not <code>GETDATE()</code>). A failed run leaves the old watermark, so the next run re-reads the same window – the load is safe to rerun.</li>
-</ol>
-<pre><code># Notebook version of a watermark load
-from pyspark.sql import functions as F
-wm = spark.sql("SELECT MAX(ModifiedDate) AS wm FROM silver.orders").first()["wm"] or "1900-01-01"
-src = (spark.read.table("bronze.orders_raw")
-          .filter(F.col("ModifiedDate") &gt; F.lit(wm)))
-# ...dedupe src, then MERGE into silver.orders (see MERGE above)</code></pre>
-<div class="exam">"Safe to rerun after a mid-run failure" = <strong>idempotent</strong>: overwrite the affected partition/window or MERGE on business keys, and advance the watermark only after success.</div>
-
-<div class="reveal"><p><strong>Scenario:</strong> A notebook ingests IoT micro-batches every five minutes into a Delta table. After several weeks the table has 60,000 small files; SQL endpoint queries and a Direct Lake report have slowed down, and someone proposes running <code>VACUUM RETAIN 0 HOURS</code> after every batch to "clean up". What do you recommend?</p>
-<div class="answer">Don't vacuum aggressively – VACUUM only deletes <em>unreferenced</em> files, so it doesn't fix the small files that make up the current version, and 0-hour retention breaks time travel and can make concurrent readers fail (it's blocked below 7 days by default anyway). Instead: (1) batch ingestion where latency allows; (2) ensure <strong>optimize write</strong> (and optionally auto compaction) is on; (3) schedule <strong>OPTIMIZE</strong> (with <strong>V-Order</strong> for the Direct Lake table, possibly Z-Order on the main filter column) via the Lakehouse Maintenance activity or a notebook; (4) then run <strong>VACUUM</strong> with the default 7-day retention to remove the compacted-away files; (5) refresh the SQL analytics endpoint/Direct Lake model after maintenance. If the stream needs exactly-once semantics, use Spark structured streaming with a checkpoint location.</div></div>
-
-<h2>Lakehouse vs warehouse: when to choose which</h2>
-<div class="tw"><table>
-<thead><tr><th>Requirement</th><th>Lakehouse (+ SQL endpoint)</th><th>Warehouse</th></tr></thead>
-<tbody>
-<tr><td>Primary language</td><td>Spark (PySpark, Spark SQL, Scala, R); T-SQL read-only</td><td>T-SQL read/write</td></tr>
-<tr><td>Data types</td><td>Structured, semi-structured and unstructured (Files)</td><td>Structured (tables)</td></tr>
-<tr><td>Write via T-SQL / multi-table transactions</td><td>No (endpoint is read-only)</td><td><strong>Yes</strong> – ACID multi-table transactions, MERGE, stored procedures</td></tr>
-<tr><td>Table maintenance</td><td>You run OPTIMIZE/VACUUM (or schedule them)</td><td>Automatic compaction &amp; garbage collection</td></tr>
-<tr><td>Recovery</td><td>Delta time travel / RESTORE (within VACUUM retention)</td><td>Time travel, zero-copy clones, restore points (retention 1–120 days, default 30)</td></tr>
-<tr><td>Security granularity</td><td>OneLake security roles (tables/folders, RLS/CLS) + endpoint SQL security</td><td>Object/row/column security, dynamic data masking in T-SQL</td></tr>
-<tr><td>Typical persona</td><td>Data engineers, data scientists</td><td>SQL developers, BI/data warehouse developers</td></tr>
-<tr><td>Storage format</td><td colspan="2">Both: Delta Parquet in OneLake – readable by every engine (OneCopy). Don't ingest the same data into both without a reason.</td></tr>
-</tbody></table></div>
-
-<div class="sort" data-task="Lakehouse or warehouse? Sort each requirement.">
-<ul data-bucket="Lakehouse"><li>Store images and JSON alongside tables</li><li>Team writes PySpark transformations</li><li>Data scientists train ML models on the data</li><li>Raw files must keep their original format</li></ul>
-<ul data-bucket="Warehouse"><li>Multi-table transactions in T-SQL</li><li>Stored procedures with INSERT/UPDATE/MERGE on the curated layer</li><li>Zero-copy table clones for testers</li><li>Migrating an existing SQL Server data warehouse with T-SQL skills</li></ul>
+<li>Lookup activity reads the last watermark from a control table</li>
+<li>Copy activity extracts rows WHERE ModifiedDate &gt; watermark</li>
+<li>Notebook or stored procedure MERGEs into silver</li>
+<li>On success only: set watermark to the max ModifiedDate copied</li>
+</ol></div>
+<div class="sort" data-task="Lakehouse or warehouse?">
+<ul data-bucket="🏞️ Lakehouse"><li>Store images and JSON with tables</li><li>Team writes PySpark</li><li>Data scientists train ML models</li><li>Raw files keep original format</li></ul>
+<ul data-bucket="🏢 Warehouse"><li>Multi-table T-SQL transactions</li><li>Stored procedures with MERGE</li><li>Zero-copy clones for testers</li><li>Migrating a SQL Server DW</li></ul>
 </div>
-
-<div class="check" data-answer="3">
-<p>You run <code>df.write.format("delta").option("path", "Files/external/customers").saveAsTable("customers_ext")</code> and later <code>DROP TABLE customers_ext</code>. What is the result?</p>
-<ul><li>The table and its files are deleted</li><li>The DROP fails because the table is external</li><li>The metadata is removed; the Delta files in Files/external/customers remain</li><li>The files move to the recycle bin for 7 days</li></ul>
-<p class="why">Specifying a path creates an external (unmanaged) table. Dropping it only removes the metastore entry; the data survives.</p>
-</div>
-
-<div class="check" data-answer="4">
-<p>A Delta table is partitioned by <code>OrderDate</code> at day level over five years (~1,800 partitions with a few small files each). Month-filtered queries are slow. Which change helps most?</p>
-<ul><li>Partition by OrderID instead</li><li>Run VACUUM daily</li><li>Disable V-Order</li><li>Partition at month/year level (or cluster on OrderDate) and compact the files</li></ul>
-<p class="why">Over-partitioning on a high-cardinality column creates many tiny files. Coarser partitions or clustering plus compaction produce well-sized files while keeping pruning/skipping.</p>
-</div>
-
-<h2>Key takeaways &amp; exam tips</h2>
+<div class="reveal"><p>IoT micro-batches every 5 minutes → 60,000 small files; endpoint and Direct Lake are slow. Someone proposes VACUUM RETAIN 0 HOURS after every batch. Your advice?</p>
+<div class="answer">No. VACUUM ignores the current small files; 0 h breaks time travel (and is blocked below 7 days). Do: batch ingestion → optimize write / auto compaction → scheduled OPTIMIZE (V-Order) → VACUUM 7 days → refresh endpoint/model.</div></div>
+<details><summary>Deep dive: idempotency and layouts</summary>
 <ul>
-<li><strong>Files</strong> = raw/landing any format; <strong>Tables</strong> = Delta tables discovered by the SQL analytics endpoint and used by Direct Lake.</li>
-<li><strong>Managed</strong> table drop deletes data; <strong>external</strong> (path) table drop removes metadata only.</li>
-<li>Lakehouse schemas are on by default in the portal; <code>dbo</code> is default; Spark uses <code>workspace.lakehouse.schema.table</code>.</li>
-<li>SQL analytics endpoint: <strong>read-only data</strong>, but views, functions, procedures and security (RLS/CLS/DDM, GRANT) are allowed; metadata sync can lag → Refresh button/API/pipeline activity.</li>
-<li>Delta: transaction log → ACID, optimistic concurrency (conflicting writer fails and retries), time travel (<code>VERSION/TIMESTAMP AS OF</code>, <code>RESTORE</code>) until VACUUM removes files.</li>
-<li>Schema enforcement by default; <code>mergeSchema</code> to add columns, <code>overwriteSchema</code> to replace the schema.</li>
-<li>MERGE = atomic upsert/delete; dedupe the source first.</li>
-<li><strong>V-Order is off by default for Spark in new workspaces</strong> (writeHeavy profile) and on by default in the warehouse; enable it for read-heavy gold/Direct Lake tables and rewrite with <code>OPTIMIZE … VORDER</code>.</li>
-<li>Small files → optimize write, batching, auto compaction, scheduled OPTIMIZE (+ Z-Order on common filter columns). Then VACUUM (default 7 days; under 7 days blocked unless the retention check is disabled).</li>
-<li>Partition only by low-cardinality filter columns; avoid day-level partitions over years; consider liquid clustering.</li>
-<li>Notebook parameters: <strong>parameters cell</strong> + Notebook activity <strong>base parameters</strong>; <code>notebookutils.notebook.run</code> to call another notebook with parameters; <code>notebook.exit</code> to return values; raise an exception to fail the activity.</li>
-<li>Compute: starter pool (seconds, Medium nodes) + high concurrency for cheap fast dev; custom pools need workspace Admin; environments package runtime + libraries + Spark properties; NEE accelerates Parquet/Delta with automatic fallback.</li>
-<li>Medallion: bronze keeps raw history for reprocessing, silver applies cleansing once, gold is consumption-shaped.</li>
-<li>Incremental loads: Lookup watermark → Copy changed rows → MERGE → update watermark only on success (to the max value copied).</li>
+<li>"Safe to rerun" = idempotent: overwrite the window or MERGE on keys, advance the watermark only after success, to the max value actually copied (not GETDATE()).</li>
+<li>Layouts: one lakehouse per layer (separate workspaces for governance) or bronze/silver/gold schemas in one schema-enabled lakehouse.</li>
+<li>Lakehouse vs warehouse: both store Delta in OneLake (OneCopy). Lakehouse: Spark, any data type, you run OPTIMIZE/VACUUM, OneLake security. Warehouse: T-SQL read/write, automatic maintenance, clones + restore points (1–120 days, default 30), DDM in T-SQL.</li>
+<li>Exactly-once streaming → Spark structured streaming with a checkpoint location.</li>
+</ul></details>
+</section>
+
+<section class="lesson">
+<h2>Exam traps</h2>
+<ul class="traps">
+  <li>SQL endpoint: no INSERT/UPDATE, but views, procedures and RLS are fine.</li>
+  <li>OPTIMIZE never deletes files; VACUUM does (and ends time travel past retention).</li>
+  <li>VACUUM below 7 days fails unless the retention check is disabled.</li>
+  <li>V-Order is <b>off</b> for Spark in new workspaces; changing it affects only future writes.</li>
+  <li>DROP on an external (path) table keeps the files.</li>
+  <li><code>dropDuplicates</code> before MERGE: duplicate source keys make MERGE fail.</li>
+  <li>Partitioning by ID or day-over-years creates tiny files.</li>
 </ul>
-<p class="muted">Further reading (online): Microsoft Learn – "Delta Lake table optimization and V-Order", "Delta table maintenance", "Lakehouse schemas", "Apache Spark compute", "Native execution engine", "SQL analytics endpoint metadata sync".</p>
+</section>
+
+<section class="lesson">
+<h2>Cheat sheet</h2>
+<div class="cheat">
+  <div><h4>🏞️ Lakehouse</h4><ul><li>Files = raw, any format</li><li>Tables = Delta, auto in endpoint</li><li>Endpoint: read-only + views/security</li><li>Schemas on by default; dbo</li></ul></div>
+  <div><h4>🧊 Delta</h4><ul><li>Log → ACID, versions</li><li>VERSION / TIMESTAMP AS OF, RESTORE</li><li>mergeSchema / overwriteSchema</li><li>MERGE = atomic upsert/delete</li></ul></div>
+  <div><h4>🧩 Maintenance</h4><ul><li>OPTIMIZE → VACUUM (7 d)</li><li>V-Order for read-heavy gold</li><li>Z-Order on filter columns</li><li>Optimize write, auto compaction</li></ul></div>
+  <div><h4>📓 Notebooks</h4><ul><li>saveAsTable overwrite/append</li><li>Parameters cell + base parameters</li><li>notebook.run / exit</li><li>raise → activity fails</li></ul></div>
+  <div><h4>⚙️ Compute</h4><ul><li>Starter pool: seconds</li><li>High concurrency: shared session</li><li>Environment: runtime + libs</li><li>NEE: native, auto fallback</li></ul></div>
+  <div><h4>🥇 Medallion</h4><ul><li>Bronze raw, silver clean, gold star</li><li>Watermark → MERGE → advance on success</li></ul></div>
+</div>
+</section>
 </main>
 <script src="assets/app.js"></script>
 </body>

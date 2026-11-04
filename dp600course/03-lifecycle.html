@@ -5,559 +5,446 @@
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>Lifecycle: Git, PBIP, deployment pipelines, XMLA – DP-600</title>
 <link rel="stylesheet" href="assets/style.css">
+<style>
+/* page-specific: deployment simulator + PBIP tree */
+.p03-stages { display: grid; grid-template-columns: repeat(3, 1fr); gap: 10px; margin: 10px 0; }
+.p03-stage { border: 1px solid var(--line); border-radius: 10px; padding: 8px; background: var(--bg); min-height: 150px; }
+.p03-stage h5 { margin: 0 0 6px; font-size: .95em; display: flex; justify-content: space-between; align-items: center; }
+.p03-item { border: 1px solid var(--line); border-left: 4px solid var(--c1); border-radius: 6px; padding: 3px 7px; margin: 4px 0; font-size: .82em; line-height: 1.35; background: var(--soft); }
+.p03-item b { font-size: 1.02em; }
+.p03-item .v { float: right; font-weight: 700; color: var(--muted); }
+.p03-item.flash { animation: p03f 1.2s; }
+@keyframes p03f { from { background: var(--ok-soft); } to { background: var(--soft); } }
+.p03-empty { color: var(--muted); font-style: italic; font-size: .85em; padding: 20px 4px; text-align: center; }
+.p03-bar { display: flex; flex-wrap: wrap; gap: 8px; align-items: center; margin: 8px 0; }
+.p03-rules { display: grid; grid-template-columns: repeat(3, 1fr); gap: 4px 10px; font-size: .9em; margin: 6px 0; }
+.p03-rules label { font-weight: 400 !important; }
+.p03-log { font-size: .88em; }
+.p03-log ul { margin: 4px 0; padding-left: 18px; }
+.p03-tree { font-family: Consolas, "Cascadia Mono", Menlo, monospace; font-size: .9em; background: var(--code); border: 1px solid var(--line); border-radius: 10px; padding: 10px 14px; line-height: 1.75; }
+.p03-tree > div { cursor: pointer; border-radius: 5px; padding: 0 6px; white-space: pre; overflow-x: auto; }
+.p03-tree > div:hover, .p03-tree > div.sel { background: color-mix(in srgb, var(--dom) 14%, transparent); }
+.p03-tree .ig { color: var(--bad); text-decoration: line-through; }
+.p03-tree .tag { font-family: "Segoe UI", system-ui, sans-serif; font-size: .78em; padding: 0 6px; border-radius: 8px; margin-left: 6px; }
+.p03-tree .tag.g { background: var(--bad-soft); color: var(--bad); } .p03-tree .tag.k { background: var(--ok-soft); color: var(--ok); }
+@media (max-width: 700px) { .p03-stages, .p03-rules { grid-template-columns: 1fr; } }
+</style>
 </head>
-<body>
+<body data-domain="1">
 <main>
-<h1>Lifecycle: Git, PBIP, deployment pipelines, XMLA</h1>
-<p class="lead">How analytics content moves from a developer's laptop to production in Microsoft Fabric: version control with Git integration, Power BI Desktop projects (PBIP, TMDL, PBIR), deployment pipelines and their rules, the XMLA endpoint, warehouse database projects, reusable assets, automation (REST APIs, fabric-cicd, variable libraries) and impact analysis. Maps to the exam domain <em>Maintain a data analytics solution → Maintain the analytics development lifecycle</em> (25–30% of the exam together with security and governance).</p>
+<header class="hero">
+  <div class="hi">🚀</div>
+  <div>
+    <h1>Lifecycle: Git, PBIP, deployment pipelines, XMLA</h1>
+    <p class="lead">How content travels from a developer's laptop to Production: versioned in Git, promoted by pipelines, managed over XMLA.</p>
+    <div class="meta"><span class="pill">Domain 1 · Maintain</span><span class="pill">⏱ 35 min</span><span class="pill">6 lessons</span></div>
+    <ul class="goals">
+      <li>Run the Git workflow: connect, commit, update, branch out, PR</li>
+      <li>Read a PBIP folder and know what stays out of Git</li>
+      <li>Predict what a deployment copies and fix bindings with rules</li>
+      <li>Pick the right ALM tool and release pattern</li>
+    </ul>
+  </div>
+</header>
 
-<div class="note">
-<p><strong>The big picture in one sentence:</strong> Git integration gives you <em>versioning, branching and code review</em>; deployment pipelines give you <em>controlled promotion between workspaces</em> (Dev → Test → Prod) with per-stage configuration; the XMLA endpoint lets <em>enterprise tools</em> read and change published semantic models. They are complementary, not alternatives.</p>
+<div class="tldr"><ul>
+  <li><b>Git</b> = versions, branches, reviews. <b>Deployment pipeline</b> = Dev → Test → Prod promotion. <b>XMLA</b> = pro tools on published models.</li>
+  <li>Git and pipelines move <b>definitions, never data</b>.</li>
+  <li><b>Commit</b> is selective; <b>Update</b> is all-or-nothing.</li>
+  <li><b>Rules</b> live on the <b>target</b> stage and apply on the <b>next</b> deployment.</li>
+  <li>XMLA is <b>read-only by default</b>; read-write is a <b>capacity</b> setting.</li>
+</ul></div>
+
+<!-- ============ L1 ============ -->
+<section class="lesson">
+<h2>The big picture: three complementary tools</h2>
+<p class="idea">Git stores and reviews, pipelines promote, XMLA edits published models; they work together, not instead of each other.</p>
+<div class="flow" data-hint="Click each stage of the journey.">
+  <div data-info="Save as Power BI project (.pbip): report and model become folders of text files (PBIR + TMDL) that Git can diff."><span class="fi">💻</span>Desktop<small>PBIP files</small></div>
+  <div data-info="Azure DevOps or GitHub. Feature branches, pull requests and reviews; history lets you restore any older definition."><span class="fi">🌿</span>Git repo<small>branch → PR → main</small></div>
+  <div data-info="Only the Dev workspace is usually connected to main. After a merge someone presses Update (no automatic sync)."><span class="fi">🛠️</span>Dev<small>workspace</small></div>
+  <div data-info="Deployment pipeline: compare, deploy, rules swap data sources. Testers validate with realistic data."><span class="fi">🧪</span>Test<small>workspace</small></div>
+  <div data-info="Consumers use the app here. Set credentials, refresh schedule and RLS members once: they are not deployed."><span class="fi">🏭</span>Prod<small>workspace</small></div>
 </div>
-
-<div class="diagram">
-<svg viewBox="0 0 760 250" width="760" role="img" aria-label="Lifecycle overview: developer, Git repo, Dev, Test and Prod workspaces">
-  <g fill="none" stroke="currentColor" stroke-width="1.5">
-    <rect x="10" y="20" width="150" height="70" rx="8"/>
-    <rect x="10" y="150" width="150" height="70" rx="8"/>
-    <rect x="230" y="85" width="140" height="70" rx="8"/>
-    <rect x="440" y="85" width="90" height="70" rx="8"/>
-    <rect x="555" y="85" width="90" height="70" rx="8"/>
-    <rect x="665" y="85" width="85" height="70" rx="8"/>
-    <path d="M160 55 L230 105"/><path d="M160 185 L230 135"/>
-    <path d="M370 120 L440 120"/>
-    <path d="M530 120 L555 120"/><path d="M645 120 L665 120"/>
-  </g>
-  <g fill="currentColor" font-size="13" text-anchor="middle" font-family="Segoe UI, Arial, sans-serif">
-    <text x="85" y="48">Power BI Desktop</text><text x="85" y="66">PBIP (TMDL + PBIR)</text>
-    <text x="85" y="178">Fabric workspace</text><text x="85" y="196">(branched / feature)</text>
-    <text x="300" y="113">Git repo</text><text x="300" y="131">ADO / GitHub</text>
-    <text x="485" y="113">Dev</text><text x="485" y="131">workspace</text>
-    <text x="600" y="113">Test</text><text x="600" y="131">workspace</text>
-    <text x="707" y="113">Prod</text><text x="707" y="131">workspace</text>
-    <text x="405" y="108" font-size="11">update</text>
-    <text x="600" y="185" font-size="12">Deployment pipeline (rules, compare, deploy)</text>
-    <text x="195" y="30" font-size="11">commit / PR</text>
-  </g>
-  <path d="M470 165 L720 165" stroke="currentColor" stroke-dasharray="4 3" fill="none"/>
-</svg>
+<div class="icards">
+  <div class="icard" data-info="Workspace-level connection to one branch and folder. Providers: Azure DevOps and GitHub (cloud only)."><div class="i">🌿</div><h4>Git integration</h4><p>Versioning, branching, code review</p></div>
+  <div class="icard" data-info="2–10 stages, one workspace per stage. Compare, selective deploy, rules, history."><div class="i">🚀</div><h4>Deployment pipelines</h4><p>Controlled promotion with per-stage config</p></div>
+  <div class="icard" data-info="Analysis Services protocol: SSMS, Tabular Editor, DAX Studio, ALM Toolkit talk to the model in the service."><div class="i">🔌</div><h4>XMLA endpoint</h4><p>Enterprise tools on published models</p></div>
 </div>
-
-<h2>Git integration in Fabric</h2>
-<p>Git integration works at the <strong>workspace level</strong>: a workspace is connected to <strong>one Git branch and (optionally) one folder</strong> in a repository. Supported item definitions are serialized as folders of text files; the workspace folder structure (up to 10 levels) is mirrored in the repo.</p>
-
-<h3>Supported providers and prerequisites</h3>
-<ul>
-<li><strong>Azure DevOps (Azure Repos)</strong> – cloud only.</li>
-<li><strong>GitHub</strong> and <strong>GitHub Enterprise</strong> – cloud only (no GitHub Enterprise Server on a private network or custom domain).</li>
-<li>Not supported: on-premises Git servers, Bitbucket, GitLab, Subversion, TFVC, submodules, sovereign clouds, <em>My workspace</em>, and workspaces with template apps installed.</li>
-<li>A Fabric administrator must enable the tenant setting <em>Users can synchronize workspace items with their Git repositories</em> (and, for Azure DevOps repos in another geography, the cross-geo export setting). Exporting items that carry sensitivity labels needs a separate admin setting.</li>
-<li>The Git connection uses <strong>each user's own credentials</strong>: in a shared connected workspace every developer signs in to their own Git account (GitHub: personal access token; Azure DevOps: Microsoft Entra SSO, configured automatically where possible).</li>
-</ul>
-
-<h3>What gets versioned</h3>
-<p>Only <strong>item definitions (metadata)</strong>, never data. Examples of supported items: notebooks, Spark job definitions, environments, lakehouses (metadata such as shortcuts – <em>not</em> the tables or files), warehouses (as a SQL database project), SQL databases, pipelines, Copy jobs, Dataflow Gen2, mirrored databases, eventhouses, KQL databases and querysets, eventstreams, Activator, Real-Time dashboards, variable libraries, semantic models and reports (both preview), paginated reports (preview).</p>
-<ul>
-<li>Semantic models: not supported for push datasets, live connections to Analysis Services, or model v1 (non-enhanced metadata).</li>
-<li>Reports: not supported if connected to AAS/SSAS models.</li>
-<li><strong>Unsupported items</strong> in the workspace are simply <em>ignored</em> – not saved, not synced, not deleted. They show in the source control pane but can't be committed.</li>
-</ul>
-
-<div class="tw"><table>
-<thead><tr><th>Item</th><th>How it appears in Git</th><th>Data in Git?</th></tr></thead>
-<tbody>
-<tr><td>Semantic model</td><td><code>Name.SemanticModel/</code> with <code>definition.pbism</code> + TMDL <code>definition/</code> folder (or <code>model.bim</code>)</td><td>No – a refresh is needed after sync</td></tr>
-<tr><td>Report</td><td><code>Name.Report/</code> with <code>definition.pbir</code> + PBIR <code>definition/</code> folder (or legacy <code>report.json</code>)</td><td>No</td></tr>
-<tr><td>Notebook</td><td><code>notebook-content.py</code> (source file) – outputs are not committed</td><td>No</td></tr>
-<tr><td>Lakehouse</td><td>Metadata: shortcuts (<code>shortcuts.metadata.json</code>), settings</td><td>No – Delta tables and files stay in OneLake</td></tr>
-<tr><td>Warehouse</td><td>SQL database project (<code>.sqlproj</code> + one <code>.sql</code> file per object)</td><td>No – schema only</td></tr>
-<tr><td>Pipeline / Copy job / Dataflow Gen2</td><td>JSON definition (Dataflow: <code>mashup.pq</code> + metadata)</td><td>No</td></tr>
-<tr><td>Every item</td><td>A <code>.platform</code> system file with type, display name and logical ID</td><td>–</td></tr>
-</tbody>
+<div class="tw"><table class="matrix">
+<tr><th>Need</th><th>Git</th><th>Deployment pipeline</th><th>XMLA</th></tr>
+<tr><td>Version history / restore last week's definition</td><td>✓ yes</td><td>✗ only deploy history</td><td>✗</td></tr>
+<tr><td>Peer review before changes land</td><td>✓ pull requests</td><td>✗</td><td>✗</td></tr>
+<tr><td>Promote Test → Prod, see differences</td><td>~ via branch merges</td><td>✓ compare + deploy</td><td>~ ALM Toolkit</td></tr>
+<tr><td>Different data source per stage</td><td>~ variable library</td><td>✓ rules</td><td>✗</td></tr>
+<tr><td>Process one partition, calc groups in the service</td><td>✗</td><td>✗</td><td>✓ read-write</td></tr>
+<tr><td>Copies data</td><td>✗ never</td><td>✗ never</td><td>✗</td></tr>
 </table></div>
+<div class="check" data-answer="3"><p>You must restore last week's version of a notebook definition. Which tool?</p><ul><li>Deployment pipeline history</li><li>XMLA endpoint</li><li>Git integration (commit history)</li><li>Workspace lineage view</li></ul><p class="why">Only Git keeps every committed version of an item definition.</p></div>
+</section>
 
-<h3>Connect, commit, update</h3>
-<ol>
-<li><strong>Connect</strong> (Workspace settings → Git integration): choose provider, organization/project/repo (or GitHub repo URL), <strong>branch</strong> and <strong>Git folder</strong>. Only a <strong>workspace Admin</strong> can connect or disconnect.</li>
-<li><strong>Initial sync</strong>: if either side is empty, content is copied from the non-empty side. If both have content you must choose the direction – <em>commit</em> workspace to Git (overwrites Git) or <em>update</em> workspace from Git (overwrites the workspace; you're asked to confirm because a workspace can't be restored like a Git branch).</li>
-<li><strong>Commit</strong>: the Source control pane lists <em>Changes</em> (workspace → Git). You can <strong>select which items</strong> to commit and add a commit message. Commit is <strong>disabled while there are incoming updates</strong> – update first.</li>
-<li><strong>Update</strong>: the <em>Updates</em> section lists items changed in the branch. <strong>Update always applies the entire branch</strong> (latest commit); you can't pick individual items. Fabric does <strong>not</strong> sync automatically – someone must press Update (or call the API).</li>
-<li><strong>Undo</strong>: discards uncommitted workspace changes back to the last synced commit.</li>
-</ol>
-
-<h3>Git status of each item</h3>
-<div class="tw"><table>
-<thead><tr><th>Status</th><th>Meaning</th><th>Action</th></tr></thead>
-<tbody>
-<tr><td>Synced</td><td>Same in workspace and branch</td><td>None</td></tr>
-<tr><td>Uncommitted changes</td><td>Changed in the workspace</td><td>Commit (or Undo)</td></tr>
-<tr><td>Update required</td><td>Changed in the branch</td><td>Update</td></tr>
-<tr><td>Conflict</td><td>Changed in <em>both</em> places</td><td>Resolve (below)</td></tr>
-<tr><td>Unsupported</td><td>Item type not supported</td><td>Ignored by Git</td></tr>
-</tbody>
-</table></div>
-
-<h3>Conflict resolution</h3>
-<ul>
-<li><strong>In the Fabric UI</strong>: start <em>Update all</em>; for each conflicting item choose which version to keep – the <strong>incoming (Git)</strong> version or the <strong>current (workspace)</strong> version. Alternatively <em>Undo</em> your workspace changes and then update.</li>
-<li><strong>In Git</strong> (when you need a real merge): use <em>Checkout new branch</em> (admin) to create a branch from the last synced commit and connect the workspace to it, commit your workspace state there, merge the two branches with a <strong>pull request</strong> in Azure DevOps/GitHub, then switch back / update.</li>
-</ul>
-<div class="tip"><p>Conflict resolution is partly done in Git. For semantic models, <strong>TMDL</strong> makes merges practical because each table, role, perspective and culture is its own small text file; a single huge <code>model.bim</code> JSON is painful to merge.</p></div>
-
-<h3>Branching strategies: branch out</h3>
-<p>The recommended developer pattern is <strong>one workspace per branch</strong> (a workspace can be connected to only one branch at a time):</p>
-<ul>
-<li><strong>Branch out to another workspace</strong> (Source control → Branches; Contributor or higher, plus Git <em>Create branch</em>): creates a new Git branch from the <strong>last commit</strong> of the current workspace and a <strong>new (or existing) workspace</strong> connected to it – an isolated sandbox. You need permission to create workspaces / assign capacity.</li>
-<li>Work and commit in the feature workspace (or in Power BI Desktop / VS Code against a cloned repo), open a <strong>pull request</strong> to <code>main</code>, review, merge; then <strong>Update</strong> the shared Dev workspace from Git.</li>
-<li><strong>Switch branch</strong> overwrites all workspace items with the selected branch (Admin, or Member/Contributor when the workspace setting <em>Allow users with at least Contributor role to change Git branch</em> is on).</li>
-<li><strong>Checkout new branch</strong> (Admin) changes the connection of the current workspace to a new branch without changing content.</li>
-</ul>
-
-<h3>Permissions</h3>
-<div class="tw"><table>
-<thead><tr><th>Operation</th><th>Workspace role</th><th>Git permission (Azure Repos)</th></tr></thead>
-<tbody>
-<tr><td>Connect / disconnect / sync settings</td><td><strong>Admin</strong></td><td>Read (connect)</td></tr>
-<tr><td>View Git status / connection details</td><td>Admin, Member, Contributor</td><td>Read</td></tr>
-<tr><td>Commit</td><td>Contributor+ with write on all items (item owner if the tenant switch blocks non-owners)</td><td>Read + Contribute; branch policy must allow direct commit</td></tr>
-<tr><td>Update from Git</td><td>Contributor+ with write on all items</td><td>Read</td></tr>
-<tr><td>Branch out to another workspace</td><td>Admin, Member, Contributor</td><td>Read + Create branch</td></tr>
-<tr><td>Switch branch</td><td>Admin (Member/Contributor only if workspace setting allows)</td><td>Read on target</td></tr>
-<tr><td>Anything Git-related</td><td><strong>Viewer: nothing</strong> – can't even see Git info</td><td>–</td></tr>
-</tbody>
-</table></div>
-
-<h3>Limits worth knowing</h3>
-<ul>
-<li>Max <strong>1,000 items</strong> per workspace sync; max file size 25 MB; max path length 250 characters; branch name 244 characters; folder depth 10.</li>
-<li>Commit size: Azure DevOps 125 MB (user SSO) / 25 MB (service principal); GitHub 50 MB per commit.</li>
-<li>Duplicate item names (same type) make commit/update fail.</li>
-<li>Downloading a report or semantic model as <code>.pbix</code> from the service after it was created via Git is <strong>not recommended</strong> (unreliable) – open the PBIP in Desktop instead.</li>
-<li>Items re-created by Git get a <strong>new item ID</strong> (definition only, no data); restoring from the workspace recycle bin keeps the original ID and data.</li>
-</ul>
-
-<div class="check" data-answer="3">
-<p>Analysts in a workspace connected to an Azure DevOps branch have the <strong>Viewer</strong>, <strong>Contributor</strong> and <strong>Admin</strong> roles. A Contributor wants to connect the workspace to a different repository. What happens?</p>
-<ul>
-<li>It works, because Contributors can manage all Git settings</li>
-<li>It works only if the Contributor is also a project administrator in Azure DevOps</li>
-<li>It fails; connecting or disconnecting a workspace requires the workspace Admin role</li>
-<li>It fails, because a workspace can never be reconnected once it has been synced</li>
-</ul>
-<p class="why">Only workspace Admins manage the Git connection (connect, disconnect, connection settings). Contributors and Members can commit, update and branch out once connected; Viewers see nothing Git-related. Reconnecting is allowed – by an Admin.</p>
+<!-- ============ L2 ============ -->
+<section class="lesson">
+<h2>Git integration workflow</h2>
+<p class="idea">A workspace connects to one branch; you commit selected items out, and update the whole branch in.</p>
+<div class="stepper" data-task="From connection to merged feature">
+  <section data-step="Connect"><p>🔐 <b>Workspace Admin only</b>: Workspace settings → Git integration → provider, repo, <b>branch</b>, folder.</p><p>Initial sync: empty side gets the content; if both have content, <b>you choose the direction</b>.</p></section>
+  <section data-step="Commit"><p>⬆️ Source control pane → <b>Changes</b>. Pick the items you want + message.</p><p>Blocked while incoming updates exist: <b>update first</b>.</p></section>
+  <section data-step="Update"><p>⬇️ <b>Updates</b> applies the <b>entire branch</b> (latest commit). No cherry-picking, no automatic sync.</p></section>
+  <section data-step="Branch out"><p>🌱 <b>Branch out to another workspace</b> = new branch + new (or existing) workspace. One workspace per branch, isolated sandbox.</p></section>
+  <section data-step="Pull request"><p>🔍 Open a PR to <code>main</code> in Azure DevOps / GitHub. Reviewers check TMDL/PBIR diffs.</p></section>
+  <section data-step="Merge &amp; update Dev"><p>✅ Merge, then press <b>Update</b> in the Dev workspace (or call the Git REST API).</p></section>
 </div>
-
-<div class="check" data-answer="2">
-<p>A colleague merged a pull request into the branch your Dev workspace is connected to. Your workspace shows two items with <em>Update required</em> and one with <em>Uncommitted changes</em> (a different item). You want only one of the two incoming items. What is true?</p>
-<ul>
-<li>You can select a single incoming item and update just that one</li>
-<li>Update always applies the whole branch; you can't cherry-pick incoming items, and commits are blocked until you update</li>
-<li>The workspace updates automatically every 15 minutes, so you only need to wait</li>
-<li>You must disconnect and reconnect the workspace to receive the changes</li>
-</ul>
-<p class="why">Commit is selective, Update is not: it syncs the workspace to the latest commit of the branch. While incoming updates exist, commit is disabled. There is no automatic sync.</p>
+<div class="icards" data-hint="Click a status to see the action.">
+  <div class="icard" data-info="Identical in workspace and branch. Nothing to do."><div class="i">✅</div><h4>Synced</h4></div>
+  <div class="icard" data-info="Changed in the workspace. Commit it, or Undo back to the last synced commit."><div class="i">✏️</div><h4>Uncommitted</h4></div>
+  <div class="icard" data-info="Changed in the branch. Update the workspace (whole branch)."><div class="i">⬇️</div><h4>Update required</h4></div>
+  <div class="icard" data-info="Changed in both. In Fabric pick incoming (Git) or current (workspace) version, or Checkout new branch → commit → PR merge in Git."><div class="i">⚔️</div><h4>Conflict</h4></div>
+  <div class="icard" data-info="Item type not supported: ignored, never committed, synced or deleted."><div class="i">🚫</div><h4>Unsupported</h4></div>
 </div>
-
-<h2>Power BI Desktop projects (PBIP)</h2>
-<p><strong>File → Save as → Power BI project (*.pbip)</strong> saves the report and semantic model as folders of human-readable text files instead of one binary <code>.pbix</code>. That makes Git diffs, code review, merges, programmatic edits and CI/CD possible. You can convert back with <em>Save as .pbix</em> (only in Desktop – there's no programmatic converter).</p>
-
-<pre><code>Project/
-├── Sales.SemanticModel/
-│   ├── definition/              ← TMDL: database.tmdl, model.tmdl, tables/*.tmdl, roles/*.tmdl, cultures/ …
-│   │   (or model.bim            ← TMSL: one big JSON, older format)
-│   ├── definition.pbism         ← required; "version" 4.0+ allows TMDL
-│   ├── diagramLayout.json
-│   ├── DAXQueries/              ← DAX query view tabs (*.dax)
-│   ├── TMDLScripts/             ← TMDL view script tabs
-│   ├── .platform                ← Fabric Git system file
-│   └── .pbi/
-│       ├── localSettings.json   ← user/machine settings  → git-ignored
-│       ├── cache.abf            ← local data cache        → git-ignored
-│       ├── editorSettings.json
-│       └── unappliedChanges.json
-├── Sales.Report/
-│   ├── definition.pbir          ← points to the semantic model (byPath or byConnection)
-│   ├── definition/              ← PBIR: report.json, pages/&lt;page&gt;/visuals/&lt;visual&gt;/visual.json …
-│   └── .platform
-├── .gitignore                   ← **/.pbi/localSettings.json and **/.pbi/cache.abf
-└── Sales.pbip                   ← optional pointer that opens the report</code></pre>
-
-<div class="tw"><table>
-<thead><tr><th>Format</th><th>What it describes</th><th>Characteristics</th></tr></thead>
-<tbody>
-<tr><td><strong>TMDL</strong> (Tabular Model Definition Language)</td><td>Semantic model metadata</td><td>YAML-like, indentation based, <strong>one file per table/role/culture/perspective</strong>; readable diffs, easy merges; editable in VS Code (TMDL extension), TMDL view in Desktop, Tabular Editor</td></tr>
-<tr><td><strong>TMSL</strong> (Tabular Model Scripting Language) – <code>model.bim</code></td><td>Semantic model metadata (and XMLA commands like createOrReplace, refresh)</td><td>Single large JSON document; noisy diffs, hard merges; still the scripting language used in SSMS over XMLA</td></tr>
-<tr><td><strong>PBIR</strong> (Power BI enhanced report format)</td><td>Report definition</td><td>Folder per page and per visual, documented JSON schemas → granular diffs, reusable pages/visuals; replacing the legacy single <code>report.json</code> (PBIR-Legacy) and rolling out as the default report format</td></tr>
-</tbody>
-</table></div>
-
+<div class="stats">
+  <div><b>2</b><span>providers: Azure DevOps, GitHub (cloud)</span></div>
+  <div><b>1</b><span>branch per workspace</span></div>
+  <div><b>1,000</b><span>items per workspace sync</span></div>
+  <div><b>0</b><span>rows of data in Git</span></div>
+</div>
+<div class="flips">
+  <div class="flip"><div class="front">Who can connect / disconnect a workspace to Git?</div><div class="back"><span>Only the workspace <b>Admin</b>. Contributors/Members commit, update, branch out. Viewers see nothing Git-related.</span></div></div>
+  <div class="flip"><div class="front">Can Update apply just one incoming item?</div><div class="back"><span>No. Update always applies the <b>whole branch</b>; Commit is the selective one.</span></div></div>
+  <div class="flip"><div class="front">What does a lakehouse put in Git?</div><div class="back">Metadata only (shortcuts, settings). Tables and files stay in OneLake.</div></div>
+</div>
+<div class="check" data-answer="2"><p>Two items show <i>Update required</i>, one shows <i>Uncommitted changes</i>. You want just one incoming item. What is true?</p><ul><li>Select one incoming item and update only that</li><li>Update applies the whole branch, and commit is blocked until you update</li><li>The workspace syncs automatically every 15 minutes</li><li>Disconnect and reconnect to receive changes</li></ul><p class="why">Commit is selective, Update is not; no automatic sync exists.</p></div>
+<div class="check" data-answer="3"><p>A Contributor wants to connect the workspace to a different repository. What happens?</p><ul><li>Works: Contributors manage all Git settings</li><li>Works only for an Azure DevOps project admin</li><li>Fails: connect/disconnect needs workspace Admin</li><li>Fails: a workspace can never be reconnected</li></ul><p class="why">Connection settings belong to workspace Admins; reconnecting is allowed for them.</p></div>
+<details><summary>Deep dive: prerequisites, permissions, limits, supported items</summary>
 <ul>
-<li><strong>cache.abf</strong> is an Analysis Services backup holding the local <em>data</em>. It's ignored by Git, so a fresh clone opens with the full model definition but <strong>no data</strong> – you refresh.</li>
-<li>Publishing PBIP through <em>Desktop → Publish</em> uploads metadata <em>and</em> the local cache (it builds a temporary PBIX); publishing via Git integration or Fabric APIs deploys <strong>metadata only</strong>.</li>
-<li>A <code>.pbip</code> file isn't required (Git-synced workspaces don't create one) – open <code>definition.pbir</code> to edit report + model.</li>
-<li>Limitations: sensitivity labels aren't supported in PBIP; Windows 260-character path limit (keep the root folder short); can't save PBIP directly to OneDrive/SharePoint; edit files as UTF-8 without BOM; Desktop uses CRLF line endings (configure <code>autocrlf</code>).</li>
-<li>Desktop detects external edits to TMDL/PBIR and offers <em>Apply external changes</em>.</li>
-</ul>
+<li>Not supported: on-prem Git servers, GitHub Enterprise Server, Bitbucket, GitLab, TFVC, submodules, sovereign clouds, My workspace, workspaces with template apps.</li>
+<li>Tenant setting <i>Users can synchronize workspace items with their Git repositories</i> (+ cross-geo export for ADO in another geography; separate setting for sensitivity-labelled items).</li>
+<li>Each user signs in with their own Git credentials (GitHub PAT; Azure DevOps Entra SSO).</li>
+<li><b>Switch branch</b> overwrites all items (Admin, or Contributor+ if the workspace setting allows). <b>Checkout new branch</b> (Admin) changes the connection without changing content. Branch out needs Contributor+ and Git <i>Create branch</i>.</li>
+<li>Commit: Contributor+ with write on all items; Azure Repos Read + Contribute, and branch policy must allow direct commit.</li>
+<li>Limits: file 25 MB, path 250 chars, branch name 244 chars, folder depth 10; commit size ADO 125 MB (user) / 25 MB (service principal), GitHub 50 MB. Duplicate item names (same type) make commit/update fail.</li>
+<li>Supported items include notebooks, Spark job definitions, environments, lakehouses (metadata), warehouses (SQL database project), SQL databases, pipelines, Copy jobs, Dataflow Gen2, mirrored DBs, eventhouses, KQL DBs/querysets, eventstreams, Activator, Real-Time dashboards, variable libraries, semantic models and reports, paginated reports. Not: push datasets, live connections to AAS, model v1; reports on AAS/SSAS.</li>
+<li>Every item gets a <code>.platform</code> file (type, display name, logical ID). Notebooks: <code>notebook-content.py</code>, no outputs. Items re-created by Git get a new ID and no data; the recycle bin keeps ID and data.</li>
+<li>Downloading a .pbix of a Git-created report/model is unreliable: open the PBIP in Desktop.</li>
+</ul></details>
+</section>
 
-<div class="exam"><p>"Which format produces <strong>meaningful, human-readable diffs</strong> for semantic models in source control?" → <strong>TMDL</strong>. "Which files should <strong>not</strong> be committed?" → <code>cache.abf</code> and <code>localSettings.json</code> (Desktop writes them into <code>.gitignore</code>).</p></div>
-
+<!-- ============ L3 ============ -->
+<section class="lesson">
+<h2>PBIP: the project as text files</h2>
+<p class="idea">Save as .pbip and your report and model become small text files that Git can diff, review and merge.</p>
+<div class="p03-tree" data-infopanel data-hint="Click a file or folder in the project tree.">
+  <div data-title="Sales.SemanticModel/" data-info="The semantic model item folder. Fabric Git creates the same structure.">📁 Sales.SemanticModel/</div>
+  <div data-title="definition/ (TMDL)" data-info="TMDL: YAML-like, one file per table, role, culture, perspective (database.tmdl, model.tmdl, tables/*.tmdl). Readable diffs, easy merges. Edit in TMDL view, VS Code, Tabular Editor.">   📁 definition/  <span class="tag k">TMDL</span></div>
+  <div data-title="model.bim (TMSL)" data-info="Older alternative: the whole model as ONE large TMSL JSON file. Noisy diffs, painful merges. TMSL is still the scripting language in SSMS over XMLA.">   📄 model.bim  <span class="tag k">or TMSL</span></div>
+  <div data-title="definition.pbism" data-info="Required model file. Its version (4.0+) decides whether TMDL is allowed.">   📄 definition.pbism</div>
+  <div data-title="DAXQueries/ and TMDLScripts/" data-info="Tabs from DAX query view (*.dax) and TMDL view scripts.">   📁 DAXQueries/ · TMDLScripts/</div>
+  <div data-title=".platform" data-info="Fabric Git system file: item type, display name, logical ID. Every item has one.">   📄 .platform</div>
+  <div data-title=".pbi/localSettings.json" data-info="User- and machine-specific settings. Git-ignored.">   <span class="ig">📄 .pbi/localSettings.json</span> <span class="tag g">gitignored</span></div>
+  <div data-title=".pbi/cache.abf" data-info="Local data cache (an Analysis Services backup). Git-ignored, so a fresh clone has the full model definition but NO data: refresh it.">   <span class="ig">📄 .pbi/cache.abf</span> <span class="tag g">gitignored</span></div>
+  <div data-title="Sales.Report/" data-info="The report item folder.">📁 Sales.Report/</div>
+  <div data-title="definition.pbir" data-info="Points to the semantic model (byPath or byConnection). Open it directly in Desktop to edit report + model; no .pbip needed.">   📄 definition.pbir</div>
+  <div data-title="definition/ (PBIR)" data-info="PBIR: folder per page and per visual (pages/&lt;page&gt;/visuals/&lt;visual&gt;/visual.json) with documented schemas. Granular diffs, reusable pages. Replaces legacy report.json.">   📁 definition/  <span class="tag k">PBIR</span></div>
+  <div data-title=".gitignore" data-info="Desktop writes **/.pbi/localSettings.json and **/.pbi/cache.abf into it.">📄 .gitignore</div>
+  <div data-title="Sales.pbip" data-info="Optional pointer that opens the report in Desktop. Git-synced workspaces don't create it.">📄 Sales.pbip</div>
+</div>
+<div class="vs">
+  <div><h4>TMDL</h4><ul><li>One file per table / role</li><li>Readable, mergeable diffs</li><li>✓ the exam answer for model source control</li></ul></div>
+  <div class="vsmark">VS</div>
+  <div><h4>TMSL (model.bim)</h4><ul><li>One giant JSON</li><li>Noisy diffs, hard merges</li><li>Still used for XMLA scripts</li></ul></div>
+</div>
+<div class="remember"><b>"Cache and local stay local."</b> cache.abf and localSettings.json never go to Git.</div>
 <div class="match" data-task="Match each PBIP file or folder to its purpose.">
 <dl>
-<dt>cache.abf</dt><dd>Local cached copy of model data; excluded from Git</dd>
-<dt>definition.pbism</dt><dd>Required semantic model file whose version decides whether TMDL is allowed</dd>
-<dt>definition.pbir</dt><dd>Report file that references the semantic model and can be opened directly in Desktop</dd>
+<dt>cache.abf</dt><dd>Local copy of model data; excluded from Git</dd>
+<dt>definition.pbism</dt><dd>Required model file; its version allows TMDL</dd>
+<dt>definition.pbir</dt><dd>Report file referencing the model; opens in Desktop</dd>
 <dt>model.bim</dt><dd>Model metadata as one TMSL JSON document</dd>
-<dt>SemanticModel definition folder</dt><dd>Model metadata as TMDL, one file per table and role</dd>
-<dt>localSettings.json</dt><dd>User- and machine-specific settings; excluded from Git</dd>
-<dt>.platform</dt><dd>System file with item type, display name and logical ID used by Fabric Git</dd>
+<dt>definition/ (model)</dt><dd>TMDL: one file per table and role</dd>
+<dt>.platform</dt><dd>Item type, display name, logical ID for Fabric Git</dd>
 </dl>
 </div>
-
-<h2>Deployment pipelines</h2>
-<p>A deployment pipeline promotes content between workspaces that represent release <strong>stages</strong>. Each stage is backed by <strong>one workspace</strong>, and a workspace can belong to <strong>only one pipeline</strong>. Workspaces must be on a Fabric capacity (Power BI-only content can also use PPU).</p>
-
-<h3>Structure</h3>
+<details><summary>Deep dive: publishing and PBIP limitations</summary>
 <ul>
-<li><strong>2 to 10 stages</strong>; the default is <strong>3</strong> (Development, Test, Production). The number and names of stages are <strong>fixed after creation</strong>; a stage can be marked <em>public</em> or private at any time.</li>
-<li><strong>Assign a workspace</strong> to each stage (requires pipeline admin + <em>workspace Admin</em> of that workspace), or deploy into an empty stage and let Fabric create the workspace (the deploying user becomes its only admin and owner of cloned semantic models).</li>
-<li><strong>Item pairing</strong>: items are paired when a workspace is assigned or on a clean deploy. Paired items stay paired even if renamed and are <em>overwritten</em> on deploy. Items that look identical but are not paired are <em>not</em> overwritten – a duplicate is created (or a first deployment fails if an item with the same name and type already exists).</li>
-</ul>
+<li>Desktop → Publish uploads metadata <i>and</i> the local cache; Git integration or Fabric APIs deploy metadata only.</li>
+<li>Convert back with Save as .pbix (Desktop only, no programmatic converter). Desktop detects external TMDL/PBIR edits and offers <i>Apply external changes</i>.</li>
+<li>Limits: no sensitivity labels in PBIP; Windows 260-char path limit; can't save directly to OneDrive/SharePoint; UTF-8 without BOM; CRLF line endings.</li>
+</ul></details>
+</section>
 
-<h3>Compare and deploy</h3>
-<ul>
-<li><strong>Compare</strong> shows per item: same, different (with a <em>Review changes</em> schema diff), only in source, or only in target. Comparison already reflects newly created rules.</li>
-<li><strong>Deploy all</strong> or <strong>selective deployment</strong> (pick items; <em>Select related</em> adds the dependencies so deployment doesn't fail). Max <strong>300 items</strong> per deployment.</li>
-<li>Deploy to an <strong>adjacent stage in either direction</strong> – forward (Dev → Test) or <strong>backward</strong> (e.g., Prod → Test to seed a pipeline from an existing production workspace). You can't skip a stage.</li>
-<li><strong>Deployment history</strong> shows who deployed what and when (pipeline admin).</li>
-<li>Deployments can be automated with the <strong>Power BI / Fabric deployment pipelines REST APIs</strong>; an optional <em>deployment plan</em> (preview) can enforce order and pre/post actions.</li>
-</ul>
-
-<h3>What is and isn't copied</h3>
-<div class="tw"><table>
-<thead><tr><th>Copied (overwrites target)</th><th>Not copied (stays as configured in the target stage)</th></tr></thead>
-<tbody>
-<tr><td>
-<ul>
-<li>Item metadata / definitions (model metadata, report pages and visuals, dashboard tiles, pipeline JSON, notebook code…)</li>
-<li>Data sources and parameters (overridable by <strong>rules</strong>)</li>
-<li>Relationships between items</li>
-<li>Sensitivity labels – only for new items, deployment to an empty stage, or when the source label is protected and the target has none</li>
-<li>Incremental refresh policy</li>
-</ul>
-</td><td>
-<ul>
-<li><strong>Data</strong> (lakehouse tables, warehouse rows, imported model data) – refresh after deployment</li>
-<li>Item ID and URL, workspace settings</li>
-<li>Permissions (workspace and item)</li>
-<li><strong>App content and settings</strong> – update the app manually per stage</li>
-<li>Semantic model: <strong>RLS role membership</strong>, refresh schedule, <strong>data source credentials</strong>, endorsement, query caching</li>
-<li>Gateway mapping (configure once after first deployment)</li>
-</ul>
-</td></tr>
-</tbody>
-</table></div>
-<p>Where possible the target keeps its data: small changes (add a measure, add a table) keep data; breaking schema or connection changes require a full refresh. Incremental refresh data and partitions are retained. You <strong>can't download a .pbix</strong> from a stage after deployment.</p>
-
-<h3>Deployment rules</h3>
-<p>Rules make an item behave differently per stage, e.g., Prod points at the production database. A rule is defined <strong>on the target stage</strong>, for a specific item, and takes effect on the <strong>next deployment</strong> into that stage.</p>
-<div class="tw"><table>
-<thead><tr><th>Item</th><th>Data source rule</th><th>Parameter rule</th><th>Default lakehouse rule</th></tr></thead>
-<tbody>
-<tr><td>Semantic model</td><td>Yes</td><td>Yes</td><td>–</td></tr>
-<tr><td>Dataflow Gen1</td><td>Yes</td><td>Yes</td><td>–</td></tr>
-<tr><td>Paginated report</td><td>Yes</td><td>No</td><td>–</td></tr>
-<tr><td>Mirrored database</td><td>Yes</td><td>No</td><td>–</td></tr>
-<tr><td>Notebook</td><td>–</td><td>–</td><td>Yes</td></tr>
-<tr><td>Pipelines, Copy job, Dataflow Gen2, shortcuts…</td><td colspan="3">No rules – use a <strong>variable library</strong> (active value set per stage)</td></tr>
-</tbody>
-</table></div>
-<ul>
-<li>You must be the <strong>owner of the item</strong> (and contributor+ on the target workspace) to create a rule. Rules <strong>can't be created in the first (development) stage</strong>.</li>
-<li>Data source rules only switch to a source <strong>of the same type</strong> (e.g., SQL Server → SQL Server) and are supported for a fixed list of connectors (Azure SQL, SQL Server, Azure Synapse, AAS, SSAS, OData, Oracle, SAP HANA import, SharePoint, Teradata). For anything else – or for parameterized sources – use <strong>parameter rules</strong> (parameters used for rebinding must be of type Text).</li>
-<li>If the source data source/parameter referenced by a rule is removed, the rule becomes invalid and deployment fails. Deleting the item or unassigning the workspace deletes its rules.</li>
-</ul>
-
-<h3>Autobinding</h3>
-<ul>
-<li>When a deployed item depends on another item (report → semantic model, model → lakehouse), the pipeline <strong>automatically rebinds</strong> it to the paired item in the target stage. If the dependency isn't in the target stage, deployment <strong>fails</strong> – use <em>Select related</em>.</li>
-<li>Across pipelines, autobinding works when both items are in the <strong>same stage position</strong> and the pipelines have the same number of stages.</li>
-<li>To avoid autobinding (e.g., reports in every stage should use the <em>production</em> model): connect to an item not in the corresponding stage, use a parameter rule, or use a proxy model outside the pipeline.</li>
-<li><strong>Direct Lake semantic models do not autobind</strong> – after deployment they still point to the source-stage lakehouse/warehouse. Use a <strong>data source rule</strong> for Direct Lake on SQL endpoint, or <strong>M parameters + parameter rules</strong> for Direct Lake on OneLake.</li>
-<li>Autobinding isn't supported for Dataflow Gen2.</li>
-</ul>
-
-<h3>Permissions for deployment pipelines</h3>
-<div class="tw"><table>
-<thead><tr><th>Action</th><th>Required</th></tr></thead>
-<tbody>
-<tr><td>Create a pipeline</td><td>Pro, PPU or Premium license</td></tr>
-<tr><td>Share, edit, delete pipeline; view history</td><td><strong>Pipeline admin</strong> (the only pipeline permission; M365 groups not supported)</td></tr>
-<tr><td>Assign a workspace to a stage</td><td>Pipeline admin + <strong>workspace Admin</strong></td></tr>
-<tr><td>Deploy to the next stage</td><td>Pipeline admin + <strong>Contributor (or higher) in both source and target</strong> workspaces; dataflow owner for dataflows; semantic model owner if <em>Block republish</em> tenant switch is on</td></tr>
-<tr><td>Deploy to an empty stage</td><td>Pipeline admin + source workspace Contributor (and capacity assignment rights)</td></tr>
-<tr><td>Compare stages</td><td>Pipeline admin + Contributor+ on both</td></tr>
-<tr><td>Create a rule</td><td>Pipeline admin + target Contributor+ + <strong>owner of the item</strong></td></tr>
-</tbody>
-</table></div>
-<div class="warn"><p>Pipeline admin alone grants <strong>no access to workspace content</strong>: a pipeline admin without a workspace role can view and share the pipeline but can't see items or deploy.</p></div>
-
-<div class="check" data-answer="4">
-<p>A pipeline has Development, Test and Production stages. Model1 imports data from <code>sql-dev</code>. After deployment to Production it must read from <code>sql-prod</code> (same connector type). Where do you configure this?</p>
-<ul>
-<li>A parameter in the Development workspace settings</li>
-<li>A data source rule on Model1 in the Development stage</li>
-<li>Workspace settings of the Production workspace</li>
-<li>A data source rule on Model1 in the Production stage, followed by a deployment to Production</li>
-</ul>
-<p class="why">Rules are defined on the <em>target</em> stage (never in the first stage) and only take effect on the next deployment into that stage. A data source rule works because both sources are the same type; otherwise use a parameter rule.</p>
+<!-- ============ L4 ============ -->
+<section class="lesson">
+<h2>Deployment pipelines and rules</h2>
+<p class="idea">A deployment copies definitions to the next stage; data, settings and permissions stay where they are.</p>
+<div class="flow" data-hint="Click a stage or arrow concept.">
+  <div data-info="First stage. No deployment rules can be created here."><span class="fi">🛠️</span>Development<small>workspace A</small></div>
+  <div data-info="Rules on items in this stage swap sources (e.g. sql-test). Deploy forward or backward, never skip a stage."><span class="fi">🧪</span>Test<small>workspace B</small></div>
+  <div data-info="Rules point to production sources. Update the Power BI app manually after deploying."><span class="fi">🏭</span>Production<small>workspace C</small></div>
+</div>
+<div class="stats">
+  <div><b>2–10</b><span>stages (default 3)</span></div>
+  <div><b>1</b><span>pipeline per workspace</span></div>
+  <div><b>300</b><span>items per deployment</span></div>
+  <div><b>⇄</b><span>adjacent stages, both directions</span></div>
 </div>
 
-<div class="check" data-answer="1">
-<p>After deploying a Direct Lake on SQL endpoint semantic model and its lakehouse from Test to Production, the Production report still shows Test data. Why?</p>
-<ul>
-<li>Direct Lake models don't autobind; add a data source rule in Production that points to the Production lakehouse SQL endpoint and redeploy</li>
-<li>Deployment pipelines copied the Test data into Production</li>
-<li>The Production lakehouse needs a refresh schedule identical to Test</li>
-<li>Direct Lake models can't be deployed with deployment pipelines</li>
-</ul>
-<p class="why">Unlike import/DirectQuery models that autobind to the paired item, Direct Lake models keep their original binding. Direct Lake on SQL → data source rule; Direct Lake on OneLake → M parameters with parameter rules. No data is ever copied by deployment.</p>
+<div class="sim">
+  <div class="wtitle">Deployment simulator</div>
+  <p class="muted" style="margin:.2em 0">Deploy, watch the cards, then add rules and redeploy. Rules can only be set once the item exists in that stage.</p>
+  <div class="p03-bar">
+    <button id="p03-edit">✏️ Edit in Dev (new measure)</button>
+    <button class="primary" id="p03-d1">🚀 Deploy Dev → Test</button>
+    <button class="primary" id="p03-d2">🚀 Deploy Test → Prod</button>
+    <button id="p03-reset">↺ Reset</button>
+  </div>
+  <div class="p03-stages" id="p03-stages"></div>
+  <div class="p03-rules" id="p03-rules"></div>
+  <div class="out p03-log" id="p03-log">Start by deploying Dev → Test.</div>
 </div>
+<script>
+(function () {
+  var S = ['Dev', 'Test', 'Prod'], st, ver, rules, varlib;
+  var src = { Dev: 'sql-dev', Test: 'sql-test', Prod: 'sql-prod' };
+  function reset() {
+    ver = 3;
+    st = [{ ver: 3, from: 'Dev', nbLh: 'Dev', plLh: 'Dev', rows: '50K sample', data: true }, null, null];
+    rules = { Test: { ds: false, nb: false }, Prod: { ds: false, nb: false } };
+    varlib = false;
+    render(); log('Start by deploying Dev → Test.');
+  }
+  function $(id) { return document.getElementById(id); }
+  function log(h) { $('p03-log').innerHTML = h; }
+  function badge(ok, t) { return '<span class="badge ' + (ok ? 'ok' : 'bad') + '">' + t + '</span>'; }
+  function card(i) {
+    var s = st[i], n = S[i];
+    if (!s) return '<div class="p03-empty">empty stage<br>(deploy to create the workspace)</div>';
+    var ds = s.ds || 'sql-dev', dsOk = ds === src[n];
+    var nbOk = s.nbLh === n, plOk = s.plLh === n;
+    return '<div class="p03-item" style="border-left-color:var(--c3)"><b>🧠 Sales model</b><span class="v">v' + s.ver + '</span><br>source: ' + ds + ' ' + badge(dsOk, dsOk ? '✓' : 'wrong stage') + '</div>' +
+      '<div class="p03-item" style="border-left-color:var(--c1)"><b>📊 Sales report</b><span class="v">v' + s.ver + '</span><br>→ Sales model (' + n + ') ' + badge(true, 'autobind') + '</div>' +
+      '<div class="p03-item" style="border-left-color:var(--c4)"><b>📓 Notebook</b><span class="v">v' + s.ver + '</span><br>default LH: LH_' + s.nbLh + ' ' + badge(nbOk, nbOk ? '✓' : 'wrong stage') + '</div>' +
+      '<div class="p03-item" style="border-left-color:var(--c5)"><b>🔀 Pipeline</b><span class="v">v' + s.ver + '</span><br>reads LH_' + s.plLh + ' ' + badge(plOk, plOk ? '✓' : 'wrong stage') + '</div>' +
+      '<div class="p03-item" style="border-left-color:var(--c2)"><b>🏞️ LH_' + n + '</b><br>data: ' + (s.data ? s.rows : '<b>0 rows</b> ' + badge(false, 'load data')) + '</div>' +
+      '<div class="p03-item" style="border-left-color:var(--c6)"><b>⚙️ Stage settings</b><br>' + (i === 0 ? 'credentials, schedule, RLS members ✓' : (s.cfg ? 'credentials, schedule, RLS members ✓' : '<span class="badge warn">set credentials, schedule, RLS members</span> <button data-cfg="' + i + '" style="font-size:.8em;padding:0 6px">done</button>')) + '</div>';
+  }
+  function render() {
+    $('p03-stages').innerHTML = S.map(function (n, i) {
+      return '<div class="p03-stage"><h5>' + ['🛠️', '🧪', '🏭'][i] + ' ' + n + (st[i] ? '' : '') + '</h5>' + card(i) + '</div>';
+    }).join('');
+    var h = '<div><b>🛠️ Dev</b><br><label><input type="checkbox" disabled> no rules in the first stage</label></div>';
+    ['Test', 'Prod'].forEach(function (n, k) {
+      var has = !!st[k + 1];
+      h += '<div><b>' + ['🧪', '🏭'][k] + ' ' + n + ' rules</b>' + (has ? '' : ' <span class="muted">(deploy first)</span>') + '<br>';
+      h += '<label><input type="checkbox" data-r="' + n + '.ds"' + (rules[n].ds ? ' checked' : '') + (has ? '' : ' disabled') + '> data source: model → ' + src[n] + '</label><br>';
+      h += '<label><input type="checkbox" data-r="' + n + '.nb"' + (rules[n].nb ? ' checked' : '') + (has ? '' : ' disabled') + '> default lakehouse: notebook</label></div>';
+    });
+    h += '<div style="grid-column:1/-1"><label><input type="checkbox" id="p03-vl"' + (varlib ? ' checked' : '') + '> 🧩 Pipeline reads its lakehouse from a variable library (all stages)</label></div>';
+    $('p03-rules').innerHTML = h;
+    $('p03-d1').disabled = false; $('p03-d2').disabled = !st[1];
+  }
+  function deploy(a) {
+    var b = a + 1, n = S[b], s = st[a], t = st[b], first = !t, old = t ? t.ver : null;
+    var r = rules[n];
+    st[b] = {
+      ver: s.ver,
+      ds: r.ds ? src[n] : (s.ds || 'sql-dev'),
+      nbLh: r.nb ? n : s.nbLh,
+      plLh: varlib ? n : s.plLh,
+      data: t ? t.data : false, rows: t ? t.rows : '',
+      cfg: t ? t.cfg : false
+    };
+    render();
+    var cards = $('p03-stages').children[b].querySelectorAll('.p03-item');
+    cards.forEach(function (c) { c.classList.add('flash'); });
+    var hh = '<b>' + S[a] + ' → ' + n + '</b> ' + (first ? '(empty stage: workspace created, you are its only admin)' : '(v' + old + ' → v' + s.ver + ', paired items overwritten)') +
+      '<ul><li>✅ <b>Copied</b>: model metadata, report, notebook code, pipeline JSON, lakehouse definition; report autobinds to ' + n + ' model.</li>' +
+      '<li>⛔ <b>Not copied</b>: lakehouse rows, imported data, credentials, refresh schedule, RLS members, permissions, app' + (st[b].data ? '' : ' → <b>refresh/load data in ' + n + '</b>') + '.</li>';
+    var miss = [];
+    if (st[b].ds !== src[n]) miss.push('model still reads <b>' + st[b].ds + '</b> → add a data source rule in ' + n + ' and redeploy');
+    if (st[b].nbLh !== n) miss.push('notebook still uses LH_' + st[b].nbLh + ' → default lakehouse rule (or variable library)');
+    if (st[b].plLh !== n) miss.push('pipelines have no rules → use a variable library');
+    if (miss.length) hh += '<li>⚠️ ' + miss.join('<br>⚠️ ') + '</li>';
+    log(hh + '</ul>');
+  }
+  $('p03-edit').addEventListener('click', function () { ver++; st[0].ver = ver; render(); log('Dev is now <b>v' + ver + '</b>. Compare would show the model and report as <i>different</i>.'); });
+  $('p03-d1').addEventListener('click', function () { deploy(0); });
+  $('p03-d2').addEventListener('click', function () { if (st[1]) deploy(1); });
+  $('p03-reset').addEventListener('click', reset);
+  document.getElementById('p03-stages').addEventListener('click', function (e) {
+    var i = e.target.getAttribute && e.target.getAttribute('data-cfg');
+    if (i) { st[+i].cfg = true; st[+i].data = true; st[+i].rows = 'refreshed (' + S[+i] + ' data)'; render(); log('Stage settings configured and data loaded in ' + S[+i] + '. These stay put on future deployments.'); }
+  });
+  document.getElementById('p03-rules').addEventListener('change', function (e) {
+    var k = e.target.getAttribute('data-r');
+    if (e.target.id === 'p03-vl') { varlib = e.target.checked; log('Variable library ' + (varlib ? 'on: each stage has its own active value set' : 'off') + '. Takes effect on the <b>next deployment</b>.'); return; }
+    if (!k) return;
+    var p = k.split('.'); rules[p[0]][p[1]] = e.target.checked;
+    log('Rule ' + (e.target.checked ? 'created' : 'removed') + ' on the <b>' + p[0] + '</b> stage. Nothing changes until you <b>deploy into ' + p[0] + ' again</b>.');
+  });
+  reset();
+})();
+</script>
 
-<div class="sort" data-task="Is this copied by a deployment pipeline deployment or does it stay as configured in the target stage?">
-<ul data-bucket="Copied to target">
-<li>Report pages and visuals</li>
-<li>Semantic model metadata (tables, measures, relationships)</li>
-<li>Notebook code</li>
-<li>Incremental refresh policy</li>
-<li>Item-to-item dependencies (rebound by autobinding)</li>
-</ul>
-<ul data-bucket="Not copied">
-<li>Imported data and lakehouse table data</li>
-<li>Data source credentials</li>
-<li>RLS role membership</li>
-<li>Refresh schedule</li>
-<li>Power BI app content</li>
-<li>Workspace permissions</li>
-</ul>
+<div class="sort" data-task="Does a deployment copy it, or does it stay as configured in the target stage?">
+<ul data-bucket="Copied (overwrites target)"><li>Report pages and visuals</li><li>Model tables, measures, relationships</li><li>Notebook code</li><li>Incremental refresh policy</li><li>Item dependencies (autobind)</li></ul>
+<ul data-bucket="Not copied (stays in target)"><li>Imported and lakehouse data</li><li>Data source credentials</li><li>RLS role membership</li><li>Refresh schedule</li><li>Power BI app content</li><li>Workspace permissions</li></ul>
 </div>
-
-<h2>Variable libraries, REST APIs and fabric-cicd</h2>
-<h3>Variable library</h3>
-<p>A <strong>variable library</strong> is a workspace item that holds variables (string, integer, number, boolean, date-time, GUID, <strong>item reference</strong>…) plus <strong>value sets</strong> (one per environment). Exactly <strong>one value set is active per workspace</strong>, so each pipeline stage resolves its own values at run time. It's supported by Git and deployment pipelines (the library is deployed; each stage keeps its own active value set).</p>
-<p>Consumers: <strong>pipelines</strong>, <strong>lakehouse shortcuts</strong>, <strong>notebooks</strong> (NotebookUtils / <code>%%configure</code>), <strong>Dataflow Gen2</strong>, <strong>Copy job</strong>, user data functions, eventstreams. This is the modern answer for "different connection/lakehouse per stage" for items that don't support deployment rules. Limits: up to 1,000 variables and 1,000 value sets (fewer than 10,000 cells, item ≤ 1 MB).</p>
-
-<h3>Automation options</h3>
-<div class="tw"><table>
-<thead><tr><th>Tool</th><th>What it does</th><th>Typical use</th></tr></thead>
-<tbody>
-<tr><td>Fabric REST APIs – Git</td><td>Connect, get status, <em>Commit to Git</em>, <em>Update from Git</em></td><td>Build pipeline updates the Test/Prod workspace after a PR merge</td></tr>
-<tr><td>Deployment pipelines REST APIs</td><td>Deploy all / selective between stages, get operations</td><td>Release pipeline triggers Test → Prod promotion after approval</td></tr>
-<tr><td>Items APIs (Create/Update item definition)</td><td>Push definitions (e.g., PBIP folders) to a workspace</td><td>"Build environment" pattern: modify definitions per environment, then upload</td></tr>
-<tr><td><strong>fabric-cicd</strong></td><td>Open-source Python library from Microsoft (<code>pip install fabric-cicd</code>) that deploys item definitions from a repository folder to a target workspace; <code>parameter.yml</code> does find/replace of environment-specific values (IDs, connection strings); can remove orphaned items</td><td>Code-first CI/CD from Azure DevOps Pipelines or GitHub Actions, usually with a service principal</td></tr>
-<tr><td>Semantic link (notebooks)</td><td>Run DAX against a model and compare with source queries</td><td>Automated tests / data validation that can fail a release</td></tr>
-</tbody>
+<div class="tw"><table class="matrix">
+<tr><th>Item</th><th>Data source rule</th><th>Parameter rule</th><th>Default lakehouse rule</th></tr>
+<tr><td>Semantic model</td><td>✓</td><td>✓</td><td>✗</td></tr>
+<tr><td>Dataflow Gen1</td><td>✓</td><td>✓</td><td>✗</td></tr>
+<tr><td>Paginated report, mirrored DB</td><td>✓</td><td>✗</td><td>✗</td></tr>
+<tr><td>Notebook</td><td>✗</td><td>✗</td><td>✓</td></tr>
+<tr><td>Pipeline, Copy job, Dataflow Gen2, shortcuts</td><td>✗ → variable library</td><td>✗</td><td>✗</td></tr>
 </table></div>
-
-<h2>Combining Git and deployment pipelines</h2>
-<p>Microsoft documents several release patterns. Know the trade-offs:</p>
-<div class="tw"><table>
-<thead><tr><th>Pattern</th><th>How it works</th><th>When to choose</th></tr></thead>
-<tbody>
-<tr><td><strong>Git + deployment pipelines</strong> (most common for analytics teams)</td><td>Only the <strong>Dev workspace</strong> is connected to Git (<code>main</code>). Developers work in branched/feature workspaces or PBIP locally → PR → merge → Update Dev. Then a deployment pipeline promotes Dev → Test → Prod with rules/variable libraries.</td><td>Low-code friendly, built-in compare and rules, no build agents needed</td></tr>
-<tr><td><strong>Git-based deployments</strong></td><td>Each stage workspace is connected to its <strong>own branch</strong> (dev, test, main). Releases are PR merges between branches; each workspace is updated from its branch (manually or via API).</td><td>Teams that want everything to flow through Git with branch policies</td></tr>
-<tr><td><strong>Git-based with build environments</strong></td><td>A build pipeline (Azure DevOps/GitHub Actions) takes definitions from Git, transforms environment-specific values, runs tests, and deploys with Fabric APIs or fabric-cicd.</td><td>Pro-code teams, many environments, automated quality gates</td></tr>
-<tr><td>ISV / multi-tenant</td><td>Same definitions deployed to many customer workspaces via APIs</td><td>Software vendors</td></tr>
-</tbody>
-</table></div>
+<div class="flips">
+  <div class="flip"><div class="front">Do Direct Lake models autobind on deploy?</div><div class="back">No. They keep pointing at the source-stage lakehouse. SQL endpoint variant → data source rule; OneLake variant → M parameters + parameter rules.</div></div>
+  <div class="flip"><div class="front">Minimum rights to deploy Dev → Test?</div><div class="back"><span>Pipeline admin + Contributor (or higher) on <b>both</b> source and target workspaces.</span></div></div>
+</div>
+<div class="check" data-answer="4"><p>Model1 reads sql-dev. In Production it must read sql-prod (same connector). Where do you configure this?</p><ul><li>A parameter in Dev workspace settings</li><li>A data source rule on Model1 in the Development stage</li><li>Production workspace settings</li><li>A data source rule on Model1 in the Production stage, then deploy to Production</li></ul><p class="why">Rules live on the target stage (never the first) and apply on the next deployment.</p></div>
+<div class="check" data-answer="1"><p>After deploying a Direct Lake on SQL endpoint model and its lakehouse to Prod, the report still shows Test data. Why?</p><ul><li>Direct Lake models don't autobind: add a data source rule in Prod and redeploy</li><li>The pipeline copied Test data to Prod</li><li>Prod needs the same refresh schedule as Test</li><li>Direct Lake models can't be deployed</li></ul><p class="why">No data is ever copied; Direct Lake keeps its original binding until a rule changes it.</p></div>
+<details><summary>Deep dive: pairing, compare, autobinding, permissions, rule fine print</summary>
 <ul>
-<li>Use <strong>separate workspaces per stage</strong>. One workspace for Dev, Test and Prod removes isolation – untested changes reach consumers.</li>
-<li>Externalize environment values (connections, lakehouse IDs, paths) into <strong>parameters, deployment rules or variable libraries</strong>; never hard-code production values.</li>
-<li>Give testers realistic data cheaply: a <strong>warehouse zero-copy clone</strong> or shortcuts instead of copying terabytes.</li>
-<li>Publish a <strong>Power BI app per stage</strong> to test the consumer experience; remember deployment doesn't update the app.</li>
-</ul>
+<li>Workspaces must be on Fabric capacity (Power BI-only content: PPU too). Stage count and names are fixed after creation; stages can be public/private.</li>
+<li><b>Pairing</b>: on assignment or clean deploy. Paired items stay paired when renamed and get overwritten. Unpaired look-alikes → duplicate created (or first deploy fails on same name + type).</li>
+<li><b>Compare</b>: same / different (Review changes diff) / only in source / only in target. Selective deploy + <i>Select related</i> adds dependencies. Missing dependency in target → deployment fails. History (pipeline admin). REST APIs; deployment plans (preview).</li>
+<li>Small changes keep target data; breaking changes need a full refresh. Incremental refresh partitions retained. No .pbix download after deployment. Sensitivity labels copied only for new items/empty stage or protected labels.</li>
+<li>Autobinding across pipelines needs the same stage position and same number of stages. Avoid it with an item outside the stage, a parameter rule, or a proxy model. Not for Dataflow Gen2.</li>
+<li>Rules: you must own the item + Contributor on target. Data source rules only switch to the same source type for listed connectors (Azure SQL, SQL Server, Synapse, AAS, SSAS, OData, Oracle, SAP HANA import, SharePoint, Teradata); otherwise parameter rules (Text parameters). Removed source/parameter → rule invalid, deployment fails. Deleting the item or unassigning the workspace deletes rules.</li>
+<li>Permissions: create pipeline = Pro/PPU/Premium; pipeline admin is the only pipeline role (no M365 groups) and grants no workspace content access. Assign a workspace = pipeline admin + workspace Admin. Deploy to empty stage = pipeline admin + source Contributor + capacity rights. <i>Block republish</i> switch → model owner needed.</li>
+</ul></details>
+</section>
 
+<!-- ============ L5 ============ -->
+<section class="lesson">
+<h2>Release patterns and automation</h2>
+<p class="idea">Pick a release pattern by team style; externalize per-stage values instead of hard-coding them.</p>
+<div class="tabset">
+  <section data-tab="🌿 + 🚀 Git + pipelines">
+    <div class="flow"><div data-info="Feature workspaces or local PBIP."><span class="fi">🌱</span>Feature<small>branch</small></div><div data-info="Reviewed PR merged into main; Update the Dev workspace."><span class="fi">🌿</span>main<small>Dev workspace</small></div><div data-info="Deployment pipeline promotes Dev → Test → Prod with rules / variable libraries."><span class="fi">🚀</span>Pipeline<small>Test → Prod</small></div></div>
+    <p>Most common for analytics teams. Low-code, built-in compare and rules, no build agents.</p>
+  </section>
+  <section data-tab="🌿 Git-based">
+    <p>Each stage workspace connects to <b>its own branch</b> (dev, test, main). Releases = PR merges between branches, then Update (UI or API).</p>
+  </section>
+  <section data-tab="🏗️ Build environments">
+    <p>Azure DevOps / GitHub Actions takes definitions from Git, replaces environment values, runs tests, deploys via Fabric APIs or <b>fabric-cicd</b>. Pro-code, many environments, quality gates.</p>
+  </section>
+  <section data-tab="🏢 ISV">
+    <p>Same definitions pushed to many customer workspaces through APIs.</p>
+  </section>
+</div>
+<div class="icards">
+  <div class="icard" data-info="Workspace item with variables (string, int, bool, GUID, item reference…) and one value set per environment; exactly one active set per workspace. Used by pipelines, shortcuts, notebooks, Dataflow Gen2, Copy job, eventstreams, UDFs. Up to 1,000 variables / 1,000 value sets."><div class="i">🧩</div><h4>Variable library</h4><p>Per-stage values for items without rules</p></div>
+  <div class="icard" data-info="Open-source Python library (pip install fabric-cicd). Deploys item definitions from a repo folder; parameter.yml find/replace of IDs and connection strings; can remove orphaned items. Usually run with a service principal."><div class="i">🐍</div><h4>fabric-cicd</h4><p>Code-first deploys from Git</p></div>
+  <div class="icard" data-info="Git APIs (connect, status, commit, update), deployment pipeline APIs (deploy all/selective), item definition APIs (push PBIP definitions)."><div class="i">🔧</div><h4>REST APIs</h4><p>Automate Git and deployments</p></div>
+  <div class="icard" data-info="Run DAX from a notebook and compare with source queries: automated data tests that can fail a release."><div class="i">🧪</div><h4>Semantic link</h4><p>Automated data tests</p></div>
+  <div class="icard" data-info="Warehouse = SQL database project (.sqlproj, one .sql per object). Build → DACPAC; deploy diffs and generates ALTER/CREATE. Schema only. Some column changes drop and recreate a table: review the script, reload data."><div class="i">🏢</div><h4>Database project</h4><p>Warehouse schema → DACPAC</p></div>
+</div>
+<div class="decide" data-task="Which ALM tool or release pattern fits?">
+  <div data-node="start" data-q="What do you need right now?"><button data-go="hist">History / review of changes</button><button data-go="promo">Promote between environments</button><button data-go="live">Change a published model in place</button></div>
+  <div data-node="hist" data-q="Is the item a warehouse schema?"><button data-go="dbp">Yes</button><button data-go="git">No</button></div>
+  <div data-node="promo" data-q="Does your team want low-code promotion with built-in compare?"><button data-go="dp">Yes</button><button data-go="code">No, pro-code CI/CD</button></div>
+  <div data-node="live" data-q="Read-only analysis or a write?"><button data-go="ro">Read / trace</button><button data-go="rw">Write (calc groups, partitions)</button></div>
+  <div data-node="git" data-result>🌿 <b>Git integration</b> + PBIP/TMDL, feature branches and pull requests.</div>
+  <div data-node="dbp" data-result>🏢 <b>SQL database project</b> in Git, deployed as a DACPAC.</div>
+  <div data-node="dp" data-result>🚀 <b>Deployment pipeline</b> Dev → Test → Prod with rules or variable libraries.</div>
+  <div data-node="code" data-result>🐍 <b>Build environment</b>: Azure DevOps / GitHub Actions + fabric-cicd or Fabric REST APIs.</div>
+  <div data-node="ro" data-result>🔍 <b>XMLA read-only</b> (default): DAX Studio, Profiler, Excel.</div>
+  <div data-node="rw" data-result>✍️ <b>XMLA read-write</b> (capacity setting): Tabular Editor, SSMS, ALM Toolkit.</div>
+</div>
 <div class="order" data-task="Put the steps of a typical feature release (Git + deployment pipeline) in order.">
 <ol>
-<li>Branch out from the Dev workspace to a new feature workspace</li>
-<li>Make changes and commit them to the feature branch</li>
+<li>Branch out from Dev to a feature workspace</li>
+<li>Commit changes to the feature branch</li>
 <li>Open a pull request to main and get it reviewed</li>
 <li>Merge the pull request</li>
 <li>Update the Dev workspace from Git</li>
 <li>Compare Dev with Test and deploy to Test</li>
-<li>Validate in Test, then deploy to Production (rules apply)</li>
-<li>Refresh data where needed and update the Production app</li>
+<li>Validate, then deploy to Production (rules apply)</li>
 </ol>
 </div>
-
 <div class="reveal">
-<p><strong>Scenario:</strong> Five developers edit the same semantic model. Today they publish PBIX files directly to the shared Dev workspace and regularly overwrite each other's measures. Production must only receive reviewed changes, and the Production model must read from the production warehouse. Design the process.</p>
-<div class="answer">
-<ul>
-<li>Save the model as <strong>PBIP with TMDL</strong> and put it in Git (Azure DevOps or GitHub); connect the Dev workspace (Admin) to <code>main</code>.</li>
-<li>Each developer works in a <strong>feature branch</strong> – either locally in Desktop or via <strong>Branch out to another workspace</strong> (one workspace per branch).</li>
-<li>Changes reach <code>main</code> only via <strong>pull requests</strong> with reviewers (branch policy blocks direct commits); TMDL gives per-table diffs so conflicts are rare and mergeable.</li>
-<li>After merge, <strong>Update</strong> the Dev workspace from Git (Update applies the whole branch).</li>
-<li>A <strong>deployment pipeline</strong> (Dev → Test → Prod) promotes content; a <strong>data source rule</strong> (or parameter rule) on the model in the Prod stage points it at the production warehouse; refresh after deployment; set credentials/schedule/RLS members once in Prod (not copied).</li>
-<li>Deployers need pipeline admin + Contributor on source and target; restrict Prod workspace roles so nobody edits Prod directly.</li>
-</ul>
+<p><b>Scenario:</b> A pipeline copies from LH_Bronze_Dev and a notebook defaults to LH_Silver_Dev. After deploying to Test both still hit Dev. Fix each.</p>
+<div class="answer"><ul>
+<li><b>Notebook</b>: default lakehouse rule in Test/Prod, or variable library (NotebookUtils / %%configure).</li>
+<li><b>Pipeline</b>: no rules exist → variable library item reference (or per-environment parameters).</li>
+<li>Redeploy; load Test data separately (shortcut or clone), since no data is copied.</li>
+</ul></div>
 </div>
+<details><summary>Deep dive: good practice</summary>
+<ul><li>Separate workspaces per stage; one shared workspace removes isolation.</li>
+<li>Realistic test data cheaply: warehouse zero-copy clone (<code>CREATE TABLE … AS CLONE OF</code>) or shortcuts.</li>
+<li>Publish an app per stage; deployment doesn't update the app.</li>
+<li>Five developers overwriting each other's PBIX → PBIP + TMDL in Git, feature branches, PRs with branch policy, Update Dev, pipeline with a Prod data source rule, restrict Prod roles.</li></ul></details>
+</section>
+
+<!-- ============ L6 ============ -->
+<section class="lesson">
+<h2>XMLA, reusable assets, impact analysis</h2>
+<p class="idea">XMLA makes a workspace look like an Analysis Services server; reuse templates and shared models; check impact before breaking changes.</p>
+<div class="layers">
+  <div data-info="powerbi://api.powerbi.com/v1.0/myorg/Sales%20Workspace (workspace name URI-encoded). Copy from Workspace settings → License info.">Workspace = server <small>powerbi://…/myorg/&lt;workspace&gt;</small></div>
+  <div data-info="Each semantic model appears as a database (Profiler needs it as Initial Catalog).">Semantic model = database <small>Initial Catalog</small></div>
+  <div data-info="Capacity admin: Admin portal → Capacity settings → Power BI workloads → XMLA Endpoint = Read Write. Applies to all workspaces on that capacity. Tenant setting for XMLA must also be on.">Capacity setting <small>Read Only (default) / Read Write</small></div>
+  <div data-info="Contributor, Member, Admin = write = database admin. Build permission = read (RLS enforced). Block republish switch → only owners write.">Permissions <small>Contributor+ write · Build read</small></div>
 </div>
-
-<h2>XMLA endpoint</h2>
-<p>Every workspace on a Fabric/Premium capacity (or PPU) exposes its semantic models through the <strong>XMLA endpoint</strong> – the Analysis Services protocol. The workspace looks like an Analysis Services <em>server</em> and each semantic model like a <em>database</em>.</p>
-<ul>
-<li><strong>Connection URL</strong>: <code>powerbi://api.powerbi.com/v1.0/myorg/Sales%20Workspace</code> (tenant name or <code>myorg</code>; workspace name URI-encoded). Copy it from Workspace settings → <em>License info / Premium</em> → Workspace connection. Some tools (Profiler) also need the model name as <em>Initial Catalog</em>.</li>
-<li><strong>Default: read-only</strong> – query data, metadata, events, schema (Excel, DAX Studio, Report Builder, Power BI Desktop live connect).</li>
-<li><strong>Read-write</strong> is enabled per <strong>capacity</strong> by a capacity/Fabric admin: Admin portal → Capacity settings → (capacity) → Power BI workloads → <em>XMLA Endpoint = Read Write</em>. It applies to <em>all</em> workspaces on that capacity (for PPU: Admin portal → Premium Per User).</li>
-<li>Tenant setting <em>Allow XMLA endpoints and Analyze in Excel with on-premises semantic models</em> (Integration settings, on by default) must also be enabled.</li>
-<li>Permissions: workspace <strong>Contributor, Member, Admin</strong> = write permission = Analysis Services <em>database admin</em> (deploy, script TMSL, process). <strong>Build</strong> = database <em>reader</em> (query; RLS enforced; Build is required for any XMLA read access). Server-admin operations aren't supported.</li>
-<li>With the tenant switch <em>Block republish and disable package refresh</em>, only model owners can write via XMLA.</li>
-</ul>
-
-<div class="tw"><table>
-<thead><tr><th>Tool</th><th>Typical XMLA use</th><th>Needs read-write?</th></tr></thead>
-<tbody>
-<tr><td><strong>SSMS</strong></td><td>Browse, script TMSL, process tables/<strong>partitions</strong>, manage roles, backup/restore, DMVs</td><td>Read for queries; read-write for scripting/processing</td></tr>
-<tr><td><strong>Tabular Editor</strong> (2 free / 3 commercial)</td><td>Edit model metadata in place: <strong>calculation groups</strong>, perspectives, translations, OLS, Best Practice Analyzer, C# scripts</td><td>Yes, for saving changes</td></tr>
-<tr><td><strong>DAX Studio</strong></td><td>Run/trace DAX, Server Timings, VertiPaq Analyzer</td><td>No (read-only)</td></tr>
-<tr><td><strong>ALM Toolkit</strong></td><td>Schema compare &amp; selective deploy between models/environments, keeps incremental refresh partitions</td><td>Read to compare; read-write to deploy</td></tr>
-<tr><td>SQL Server Profiler</td><td>Trace engine events (specify Initial Catalog)</td><td>No</td></tr>
-<tr><td>Visual Studio (Analysis Services projects), Deployment Wizard, PowerShell (SqlServer module), TOM/.NET</td><td>Deploy tabular projects, automate refresh &amp; management</td><td>Yes</td></tr>
-<tr><td>Excel (Analyze in Excel), Power BI Report Builder</td><td>Query/consume</td><td>No</td></tr>
-</tbody>
-</table></div>
-
-<ul>
-<li><strong>Refresh via XMLA</strong> isn't limited to 48 refreshes/day and has no scheduled-refresh timeout; you can process individual <strong>partitions</strong> (e.g., refresh only the current month of an incremental refresh table). Refresh history shows "via XMLA endpoint". The REST API <em>enhanced refresh</em> is the other way to target tables/partitions.</li>
-<li>Enable the <strong>large semantic model storage format</strong> when you use XMLA write operations – it makes them much faster (and it's required to grow beyond 10 GB).</li>
-<li>Credentials can't be set over XMLA – set them in the model settings in the service.</li>
-<li>Not reachable via XMLA: live-connection models (to AAS/SSAS or another Power BI model), push datasets, Excel workbook models.</li>
-<li>XMLA operations are recorded in the audit log (ConnectFromExternalApplication, EditDatasetFromExternalApplication…).</li>
-</ul>
-<div class="warn"><p><strong>Download trap:</strong> after <em>any</em> XMLA <strong>write</strong> to a model authored in Power BI Desktop, the model <strong>can no longer be downloaded as a .pbix</strong> from the service. Keep the original PBIX/PBIP in source control. (Downloading .pbix is also not supported after a deployment-pipeline deployment and unreliable after Git sync.)</p></div>
-
-<div class="check" data-answer="2">
-<p>You must add a calculation group to a published semantic model directly in the service with Tabular Editor. The connection succeeds but saving fails. The model is on an F64 capacity and you're a workspace Member. What is the most likely fix?</p>
-<ul>
-<li>Grant yourself Build permission on the model</li>
-<li>Have the capacity admin set the XMLA endpoint to Read Write</li>
-<li>Switch the model to DirectQuery storage mode</li>
-<li>Connect the workspace to Git first</li>
-</ul>
-<p class="why">The XMLA endpoint is read-only by default; write operations (saving metadata from Tabular Editor, SSMS scripting, ALM Toolkit deploy) need read-write in the capacity settings. As a Member you already have write (database admin) permission.</p>
+<div class="flips">
+  <div class="flip"><div class="front">Tabular Editor connects but saving a calc group fails. Fix?</div><div class="back"><span>Capacity admin sets <b>XMLA Endpoint = Read Write</b>. A Member already has write permission.</span></div></div>
+  <div class="flip"><div class="front">XMLA write on a Desktop-authored model: side effect?</div><div class="back">It can no longer be downloaded as .pbix. Keep the PBIX/PBIP in source control.</div></div>
+  <div class="flip"><div class="front">.pbit vs .pbids?</div><div class="back"><span><b>.pbit</b>: report + model + queries + parameters, no data. <b>.pbids</b>: connection only.</span></div></div>
 </div>
-
 <div class="match" data-task="Match the XMLA-based tool to the task it is best known for.">
 <dl>
-<dt>DAX Studio</dt><dd>Trace a slow measure and inspect Server Timings</dd>
-<dt>Tabular Editor</dt><dd>Create calculation groups and run Best Practice Analyzer on a published model</dd>
-<dt>ALM Toolkit</dt><dd>Schema-compare two models and deploy only selected differences</dd>
-<dt>SSMS</dt><dd>Run a TMSL script to process a single partition</dd>
-<dt>SQL Server Profiler</dt><dd>Capture engine trace events for a specific model</dd>
-<dt>Power BI Report Builder</dt><dd>Author a paginated report that queries the model</dd>
+<dt>DAX Studio</dt><dd>Trace a slow measure, Server Timings</dd>
+<dt>Tabular Editor</dt><dd>Calc groups and Best Practice Analyzer</dd>
+<dt>ALM Toolkit</dt><dd>Schema-compare two models, deploy selected differences</dd>
+<dt>SSMS</dt><dd>TMSL script to process one partition</dd>
+<dt>SQL Server Profiler</dt><dd>Capture engine trace events</dd>
 </dl>
 </div>
-
-<h2>Database projects for the warehouse</h2>
-<ul>
-<li>A Fabric <strong>warehouse</strong> is source-controlled as a <strong>SQL database project</strong> (<code>.sqlproj</code>, one <code>.sql</code> file per table, view, function, procedure, schema). Git integration and deployment pipelines handle the warehouse through this project – <strong>schema only, never data</strong>.</li>
-<li>Building the project produces a <strong>DACPAC</strong> (data-tier application package). Deploying a DACPAC (SqlPackage, VS Code <em>SQL Database Projects</em> extension, SSMS, or a CI/CD task) <strong>diffs</strong> the model against the target and generates the ALTER/CREATE script.</li>
-<li>You can download a warehouse as a database project from the Fabric UI, develop in VS Code, and publish to a warehouse connection string. Fabric SQL database works the same way.</li>
-<li>Watch out: some schema changes (e.g., altering columns) can make a deployment drop and recreate a table – data in the target table is lost. Review the generated script; reload data after deployment.</li>
-<li>For fast test environments, a <strong>zero-copy table clone</strong> (<code>CREATE TABLE … AS CLONE OF …</code>) copies metadata only and references the same files.</li>
-</ul>
-
-<h2>Reusable assets</h2>
-<div class="tw"><table>
-<thead><tr><th>Asset</th><th>Contains</th><th>Use it to…</th></tr></thead>
-<tbody>
-<tr><td><strong>Power BI template (.pbit)</strong></td><td>Report pages, model (tables, relationships, measures), Power Query queries and <strong>parameters</strong> – <strong>no data</strong></td><td>Give authors a standard starting point; on open, the user is prompted for parameter values, then data loads</td></tr>
-<tr><td><strong>Power BI data source file (.pbids)</strong></td><td>JSON with a <strong>connection</strong> only (source type, server, database; optional mode) – <strong>no credentials, no queries</strong></td><td>Let authors start with the right source pre-filled (opens Get data → Navigator)</td></tr>
-<tr><td><strong>Shared semantic model</strong></td><td>One governed model, consumed via live connection by many reports (Build permission), endorsed (Promoted/Certified)</td><td>Single version of truth; avoid every analyst rebuilding the model</td></tr>
-<tr><td>Composite model on a shared model</td><td>DirectQuery to a Power BI semantic model + local tables/measures</td><td>Extend an enterprise model without copying it</td></tr>
-<tr><td>PBIP folders</td><td>Text definitions of reports/models</td><td>Copy tables, pages or visuals between projects; programmatic generation</td></tr>
-<tr><td>Report theme (.json), organizational visuals</td><td>Formatting / approved custom visuals</td><td>Consistent branding</td></tr>
-<tr><td>Dataflow Gen2, shortcuts, OneLake data</td><td>Reusable ETL logic / data</td><td>"Build once, use many" ingestion</td></tr>
-</tbody>
-</table></div>
-<div class="exam"><p>"Distribute a file that contains the report layout, measures and queries but <strong>no data</strong>, prompting for a server parameter" → <strong>.pbit</strong>. "Distribute a file that only opens a connection to the approved SQL database" → <strong>.pbids</strong>. "Analysts keep rebuilding the same model" → publish a <strong>shared semantic model</strong>, endorse/certify it, make it discoverable in the OneLake catalog, grant <strong>Build</strong>.</p></div>
-
-<div class="check" data-answer="3">
-<p>You want every new sales report to start from the same layout, theme, DAX measures and a <code>ServerName</code> parameter, without distributing any data. What should you share?</p>
-<ul>
-<li>A .pbids file</li>
-<li>A .pbix file with all rows filtered out</li>
-<li>A .pbit template file</li>
-<li>The XMLA connection URL of the workspace</li>
-</ul>
-<p class="why">A Power BI template contains report, model definition, queries and parameters but no data, and prompts for parameter values when opened. A .pbids file only pre-configures a data source connection.</p>
+<div class="icards" data-hint="Click an asset.">
+  <div class="icard" data-info="Pages, model, Power Query queries and parameters, no data. Prompts for parameter values on open."><div class="i">📐</div><h4>.pbit</h4><p>Template, no data</p></div>
+  <div class="icard" data-info="JSON with source type, server, database (optional mode). No credentials, no queries. Opens Get data → Navigator."><div class="i">🔗</div><h4>.pbids</h4><p>Connection only</p></div>
+  <div class="icard" data-info="One governed model, live-connected by many reports (Build permission), endorsed, discoverable in the OneLake catalog. Composite models can extend it."><div class="i">🧠</div><h4>Shared model</h4><p>Single version of truth</p></div>
+  <div class="icard" data-info="Lineage / Impact analysis on an item lists downstream items across workspaces with usage, then Notify contacts before renaming a column or removing a table."><div class="i">🕸️</div><h4>Impact analysis</h4><p>Who breaks if I change this?</p></div>
 </div>
-
-<h2>Impact analysis before changing content</h2>
+<div class="check" data-answer="3"><p>New sales reports must start from the same layout, measures and a ServerName parameter, without any data. What do you share?</p><ul><li>A .pbids file</li><li>A .pbix with all rows filtered out</li><li>A .pbit template</li><li>The XMLA URL</li></ul><p class="why">A template carries definitions and parameters but no data.</p></div>
+<div class="check" data-answer="1"><p>You will rename a column in a certified model used across the organization. How do you find and warn affected report owners?</p><ul><li>Impact analysis, then Notify contacts</li><li>Deployment history</li><li>Capacity Metrics app</li><li>Git status</li></ul><p class="why">Impact analysis lists downstream items in all workspaces and notifies their contacts.</p></div>
+<details><summary>Deep dive: XMLA fine print</summary>
 <ul>
-<li>Open an item (lakehouse, warehouse, semantic model, dataflow…) → <strong>Lineage / Impact analysis</strong>. The pane lists <strong>downstream (child) items</strong> – also in <strong>other workspaces</strong> – grouped by type and workspace, plus usage information (views/viewers) to judge how critical they are.</li>
-<li><strong>Notify contacts</strong> sends a message to the contacts of all impacted workspaces before you rename a column, remove a table or change a source.</li>
-<li>The workspace <strong>lineage view</strong> shows dependencies within a workspace (data sources → lakehouses → models → reports → dashboards/apps); deployment pipelines show dependencies via <em>View lineage</em> and <em>Select related</em>.</li>
-<li>Combine with deployment pipeline <strong>Compare / Review changes</strong> to see exactly what a release will change.</li>
-</ul>
+<li>XMLA refresh: no 48/day limit, no scheduled-refresh timeout, single partitions (or REST enhanced refresh). History shows "via XMLA endpoint".</li>
+<li>Enable large semantic model storage format for XMLA writes (required beyond 10 GB). Credentials can't be set over XMLA.</li>
+<li>Not reachable: live-connection models, push datasets, Excel workbook models. Server-admin operations unsupported. Audited (EditDatasetFromExternalApplication…).</li>
+<li>Tools: SSMS (TMSL, process, roles, DMVs), Tabular Editor 2/3 (perspectives, translations, OLS, C# scripts), DAX Studio (VertiPaq Analyzer, read-only), ALM Toolkit (keeps incremental refresh partitions), Visual Studio / PowerShell / TOM, Report Builder and Excel (read).</li>
+<li>Workspace lineage view shows in-workspace dependencies; deployment pipelines show View lineage and Select related.</li>
+</ul></details>
+</section>
 
-<div class="check" data-answer="1">
-<p>You plan to rename a column in a certified semantic model used across the organization. You need to identify affected reports in all workspaces and inform their owners. What should you use?</p>
-<ul>
-<li>Impact analysis on the semantic model, then Notify contacts</li>
-<li>The deployment pipeline deployment history</li>
-<li>The Capacity Metrics app</li>
-<li>Git status in the source control pane</li>
+<section class="lesson">
+<h2>Exam traps</h2>
+<ul class="traps">
+  <li>Git or a deployment never copies <b>data</b>: refresh/load after deploying.</li>
+  <li>Rules are created on the <b>target</b> stage, never in Development, and apply only on the <b>next</b> deployment.</li>
+  <li><b>Pipelines, Copy job, Dataflow Gen2</b> have no deployment rules: use a <b>variable library</b>.</li>
+  <li><b>Direct Lake</b> models don't autobind: rule or parameter needed.</li>
+  <li>Update can't cherry-pick; commit is blocked until you update. No automatic sync.</li>
+  <li>Only workspace <b>Admins</b> connect Git; Viewers can't see Git at all.</li>
+  <li>Pipeline admin alone can't see or deploy content: you also need Contributor on both workspaces.</li>
+  <li>XMLA write failing for a Member → capacity setting <b>Read Write</b>, not Build permission.</li>
+  <li>Bitbucket/GitLab/on-prem Git are not supported.</li>
 </ul>
-<p class="why">Impact analysis lists downstream items across workspaces and lets you notify their contacts. Deployment history and Git status describe releases and sync state, not consumers.</p>
-</div>
+</section>
 
-<div class="sort" data-task="Which lifecycle tool solves each requirement?">
-<ul data-bucket="Git integration">
-<li>Restore a notebook definition from last week</li>
-<li>Require a peer review before changes reach main</li>
-<li>Give each developer an isolated workspace for a feature</li>
-</ul>
-<ul data-bucket="Deployment pipeline">
-<li>Promote reviewed content from Test to Production</li>
-<li>Point the Production model at the production database</li>
-<li>See which items differ between Test and Production</li>
-</ul>
-<ul data-bucket="XMLA endpoint">
-<li>Process one partition of a large table from SSMS</li>
-<li>Add perspectives to a published model with Tabular Editor</li>
-</ul>
+<section class="lesson">
+<h2>Cheat sheet</h2>
+<div class="cheat">
+  <div><h4>🌿 Git</h4><ul><li>ADO + GitHub (cloud)</li><li>1 branch per workspace</li><li>Admin connects</li><li>Commit selective, Update all</li><li>Branch out = branch + workspace</li></ul></div>
+  <div><h4>📁 PBIP</h4><ul><li>TMDL = mergeable model</li><li>PBIR = per-visual report</li><li>cache.abf, localSettings ignored</li><li>definition.pbir opens in Desktop</li></ul></div>
+  <div><h4>🚀 Pipelines</h4><ul><li>2–10 stages, 300 items</li><li>Adjacent, both directions</li><li>Not copied: data, creds, schedule, RLS members, app</li><li>Rules: model, Gen1, paginated, mirrored, notebook</li></ul></div>
+  <div><h4>🔌 XMLA &amp; reuse</h4><ul><li>Read-only default; RW per capacity</li><li>Contributor+ write, Build read</li><li>.pbit template, .pbids connection</li><li>Impact analysis + notify</li></ul></div>
 </div>
-
-<div class="reveal">
-<p><strong>Scenario:</strong> A data pipeline in Dev copies from <code>LH_Bronze_Dev</code> and a notebook uses <code>LH_Silver_Dev</code> as default lakehouse. After deployment to Test, both still touch the Dev lakehouses. Which mechanisms fix each item?</p>
-<div class="answer">
-<ul>
-<li><strong>Notebook</strong>: create a <strong>default lakehouse rule</strong> on the notebook in the Test (and Prod) stage, or read the lakehouse from a <strong>variable library</strong> (NotebookUtils / <code>%%configure</code>).</li>
-<li><strong>Pipeline</strong>: deployment rules don't support pipelines – reference the lakehouse through a <strong>variable library</strong> item-reference variable (active value set per stage) or pipeline parameters set per environment.</li>
-<li>Redeploy (rules apply on the next deployment), then run and verify. Remember: no data is copied – load Test data separately (or shortcut/clone it).</li>
-</ul>
-</div>
-</div>
-
-<h2>Key takeaways &amp; exam tips</h2>
-<ul>
-<li><strong>Git providers</strong>: Azure DevOps and GitHub (incl. GitHub Enterprise cloud) only. Workspace-level connection, <strong>one branch per workspace</strong>, only <strong>workspace Admins</strong> connect/disconnect; Viewers can't do anything Git-related.</li>
-<li><strong>Commit is selective, Update is all-or-nothing</strong>; no automatic sync; commit is blocked until incoming updates are applied; conflicts are resolved by choosing workspace vs Git version, or via a new branch + PR in Git.</li>
-<li><strong>Branch out</strong> = new branch + new workspace for isolated development; merge back with a pull request.</li>
-<li>Git stores <strong>definitions, not data</strong> (lakehouse tables, warehouse rows and model data stay in OneLake/engine).</li>
-<li><strong>PBIP</strong> = folders of text; <strong>TMDL</strong> = readable, mergeable model files; <strong>PBIR</strong> = per-page/per-visual report files; <code>cache.abf</code> and <code>localSettings.json</code> are git-ignored.</li>
-<li><strong>Deployment pipelines</strong>: 2–10 stages (default 3), one workspace per stage, adjacent deploys in either direction, selective deploy with <em>Select related</em>, max 300 items, compare/review changes, history.</li>
-<li>Deploy needs <strong>pipeline admin + Contributor on source and target</strong>; assigning a workspace needs workspace <strong>Admin</strong>; rules need <strong>item ownership</strong> and live on the <strong>target stage</strong>, not the first stage; they apply on the next deployment.</li>
-<li>Rules: data source + parameter (semantic models, Dataflow Gen1), data source (paginated reports, mirrored DB), default lakehouse (notebooks). Everything else → <strong>variable library</strong>.</li>
-<li>Not copied: data, credentials, refresh schedule, RLS membership, permissions, app, endorsement. Refresh after deploy. Direct Lake models don't autobind → rules/parameters.</li>
-<li><strong>XMLA</strong>: read-only by default; read-write is a <strong>capacity setting</strong>; URL <code>powerbi://api.powerbi.com/v1.0/myorg/&lt;workspace&gt;</code>; Contributor+ = write, Build = read; after an XMLA write the model <strong>can't be downloaded as PBIX</strong>; enable large model format for XMLA writes.</li>
-<li>Warehouse lifecycle = <strong>SQL database project → DACPAC</strong>; schema only.</li>
-<li>.pbit = template without data (with parameters); .pbids = connection only; shared semantic model + Build + endorsement = reuse.</li>
-<li>Before breaking changes run <strong>impact analysis</strong> and <strong>notify contacts</strong>.</li>
-<li>Automation: Fabric REST APIs (Git, deployment pipelines, item definitions), <strong>fabric-cicd</strong> Python library, semantic link for automated data tests.</li>
-</ul>
-<p class="muted">Further reading (online): Microsoft Learn – <a href="https://learn.microsoft.com/fabric/cicd/git-integration/intro-to-git-integration">Git integration</a>, <a href="https://learn.microsoft.com/fabric/cicd/deployment-pipelines/understand-the-deployment-process">deployment process</a>, <a href="https://learn.microsoft.com/fabric/enterprise/powerbi/service-premium-connect-tools">XMLA endpoint</a>, <a href="https://learn.microsoft.com/power-bi/developer/projects/projects-overview">Power BI projects</a>.</p>
+</section>
 </main>
 <script src="assets/app.js"></script>
 </body>

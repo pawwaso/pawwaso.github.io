@@ -6,22 +6,22 @@
   // Single source of truth for navigation. Add pages here.
   var PAGES = [
     { file: 'index.html', title: 'Home', group: '' },
-    { file: '00-exam-guide.html', title: 'Exam guide & skills outline', group: 'Start here' },
-    { file: '01-fabric-platform.html', title: 'Fabric platform: OneLake, capacities, workspaces', group: 'Start here' },
+    { file: '00-exam-guide.html', title: 'Exam guide & self-assessment', group: 'Start here' },
+    { file: '01-fabric-platform.html', title: 'Fabric platform & capacities', group: 'Start here' },
     { file: '02-security-governance.html', title: 'Security & governance', group: '1. Maintain a data analytics solution' },
-    { file: '03-lifecycle.html', title: 'Lifecycle: Git, PBIP, deployment pipelines, XMLA', group: '1. Maintain a data analytics solution' },
-    { file: '04-get-data.html', title: 'Get data: ingestion, shortcuts, mirroring, real-time', group: '2. Prepare data' },
-    { file: '05-lakehouse-spark.html', title: 'Lakehouse, Delta & Spark notebooks', group: '2. Prepare data' },
+    { file: '03-lifecycle.html', title: 'Lifecycle: Git & deployment', group: '1. Maintain a data analytics solution' },
+    { file: '04-get-data.html', title: 'Get data & ingestion', group: '2. Prepare data' },
+    { file: '05-lakehouse-spark.html', title: 'Lakehouse & Spark', group: '2. Prepare data' },
     { file: '06-warehouse-tsql.html', title: 'Warehouse & T-SQL', group: '2. Prepare data' },
-    { file: '07-transform-data.html', title: 'Transform data: star schema, SCD, cleansing', group: '2. Prepare data' },
+    { file: '07-transform-data.html', title: 'Transform data & star schema', group: '2. Prepare data' },
     { file: '08-kql-realtime.html', title: 'Eventhouse & KQL', group: '2. Prepare data' },
-    { file: '09-query-analyze.html', title: 'Query & analyze: SQL, visual queries, DAX queries', group: '2. Prepare data' },
-    { file: '10-semantic-model-design.html', title: 'Semantic model design & storage modes', group: '3. Implement & manage semantic models' },
-    { file: '11-direct-lake.html', title: 'Direct Lake in depth', group: '3. Implement & manage semantic models' },
-    { file: '12-dax.html', title: 'DAX for the exam', group: '3. Implement & manage semantic models' },
-    { file: '13-performance.html', title: 'Performance & enterprise-scale models', group: '3. Implement & manage semantic models' },
+    { file: '09-query-analyze.html', title: 'Query & analyze', group: '2. Prepare data' },
+    { file: '10-semantic-model-design.html', title: 'Semantic model design', group: '3. Implement & manage semantic models' },
+    { file: '11-direct-lake.html', title: 'Direct Lake', group: '3. Implement & manage semantic models' },
+    { file: '12-dax.html', title: 'DAX essentials', group: '3. Implement & manage semantic models' },
+    { file: '13-performance.html', title: 'Performance & scale', group: '3. Implement & manage semantic models' },
     { file: 'glossary.html', title: 'Glossary & flashcards', group: 'Practice' },
-    { file: 'practice.html', title: 'Practice questions & exam simulation', group: 'Practice' }
+    { file: 'practice.html', title: 'Practice & exam simulation', group: 'Practice' }
   ];
   window.DP600_PAGES = PAGES;
 
@@ -70,7 +70,15 @@
     // table of contents from h2
     var h2s = main.querySelectorAll('h2');
     var h1 = main.querySelector('h1');
-    if (h2s.length > 2 && h1 && !main.hasAttribute('data-notoc')) {
+    var hero = main.querySelector('.hero');
+    if (hero && h2s.length > 1 && !main.hasAttribute('data-notoc')) {
+      var ln = el('nav', 'lessonnav'); ln.setAttribute('aria-label', 'Lessons on this page');
+      h2s.forEach(function (h, i) {
+        if (!h.id) h.id = 's' + (i + 1);
+        var a = el('a', null, h.textContent); a.href = '#' + h.id; ln.appendChild(a);
+      });
+      hero.parentNode.insertBefore(ln, hero.nextSibling);
+    } else if (h2s.length > 2 && h1 && !main.hasAttribute('data-notoc')) {
       var toc = el('div', 'toc'); toc.appendChild(el('strong', null, 'On this page'));
       var ol = el('ol');
       h2s.forEach(function (h, i) {
@@ -301,7 +309,129 @@
     node.insertBefore(b, a);
   }
 
+  // ---------- v2 visual components ----------
+  // flip cards: <div class="flips"><div class="flip"><div class="front">Q</div><div class="back">A</div></div></div>
+  function initFlip(f) {
+    var fc = el('div', 'fc'); while (f.firstChild) fc.appendChild(f.firstChild); f.appendChild(fc);
+    f.tabIndex = 0; f.setAttribute('role', 'button');
+    var t = function () { f.classList.toggle('flipped'); };
+    f.addEventListener('click', t);
+    f.addEventListener('keydown', function (e) { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); t(); } });
+  }
+  // tabs: <div class="tabset"><section data-tab="Import">...</section>...</div>
+  function initTabs(ts) {
+    var secs = [].filter.call(ts.children, function (c) { return c.matches('section[data-tab]'); });
+    var bar = el('div', 'tabbar'); bar.setAttribute('role', 'tablist');
+    secs.forEach(function (s, i) {
+      var b = el('button', i ? '' : 'on', s.getAttribute('data-tab')); b.setAttribute('role', 'tab');
+      b.onclick = function () { secs.forEach(function (x, j) { x.hidden = j !== i; bar.children[j].classList.toggle('on', j === i); }); };
+      bar.appendChild(b); s.hidden = i > 0;
+    });
+    ts.insertBefore(bar, ts.firstChild);
+  }
+  // stepper: <div class="stepper" data-task="..."><section data-step="Title">...</section>...</div>
+  function initStepper(st) {
+    var secs = [].filter.call(st.children, function (c) { return c.matches('section[data-step]'); });
+    var task = st.getAttribute('data-task');
+    var head = el('div', 'sthead'), title = el('div', 'sttitle'), nav = el('div', 'stnav');
+    var prev = el('button', null, '← Back'), next = el('button', 'primary', 'Next →'), cur = 0;
+    var dots = secs.map(function (s, i) { var d = el('button', 'dot', String(i + 1)); d.title = s.getAttribute('data-step'); d.onclick = function () { go(i); }; head.appendChild(d); return d; });
+    function go(i) {
+      cur = i;
+      secs.forEach(function (s, j) { s.hidden = j !== i; dots[j].classList.toggle('on', j === i); if (j < i) dots[j].classList.add('seen'); });
+      title.textContent = 'Step ' + (i + 1) + ' of ' + secs.length + ': ' + secs[i].getAttribute('data-step');
+      prev.disabled = i === 0; next.disabled = i === secs.length - 1;
+    }
+    prev.onclick = function () { go(cur - 1); }; next.onclick = function () { go(cur + 1); };
+    nav.appendChild(prev); nav.appendChild(next);
+    if (task) st.insertBefore(el('div', 'wtitle', task), st.firstChild);
+    st.insertBefore(title, secs[0]); st.insertBefore(head, title); st.appendChild(nav);
+    go(0);
+  }
+  // decision wizard:
+  // <div class="decide" data-task="Which tool?">
+  //   <div data-node="start" data-q="Question?"><button data-go="n2">Yes</button><button data-go="r1">No</button></div>
+  //   <div data-node="r1" data-result>Answer text</div> ...</div>
+  function initDecide(d) {
+    frame(d, 'Decision helper');
+    var nodes = {}, first = null;
+    d.querySelectorAll('[data-node]').forEach(function (n) {
+      nodes[n.getAttribute('data-node')] = n; if (!first) first = n.getAttribute('data-node');
+      n.hidden = true; n.classList.add('node');
+      if (n.hasAttribute('data-result')) n.classList.add('answer');
+      var q = n.getAttribute('data-q');
+      if (q) {
+        var btns = [].slice.call(n.querySelectorAll(':scope > button[data-go]'));
+        var o = el('div', 'opts'); btns.forEach(function (b) { o.appendChild(b); });
+        n.insertBefore(el('div', 'qq', q), n.firstChild); n.appendChild(o);
+      }
+    });
+    var trail = el('div', 'trail'); d.insertBefore(trail, nodes[first]);
+    var path = [];
+    function show(id, label) {
+      Object.keys(nodes).forEach(function (k) { nodes[k].hidden = k !== id; });
+      if (label) path.push(label); trail.textContent = path.length ? 'Your answers: ' + path.join(' › ') : '';
+    }
+    d.addEventListener('click', function (e) {
+      var b = e.target.closest('button[data-go]'); if (!b || !d.contains(b)) return;
+      show(b.getAttribute('data-go'), b.textContent);
+    });
+    var c = el('div', 'controls'); var r = el('button', null, '↺ Start over');
+    r.onclick = function () { path = []; show(first); }; c.appendChild(r); d.appendChild(c);
+    show(first);
+  }
+  // code walkthrough: <div class="walk"><pre><code>...</code></pre><ol><li data-lines="1-3,5">...</li></ol></div>
+  function initWalk(w) {
+    frame(w, 'Code walkthrough');
+    var code = w.querySelector('pre code') || w.querySelector('pre');
+    var pre = w.querySelector('pre');
+    var lines = code.innerHTML.replace(/\n$/, '').split('\n');
+    code.innerHTML = lines.map(function (l) { return '<span class="ln">' + (l || ' ') + '</span>'; }).join('');
+    var spans = code.querySelectorAll('.ln');
+    var items = w.querySelectorAll('ol > li');
+    function sel(i) {
+      items.forEach(function (x, j) { x.classList.toggle('on', j === i); });
+      spans.forEach(function (s) { s.classList.remove('hl'); });
+      (items[i].getAttribute('data-lines') || '').split(',').forEach(function (rg) {
+        var p = rg.split('-'), a = +p[0], b = +(p[1] || p[0]);
+        for (var k = a; k <= b; k++) if (spans[k - 1]) spans[k - 1].classList.add('hl');
+      });
+      pre.classList.add('dim');
+    }
+    items.forEach(function (li, i) { li.tabIndex = 0; li.addEventListener('click', function () { sel(i); }); li.addEventListener('keydown', function (e) { if (e.key === 'Enter') sel(i); }); });
+    var hint = el('p', 'kbd-hint', 'Click a step to highlight the matching lines.'); w.insertBefore(hint, w.querySelector('ol'));
+  }
+  // clickable info: any element with data-info inside a container [data-infopanel] (or .flow/.layers/.icards)
+  function initInfo(container) {
+    var items = container.querySelectorAll('[data-info]');
+    if (!items.length) return;
+    var panel = el('div', 'infopanel empty', container.getAttribute('data-hint') || 'Click a box to see details.');
+    container.parentNode.insertBefore(panel, container.nextSibling);
+    items.forEach(function (it) {
+      it.tabIndex = 0;
+      var go = function () {
+        items.forEach(function (x) { x.classList.toggle('sel', x === it); });
+        panel.classList.remove('empty'); panel.innerHTML = '<strong>' + (it.getAttribute('data-title') || it.firstChild.textContent || '').trim() + ':</strong> ' + it.getAttribute('data-info');
+      };
+      it.addEventListener('click', go);
+      it.addEventListener('keydown', function (e) { if (e.key === 'Enter') go(); });
+    });
+  }
+  function initMatrix(t) {
+    t.querySelectorAll('td').forEach(function (td) {
+      var s = td.textContent.trim();
+      if (/^✓|^✔/.test(s)) td.classList.add('yes'); else if (/^✗|^✘/.test(s)) td.classList.add('no'); else if (/^~|^◐/.test(s)) td.classList.add('part');
+    });
+  }
+
   function initWidgets() {
+    document.querySelectorAll('main .flip').forEach(initFlip);
+    document.querySelectorAll('main .tabset').forEach(initTabs);
+    document.querySelectorAll('main .stepper').forEach(initStepper);
+    document.querySelectorAll('main .decide').forEach(initDecide);
+    document.querySelectorAll('main .walk').forEach(initWalk);
+    document.querySelectorAll('main .flow, main .layers, main .icards, main [data-infopanel]').forEach(initInfo);
+    document.querySelectorAll('main table.matrix').forEach(initMatrix);
     document.querySelectorAll('main .check').forEach(initCheck);
     document.querySelectorAll('main .match').forEach(initMatch);
     document.querySelectorAll('main .sort').forEach(initSort);

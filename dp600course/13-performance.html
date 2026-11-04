@@ -1,0 +1,385 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Performance &amp; enterprise-scale models – DP-600</title>
+<link rel="stylesheet" href="assets/style.css">
+</head>
+<body>
+<main>
+<h1>Performance &amp; enterprise-scale models</h1>
+<p class="lead">How to find and fix slow reports, slow DAX and oversized models, and how to run large semantic models at enterprise scale: tools (Performance analyzer, DAX query view, DAX Studio, Tabular Editor BPA, semantic link, Capacity Metrics), formula vs storage engine, model optimization, aggregations, incremental refresh, large model format, query scale-out and refresh orchestration. Maps to <em>Optimize enterprise-scale semantic models</em> and parts of <em>Maintain a data analytics solution</em>.</p>
+
+<h2>A troubleshooting workflow</h2>
+<p>Performance problems sit in one of four places. Find the layer first, then optimize:</p>
+<div class="tw"><table>
+<thead><tr><th>Layer</th><th>Symptom</th><th>Tool to use first</th></tr></thead>
+<tbody>
+<tr><td>Report / visuals</td><td>One page slow; many visuals; slow "Visual display" or "Other" time</td><td><strong>Performance analyzer</strong> (Power BI Desktop)</td></tr>
+<tr><td>DAX / query</td><td>One visual's DAX query is slow</td><td><strong>DAX query view</strong> / <strong>DAX Studio</strong> (Server Timings, Query Plan)</td></tr>
+<tr><td>Model</td><td>Model large, refresh slow or out of memory, everything a bit slow</td><td><strong>VertiPaq Analyzer</strong> (DAX Studio / semantic-link-labs), <strong>Best Practice Analyzer</strong></td></tr>
+<tr><td>Capacity / source</td><td>Everything slow at certain times, throttling, refreshes rejected; DirectQuery source slow</td><td><strong>Fabric Capacity Metrics app</strong>, Monitoring hub, source query traces, Power Query diagnostics</td></tr>
+</tbody>
+</table></div>
+
+<div class="order" data-task="Order a typical investigation of a slow report page.">
+<ol>
+<li>Record the page in Performance analyzer to find the slowest visual</li>
+<li>Copy that visual's DAX query</li>
+<li>Run it in DAX Studio with Server Timings and Query Plan enabled (clear cache first)</li>
+<li>Decide whether time is spent in the formula engine or the storage engine</li>
+<li>Rewrite the measure or fix the model (columns, cardinality, relationships)</li>
+<li>Re-run and compare timings against the baseline</li>
+</ol>
+</div>
+
+<h2>The tools</h2>
+<h3>Performance analyzer (Power BI Desktop)</h3>
+<p><strong>View → Performance analyzer → Start recording → Refresh visuals</strong>. For each visual you get:</p>
+<ul>
+<li><strong>DAX query</strong> – time from sending the query to receiving results (engine work). <em>Copy query</em> to analyse it elsewhere.</li>
+<li><strong>Direct query</strong> – time spent in the source (DirectQuery tables, or Direct Lake fallback).</li>
+<li><strong>Visual display</strong> – rendering time (lots of data points, custom visuals, maps).</li>
+<li><strong>Other</strong> – waiting for other visuals / background processing (high when a page has many visuals queued).</li>
+</ul>
+<p>Use it <em>first</em> to find which visual is responsible. Clear the cache (or restart) for realistic cold numbers.</p>
+
+<h3>DAX query view</h3>
+<p>Built into Power BI Desktop (and the web) – run <code>EVALUATE</code> queries, define temporary measures with <code>DEFINE MEASURE</code>, then <em>update the model</em> with the change. Works with Import, DirectQuery and Direct Lake models. Copilot can generate or explain queries. Good for validation; DAX Studio is still the deeper performance tool.</p>
+
+<h3>DAX Studio</h3>
+<ul>
+<li><strong>Server Timings</strong>: total duration, <strong>FE</strong> (formula engine) vs <strong>SE</strong> (storage engine) time, number of SE queries, SE CPU (parallelism), and the xmSQL (or SQL for DirectQuery) of each SE query, plus cache hits.</li>
+<li><strong>Query Plan</strong>: logical and physical plan of the formula engine.</li>
+<li><strong>VertiPaq Analyzer</strong> (<em>View Metrics</em>): size per table/column, cardinality, dictionary size, data size, encoding, relationship sizes – the tool to decide what to remove.</li>
+<li><strong>Clear cache</strong> before measuring, run several times, and compare cold vs warm.</li>
+<li>Connects to Desktop models or to the service through the <strong>XMLA endpoint</strong>.</li>
+</ul>
+
+<h3>Tabular Editor and the Best Practice Analyzer (BPA)</h3>
+<p>Tabular Editor (2 free / 3 commercial) edits model metadata offline or live through XMLA (calculation groups, perspectives, partitions, OLS, scripting). Its <strong>Best Practice Analyzer</strong> evaluates <em>rules</em> (performance, DAX expressions, naming, formatting, maintenance) against the model metadata and lists violating objects, often with auto-fix. Typical rules: avoid floating point data types, set <em>IsAvailableInMDX</em> false on hidden columns, avoid bidirectional/many-to-many relationships, use DIVIDE, remove auto date/time tables, hide foreign keys, provide format strings and descriptions. BPA can run from the <strong>command line in a CI/CD pipeline</strong> to fail a release on violations.</p>
+
+<h3>Semantic link (sempy) and semantic-link-labs in Fabric notebooks</h3>
+<ul>
+<li><code>sempy.fabric</code>: <code>list_datasets</code>, <code>list_measures</code>, <code>read_table</code>, <code>evaluate_measure</code>, <code>evaluate_dax</code>, <code>refresh_dataset</code> – query and refresh models from Python; e.g. validate that a measure total equals the warehouse total as an automated release test.</li>
+<li><code>semantic-link-labs</code> (<code>%pip install semantic-link-labs</code>): <code>run_model_bpa</code> (BPA in a notebook), <code>vertipaq_analyzer</code>, <code>delta_analyzer</code> (Parquet files / row groups / V-Order of a Delta table), Direct Lake guardrail and fallback checks, Import→Direct Lake migration helpers, report and model management.</li>
+<li>The Fabric portal also offers ready-made <strong>Best Practice Analyzer</strong> and <strong>Memory Analyzer</strong> notebooks launched from a semantic model, built on these libraries.</li>
+</ul>
+<pre><code># Fabric notebook: compare a model measure with the warehouse source
+import sempy.fabric as fabric
+
+model_total = fabric.evaluate_measure("Sales Model", "Sales Amount").iloc[0, 0]
+src_total = spark.sql("SELECT SUM(SalesAmount) AS s FROM gold.fact_sales").collect()[0]["s"]
+assert abs(model_total - src_total) &lt; 0.01, "Measure does not reconcile with source"
+
+import sempy_labs as labs
+labs.run_model_bpa(dataset="Sales Model")          # best practice rules
+labs.vertipaq_analyzer(dataset="Sales Model")      # column sizes and cardinality</code></pre>
+
+<h3>Fabric Capacity Metrics app</h3>
+<p>Shows <strong>CU consumption</strong> per capacity, item and operation (interactive vs background), utilization against the SKU, <strong>overload and throttling</strong>, and which items/operations caused it. First tool when "visuals error and refreshes are rejected" on a busy capacity. Remember Fabric <strong>smoothing</strong> (interactive operations are smoothed over a short window – at least 5 minutes; background operations such as refreshes over 24 hours) and the throttling stages: overage protection up to 10 minutes of future capacity, then <em>interactive delay</em>, then <em>interactive rejection</em> (after 60 minutes), then <em>background rejection</em> (after 24 hours).</p>
+
+<h3>Other monitoring sources</h3>
+<ul>
+<li><strong>Monitoring hub</strong>: status and duration of refreshes, pipelines, notebooks.</li>
+<li><strong>Refresh history</strong> of a semantic model; <strong>workspace monitoring</strong> (Eventhouse-based logs of semantic model queries and refreshes); SQL Server Profiler / Log Analytics integration for traces.</li>
+<li><strong>Power Query query diagnostics</strong> (Power BI Desktop: Tools → Diagnose step / Start diagnostics) and the <em>View native query</em> / step folding indicators: verify that filters fold to the source – essential for incremental refresh and DirectQuery.</li>
+</ul>
+
+<div class="match" data-task="Match each tool to the question it answers best.">
+<dl>
+<dt>Performance analyzer</dt><dd>Which visual on this page is slow and how much is rendering vs DAX?</dd>
+<dt>DAX Studio Server Timings</dt><dd>Is a query's time spent in the formula engine or the storage engine?</dd>
+<dt>VertiPaq Analyzer</dt><dd>Which columns consume the most memory and how high is their cardinality?</dd>
+<dt>Best Practice Analyzer</dt><dd>Which model objects violate naming and performance rules?</dd>
+<dt>Fabric Capacity Metrics app</dt><dd>Which items and operations consumed the CUs that caused throttling?</dd>
+<dt>Query diagnostics in Power Query</dt><dd>Does the RangeStart/RangeEnd filter fold into the source query?</dd>
+<dt>Semantic link evaluate_measure</dt><dd>Does the model's total reconcile with the warehouse in an automated test?</dd>
+</dl>
+</div>
+
+<div class="check" data-answer="3">
+<p>Users report that report visuals return errors and scheduled refreshes are rejected on a heavily used F2 capacity. Which tool should you use FIRST to identify the items responsible?</p>
+<ul><li>Performance analyzer in Power BI Desktop</li><li>Tabular Editor Best Practice Analyzer</li><li>Fabric Capacity Metrics app</li><li>DAX query view</li></ul>
+<p class="why">Errors plus rejected refreshes indicate capacity overload/throttling. The Capacity Metrics app shows CU usage, throttling periods and the items/operations that caused them. The other tools analyse a single report or model.</p>
+</div>
+
+<h2>Formula engine vs storage engine</h2>
+<div class="tw"><table>
+<thead><tr><th></th><th>Formula engine (FE)</th><th>Storage engine (SE)</th></tr></thead>
+<tbody>
+<tr><td>Role</td><td>Receives the DAX query, builds the plan, does complex logic, combines SE results</td><td>Scans compressed column data (VertiPaq) or sends SQL (DirectQuery); filters, groups, simple aggregates</td></tr>
+<tr><td>Threads</td><td><strong>Single-threaded</strong> per query</td><td><strong>Multi-threaded</strong> (parallel segment scans)</td></tr>
+<tr><td>Language</td><td>DAX</td><td>xmSQL (VertiPaq) / SQL (DirectQuery)</td></tr>
+<tr><td>Cache</td><td>No cache</td><td>SE cache: identical SE requests are reused</td></tr>
+<tr><td>Goal</td><td>Minimize FE work and FE-materialized rows</td><td>Push as much work as possible here in few, large queries</td></tr>
+</tbody>
+</table></div>
+<p><strong>Callbacks</strong>: when an iterator's expression is too complex for the SE (e.g. IF, DIVIDE, certain functions inside SUMX), xmSQL shows <code>CallbackDataID</code> – the SE calls back the FE row by row. Callbacks are slow and their results aren't cached.</p>
+<p><strong>Signature of bad DAX</strong> in Server Timings: high FE %, <strong>many small SE queries</strong> (one per row of an outer iteration → context transition / iterators), or SE queries returning huge materializations (millions of rows sent to the FE).</p>
+
+<div class="check" data-answer="2">
+<p>DAX Studio Server Timings show that a slow measure spends 85% of its time in the formula engine and issues 2,400 storage engine queries. What does this most likely indicate?</p>
+<ul><li>The model needs more memory; scale up the capacity</li><li>An iterator or context transition pattern evaluates row by row; rewrite it to be set-based so the storage engine does the work in few queries</li><li>The storage engine cache is disabled</li><li>The visual has too many data points to render</li></ul>
+<p class="why">Heavy FE time with many small SE queries is the classic signature of per-row evaluation (e.g. iterating a large table with a measure reference). Rewriting to aggregate in the SE fixes it; more capacity doesn't change the plan; rendering is measured in Performance analyzer, not Server Timings.</p>
+</div>
+
+<h2>Optimizing DAX</h2>
+<div class="tw"><table>
+<thead><tr><th>Do</th><th>Instead of</th><th>Why</th></tr></thead>
+<tbody>
+<tr><td>Variables for repeated subexpressions</td><td>Repeating the same CALCULATE several times</td><td>Evaluated once; clearer</td></tr>
+<tr><td>Column predicates in CALCULATE: <code>CALCULATE([Sales], Product[Color] = "Red")</code></td><td><code>CALCULATE([Sales], FILTER(Product, Product[Color] = "Red"))</code> or <code>FILTER(Sales, …)</code></td><td>Filtering a column is pushed to the SE; FILTER over a whole (fact) table iterates rows and uses the expanded table</td></tr>
+<tr><td><code>KEEPFILTERS(Product[Color] = "Red")</code> when you need intersection</td><td>FILTER(VALUES(…)) workarounds</td><td>Same semantics, SE-friendly</td></tr>
+<tr><td>Aggregate numerator and denominator separately, then <code>DIVIDE</code></td><td><code>SUMX(Sales, DIVIDE(a, b))</code> row by row</td><td>Two SE aggregates + one FE division vs per-row callbacks</td></tr>
+<tr><td><code>DIVIDE</code></td><td><code>IFERROR(a / b, …)</code></td><td>IFERROR blocks optimizations</td></tr>
+<tr><td><code>SUM</code> over a materialized column</td><td>SUMX with complex per-row logic</td><td>Pure SE scan</td></tr>
+<tr><td><code>DISTINCTCOUNT(col)</code></td><td><code>COUNTROWS(VALUES(col))</code> inside iterators / SUMMARIZE tricks</td><td>Purpose-built</td></tr>
+<tr><td>Iterate dimensions or <code>VALUES(col)</code> when you need context transition</td><td>Iterate the fact table with a measure reference</td><td>Fewer rows → fewer transitions</td></tr>
+<tr><td><code>SELECTEDVALUE</code>, <code>ISINSCOPE</code></td><td><code>IF(HASONEVALUE(x), VALUES(x))</code> nests</td><td>Simpler, same plan</td></tr>
+<tr><td>Measure branching (build on base measures)</td><td>Copy-pasted logic</td><td>One definition, reusable SE results</td></tr>
+<tr><td>Return BLANK, not 0, for "no data"</td><td><code>[Sales] + 0</code>, COALESCE everywhere</td><td>Zeros make visuals evaluate every combination (dense results)</td></tr>
+</tbody>
+</table></div>
+<pre><code>-- Slow: FILTER iterates the whole Sales table (expanded with all dimensions)
+High Value Sales (slow) =
+CALCULATE ( [Sales Amount], FILTER ( Sales, Sales[Quantity] * Sales[NetPrice] &gt; 1000 ) )
+
+-- Better: filter only the needed columns
+High Value Sales =
+CALCULATE (
+    [Sales Amount],
+    FILTER ( ALL ( Sales[Quantity], Sales[NetPrice] ), Sales[Quantity] * Sales[NetPrice] &gt; 1000 )
+)
+-- Best (if used often): materialize LineTotal upstream and filter it: Sales[LineTotal] &gt; 1000
+
+-- Slow ratio: per-row DIVIDE causes callbacks
+Avg Margin % (slow) = AVERAGEX ( Sales, DIVIDE ( Sales[Margin], Sales[SalesAmount] ) )
+-- Ratio of totals (usually the business definition anyway)
+Margin % = DIVIDE ( SUM ( Sales[Margin] ), SUM ( Sales[SalesAmount] ) )</code></pre>
+
+<div class="check" data-answer="1">
+<p>Which rewrite is most likely to improve performance?</p>
+<ul><li>Replace <code>CALCULATE([Sales], FILTER(Sales, Sales[Channel] = "Web"))</code> with <code>CALCULATE([Sales], Sales[Channel] = "Web")</code></li><li>Replace DIVIDE with IFERROR(a/b, BLANK())</li><li>Replace SUM(Sales[LineTotal]) with SUMX(Sales, Sales[Qty] * Sales[Price])</li><li>Wrap every measure in COALESCE(…, 0)</li></ul>
+<p class="why">A simple column predicate is pushed to the storage engine; FILTER over the fact table forces row iteration over the expanded table. IFERROR and per-row SUMX add work; COALESCE to 0 densifies results.</p>
+</div>
+
+<h2>Optimizing the model</h2>
+<p>VertiPaq compresses each column with a <strong>dictionary</strong> (distinct values) plus encoded data. Size and speed depend mainly on <strong>number of columns</strong> and <strong>column cardinality</strong> (distinct values), much less on row count.</p>
+<div class="tw"><table>
+<thead><tr><th>Technique</th><th>Effect</th></tr></thead>
+<tbody>
+<tr><td><strong>Remove unused columns</strong> (and rows you don't analyse)</td><td>Biggest and easiest win. Find candidates with VertiPaq Analyzer (size) + dependency/usage analysis (columns not used by measures, relationships or reports)</td></tr>
+<tr><td><strong>Reduce cardinality</strong></td><td>Round decimals, drop seconds/milliseconds, remove unique IDs not needed for analysis (GUIDs, transaction numbers), bucket values</td></tr>
+<tr><td><strong>Split datetime</strong> into a Date column and a Time column (time at minute or hour grain)</td><td>A second-precision datetime over years has millions of distinct values; date (~thousands) + time (1,440 minutes) compress dramatically</td></tr>
+<tr><td><strong>Correct data types</strong></td><td>Integers / fixed decimal instead of text or floating point; avoid numbers stored as text; integer keys</td></tr>
+<tr><td><strong>Integer surrogate keys</strong> for relationships</td><td>Narrow, low-memory join columns; text/float keys are larger and slower</td></tr>
+<tr><td><strong>Star schema</strong>, single-direction one-to-many relationships</td><td>The pattern the engine optimizes; avoid bidirectional and many-to-many unless needed (use CROSSFILTER per measure)</td></tr>
+<tr><td><strong>Disable Auto date/time</strong></td><td>Removes a hidden date table per date column; use one marked Date table</td></tr>
+<tr><td>Avoid calculated columns on large tables; compute upstream</td><td>Calculated columns compress worse and lengthen refresh</td></tr>
+<tr><td><strong>Summary tables</strong> at the grain users need (e.g. month × product)</td><td>If nobody analyses individual transactions, a 400 M-row fact may become a few million rows</td></tr>
+<tr><td>Hide technical columns, set <em>IsAvailableInMDX</em> = false for hidden columns not used in MDX</td><td>Avoids building attribute hierarchies (memory, refresh time)</td></tr>
+</tbody>
+</table></div>
+
+<div class="sort" data-task="Classify each change by what it mainly reduces.">
+<ul data-bucket="Model memory / size"><li>Remove a GUID column nobody reports on</li><li>Split a datetime column into date and time</li><li>Disable auto date/time</li><li>Replace a text key with an integer surrogate key</li></ul>
+<ul data-bucket="DAX query time"><li>Replace FILTER over the fact table with a column predicate</li><li>Store a repeated subexpression in a variable</li><li>Aggregate numerator and denominator before DIVIDE</li></ul>
+<ul data-bucket="Refresh time / capacity load"><li>Incremental refresh with a 10-day refresh window</li><li>Trigger the refresh from the load pipeline instead of hourly</li><li>Refresh only changed partitions through the enhanced refresh API</li></ul>
+</div>
+
+<div class="check" data-answer="4">
+<p>A 600-million-row imported fact table stores OrderDateTime at second precision. VertiPaq Analyzer shows this column is the largest in the model. Reports analyse by date and hour. What should you do?</p>
+<ul><li>Change the column to text</li><li>Enable bidirectional relationships to the Date table</li><li>Create a calculated column with the date part and keep the original</li><li>Split it upstream into a Date column (related to the Date table) and an hour-level Time column, and remove the original</li></ul>
+<p class="why">Cardinality drives dictionary size. Date (thousands of values) + hour (24) is tiny compared with a second-precision datetime (hundreds of millions of values). Keeping the original or adding a calculated column increases size.</p>
+</div>
+
+<h2>Aggregations</h2>
+<h3>User-defined aggregations</h3>
+<p>For huge <strong>DirectQuery</strong> fact tables: add a smaller <strong>aggregation table</strong> (usually Import) at a coarser grain, map its columns in <strong>Manage aggregations</strong>, and the engine automatically answers queries it can from the aggregation; other queries (drill to detail) fall through to the DirectQuery detail table.</p>
+<ul>
+<li>Summarization per column: <strong>GroupBy</strong> (grain columns, e.g. DateKey, ProductKey), <strong>Sum</strong>, <strong>Count</strong>, <strong>Min</strong>, <strong>Max</strong>, <strong>Count table rows</strong>.</li>
+<li>The detail table must be <strong>DirectQuery</strong>. Related dimension tables should be <strong>Dual</strong> storage mode, so they behave as Import when joined to the agg table and as DirectQuery when joined to the detail table (avoids limited relationships and unnecessary source queries).</li>
+<li><strong>Precedence</strong>: when several aggregation tables could answer a query, the one with the <strong>higher precedence</strong> value is considered first (put the coarsest useful agg highest).</li>
+<li>The aggregation table is hidden; users and reports query the detail table and are redirected transparently. RLS must be consistent between agg and detail.</li>
+<li><strong>Not supported on Direct Lake tables</strong> – with Direct Lake, build summary Delta tables in the lakehouse instead.</li>
+<li>Check hits with DAX Studio / Profiler (<em>Aggregate Table Rewrite Query</em> event) – queries matching the agg show no DirectQuery events.</li>
+</ul>
+<h3>Automatic aggregations</h3>
+<p>For DirectQuery models on Premium/Fabric capacity: the service <strong>trains</strong> on the query log and automatically builds and maintains in-memory aggregation tables for the most frequent queries (configured in semantic model settings with a training schedule and a target query coverage %). Less control, no manual mapping.</p>
+
+<div class="check" data-answer="2">
+<p>A Fabric warehouse fact table has billions of rows. Users need fast summary reports by month and product and occasionally drill through to individual transactions. What should you design?</p>
+<ul><li>A Direct Lake model with a user-defined aggregation table</li><li>A DirectQuery detail table plus an Import aggregation table at month × product grain mapped in Manage aggregations, with Date and Product in Dual mode</li><li>Import the full fact table and disable relationships</li><li>A DirectQuery model with all dimensions in DirectQuery and no aggregations</li></ul>
+<p class="why">User-defined aggregations answer summary queries from memory while the DirectQuery detail remains for drill-through; Dual dimensions serve both paths. User-defined aggregations aren't supported on Direct Lake tables. Importing billions of rows or pure DirectQuery would be slow or expensive.</p>
+</div>
+
+<h2>Incremental refresh</h2>
+<p>Incremental refresh partitions an <strong>Import</strong> table by date so each refresh reloads only recent data. Supported for Pro, PPU, Premium/Fabric capacity and Embedded (real-time hybrid tables require Premium/PPU/Fabric capacity).</p>
+<h3>Setup in Power BI Desktop</h3>
+<ol>
+<li>In Power Query, create two parameters with the reserved, <strong>case-sensitive</strong> names <code>RangeStart</code> and <code>RangeEnd</code> of type <strong>Date/Time</strong> (not Date).</li>
+<li>Filter the table's date column with them – one boundary inclusive, the other exclusive: <code>[OrderDate] &gt;= RangeStart and [OrderDate] &lt; RangeEnd</code> (otherwise rows on the boundary are duplicated or lost). For integer keys (yyyymmdd) convert the parameters with a function.</li>
+<li>The filter must <strong>fold</strong> to the source so each partition sends its own filtered query. If folding breaks, the mashup engine loads the whole table and filters locally for <em>every partition</em> → slower than a full refresh. Desktop shows a warning when it can't verify folding; check with query diagnostics or a source trace.</li>
+<li>Define the policy on the table (<em>Incremental refresh</em>): <strong>Archive data starting … before refresh date</strong> (e.g. 5 years – historical partitions, not refreshed) and <strong>Incrementally refresh data starting … before refresh date</strong> (e.g. 10 days – refreshed every time).</li>
+<li>Optional: <strong>Get the latest data in real time with DirectQuery</strong> (hybrid table, Premium only), <strong>Only refresh complete days</strong> (required with real-time), <strong>Detect data changes</strong>.</li>
+<li>Publish; the <strong>first refresh in the service</strong> creates the partitions and loads history (can take long). Subsequent refreshes touch only the refresh window.</li>
+</ol>
+<pre><code>// Power Query (M) – the folding filter step
+let
+    Source   = Sql.Database("myserver.database.windows.net", "SalesDW"),
+    Fact     = Source{[Schema = "dbo", Item = "FactSales"]}[Data],
+    Filtered = Table.SelectRows(Fact, each [OrderDate] &gt;= RangeStart and [OrderDate] &lt; RangeEnd)
+in
+    Filtered
+
+// Integer date key variant (yyyymmdd)
+Table.SelectRows(Fact, each
+    [OrderDateKey] &gt;= Int32.From(DateTime.ToText(RangeStart, [Format = "yyyyMMdd"])) and
+    [OrderDateKey] &lt;  Int32.From(DateTime.ToText(RangeEnd,   [Format = "yyyyMMdd"])))</code></pre>
+
+<h3>Details that get tested</h3>
+<ul>
+<li><strong>Detect data changes</strong>: pick an <em>audit</em> datetime column (e.g. <code>LastUpdateTime</code>) – <em>not</em> the partitioning date column. Per partition in the refresh window, the service queries <code>MAX(LastUpdateTime)</code> and only refreshes partitions whose max changed. <strong>Hard deletes don't change the max</strong> → use soft deletes (IsDeleted flag + update LastUpdateTime) and filter deleted rows out.</li>
+<li><strong>Hybrid table</strong> = imported historical/incremental partitions + a <strong>DirectQuery partition</strong> for data after the refresh window; enable automatic page refresh for reports.</li>
+<li>Time limits: refreshes in the service time out after 2 hours (Pro) / 5 hours (capacity); refreshes through <strong>XMLA</strong> have no such limit.</li>
+<li>After publishing you <strong>can't download the PBIX</strong>, and republishing from Desktop replaces the partitions/data. Make later metadata changes with XMLA tools (Tabular Editor, ALM Toolkit) – metadata-only deployment.</li>
+<li>Refresh uses UTC unless a time zone is configured in the refresh settings (XMLA/TMSL refreshes always use UTC).</li>
+<li>With XMLA read-write you can view partitions in SSMS, <strong>refresh individual (backdated) partitions</strong>, bootstrap a huge initial load partition by partition, and override detect-data-changes queries.</li>
+<li>Same <code>RangeStart</code>/<code>RangeEnd</code> parameters for all tables with policies; all partitions must query a single source.</li>
+<li>Incremental refresh doesn't apply to Direct Lake tables (partition the Delta table instead). Dataflow Gen2 has its own incremental refresh feature with a similar folding requirement.</li>
+</ul>
+
+<div class="order" data-task="Order the steps to implement incremental refresh for a large imported fact table.">
+<ol>
+<li>Create Date/Time parameters RangeStart and RangeEnd in Power Query</li>
+<li>Filter the date column with &gt;= RangeStart and &lt; RangeEnd in a step that folds</li>
+<li>Define the incremental refresh policy (archive and refresh periods, optional detect data changes)</li>
+<li>Enable the large semantic model storage format if the model may grow large</li>
+<li>Publish to a workspace on capacity</li>
+<li>Run the first refresh in the service to create partitions and load history</li>
+</ol>
+</div>
+
+<div class="check" data-answer="3">
+<p>An incremental refresh policy keeps five years and refreshes the last 10 days, but every refresh still takes hours and the source trace shows one huge query without a date predicate per partition. What is the most likely cause?</p>
+<ul><li>RangeStart and RangeEnd are of type Date/Time</li><li>Detect data changes is enabled</li><li>The RangeStart/RangeEnd filter doesn't fold to the source, so the full table is read and filtered locally</li><li>The large semantic model format is enabled</li></ul>
+<p class="why">Incremental refresh relies on the filter folding into each partition's source query. Without folding, each partition scans everything. Date/Time is the required type; detect data changes and large format don't cause full scans.</p>
+</div>
+
+<div class="check" data-answer="1">
+<p>Which statement about the Detect data changes option is TRUE?</p>
+<ul><li>It compares the maximum value of an audit column (e.g. LastUpdateTime) per partition with the previous refresh; hard deletes aren't detected, so use soft deletes</li><li>It must use the same column as the RangeStart/RangeEnd filter</li><li>It detects deleted rows automatically by comparing row counts</li><li>It only works for DirectQuery tables</li></ul>
+<p class="why">The option evaluates MAX of a separate audit datetime column for each incremental-window partition. Deleting a row doesn't change that max, hence the soft-delete pattern.</p>
+</div>
+
+<h2>Large semantic model storage format</h2>
+<ul>
+<li>Without it, the default semantic model size limit applies (Learn: 1 GB by default; Desktop uploads are limited to 10 GB). With <strong>Large semantic model storage format</strong> on, the limit becomes the capacity's memory size (or an admin-set maximum).</li>
+<li><strong>Required</strong> for models > 10 GB; <strong>recommended for any model managed with XMLA write operations</strong> (better write performance) and <strong>required for query scale-out</strong>.</li>
+<li>Enable per model (<em>Settings → Large semantic model storage format</em>) or as the workspace default storage format. Enable it <strong>before the first refresh</strong> of a model with incremental refresh that will grow.</li>
+<li>Brings <strong>on-demand load</strong> (only needed data pages are loaded after eviction) and a default segment size of 8 million rows. Desktop upload is still limited to 10 GB – models grow beyond that through refresh in the service.</li>
+</ul>
+
+<h2>Query scale-out (read replicas)</h2>
+<ul>
+<li>Hosts one or more <strong>read-only replicas</strong> of the model for report queries, separate from the <strong>read-write</strong> primary used for refreshes and writes. Users keep querying while a refresh runs; heavy concurrent audiences are spread over replicas.</li>
+<li>Prerequisites: capacity (F, P, A SKUs or PPU), tenant setting <em>Scale-out queries for large semantic models</em> (on by default), and <strong>large semantic model storage format</strong>. Enabled per semantic model (model settings or REST API).</li>
+<li>Replicas are <strong>synchronized automatically</strong> by default after refresh. You can disable auto-sync and sync manually (REST API) to control exactly when users see new data – e.g. after validating a refresh made via XMLA/REST.</li>
+<li>Connection strings: append <code>?readonly</code> or <code>?readwrite</code>. Power BI Desktop and live-connected reports use read-only replicas; XMLA clients and refreshes use the read-write instance by default.</li>
+<li>The number of replicas is managed by the service based on CU demand; it doesn't increase the CU limits of the SKU.</li>
+</ul>
+
+<div class="check" data-answer="4">
+<p>When should the large semantic model storage format be enabled?</p>
+<ul><li>Only for Direct Lake models</li><li>Only when the model is smaller than 1 GB</li><li>Never on Fabric capacities – it's for Premium P SKUs only</li><li>For models that will exceed 10 GB, for models written to through XMLA, and as a prerequisite for query scale-out</li></ul>
+<p class="why">The large format is required beyond 10 GB, recommended for XMLA write operations, and a prerequisite for query scale-out. It's available on F, P and A SKUs and PPU.</p>
+</div>
+
+<h2>Refresh options and orchestration</h2>
+<div class="tw"><table>
+<thead><tr><th>Option</th><th>What it gives you</th><th>When</th></tr></thead>
+<tbody>
+<tr><td>Scheduled refresh (service)</td><td>Up to 48/day on capacity (8/day Pro)</td><td>Simple, independent sources</td></tr>
+<tr><td><strong>Semantic model refresh activity</strong> in a Fabric <strong>pipeline</strong></td><td>Refresh only after upstream activities succeed (dependency); options such as wait on completion, specific tables/partitions, commit mode, parallelism, retries</td><td>Model must reflect a successful nightly load; replace "hourly refresh while data loads daily"</td></tr>
+<tr><td><strong>Enhanced refresh REST API</strong> (asynchronous)</td><td>Choose <code>objects</code> (tables/partitions), <code>type</code> (full, dataOnly, calculate, clearValues, automatic, defragment), <code>commitMode</code> (transactional / partialBatch), <code>maxParallelism</code>, <code>retryCount</code>, <code>applyRefreshPolicy</code>, <code>effectiveDate</code>, timeout; poll status / cancel</td><td>Refresh only the current month's partition from an automated process; fine-grained memory control</td></tr>
+<tr><td><strong>XMLA endpoint</strong> (TMSL/TOM, SSMS, Tabular Editor, PowerShell)</td><td>Partition-level processing, no 5-hour service limit, metadata-only deployment</td><td>Very large models, bootstrapping incremental refresh</td></tr>
+<tr><td><code>sempy.fabric.refresh_dataset</code> / notebooks</td><td>Refresh from Python with table/partition options</td><td>Code-first orchestration</td></tr>
+<tr><td>Direct Lake framing</td><td>Metadata-only, seconds</td><td>See <a href="11-direct-lake.html">Direct Lake</a> – disable auto updates and reframe from the pipeline</td></tr>
+</tbody>
+</table></div>
+<pre><code>POST https://api.powerbi.com/v1.0/myorg/groups/{workspaceId}/datasets/{datasetId}/refreshes
+{
+  "type": "full",
+  "commitMode": "transactional",
+  "maxParallelism": 4,
+  "retryCount": 2,
+  "objects": [
+    { "table": "FactSales", "partition": "FactSales-2026-11" },
+    { "table": "DimCustomer" }
+  ]
+}</code></pre>
+<p>A full refresh can need about <strong>twice the model's memory</strong> (old copy serves queries until the new one commits). Out-of-memory refreshes are best fixed at the root: fewer columns, lower cardinality, incremental refresh / partition-level refresh – not just a bigger SKU. Schedule heavy background refreshes away from peak interactive hours.</p>
+
+<div class="check" data-answer="2">
+<p>A refresh of a large Import model fails with an out-of-memory error on F32. Which action addresses the root cause with the least long-term cost?</p>
+<ul><li>Scale permanently to F128</li><li>Remove unneeded columns, reduce cardinality and use incremental refresh so only changed partitions are processed</li><li>Switch all tables to Dual mode</li><li>Disable the large semantic model storage format</li></ul>
+<p class="why">Shrinking the model and refreshing only recent partitions reduces both memory pressure and duration. A larger SKU treats the symptom at ongoing cost; Dual mode and disabling large format don't help.</p>
+</div>
+
+<h2>Report and visual performance</h2>
+<ul>
+<li>Fewer visuals per page (each visual = at least one query; slicers are visuals too). Use drill-through, tooltips pages, bookmarks or tabs instead of 30 visuals on one page.</li>
+<li>Limit high-cardinality visuals (tables with thousands of rows, scatter charts with many points); use Top N filters.</li>
+<li>Slicers: avoid huge-cardinality slicers; "search" slicers on millions of values are slow; use hierarchy slicers wisely. Apply buttons (query reduction options) reduce queries while selecting.</li>
+<li>Avoid measures that return 0 instead of blank (forces every combination to show).</li>
+<li>Custom visuals: prefer certified ones; test their rendering time in Performance analyzer.</li>
+<li><strong>Query caching</strong> (capacity setting per model) caches results of the report's initial page load for faster first view of popular reports (Import models).</li>
+<li>For DirectQuery: reduce the number and complexity of source queries – fewer visuals, query reduction, aggregations, Dual dimensions, indexes/statistics at the source, avoid bidirectional filters and complex measures.</li>
+</ul>
+
+<h2>Direct Lake performance (summary)</h2>
+<p>All Import-mode advice about columns, cardinality and DAX applies. In addition (details on the <a href="11-direct-lake.html">Direct Lake page</a>):</p>
+<ul>
+<li>Avoid DirectQuery fallback (views, SQL RLS, guardrails) – test with <em>DirectLakeOnly</em>; prefer Direct Lake on OneLake.</li>
+<li>V-Order on gold tables, large row groups (1–16 M rows), few Parquet files, regular OPTIMIZE, append-style loads to keep incremental framing effective.</li>
+<li>Stay within SKU guardrails (F64: 5,000 files/row groups, 1.5 billion rows per table) and watch paging against Max memory.</li>
+<li>Only the columns you need; materialize calculated columns and summary tables upstream (user-defined aggregations aren't supported).</li>
+</ul>
+
+<h2>Copilot and Semantic Link for analysis (briefly)</h2>
+<ul>
+<li><strong>Copilot in Power BI</strong> (DAX query view and report authoring) can write/explain DAX queries and suggest measures; it works better on well-prepared models (clear names, descriptions, synonyms, "Prep data for AI" settings).</li>
+<li><strong>Semantic link</strong> exposes semantic models to data science: read tables/measures into pandas-compatible FabricDataFrames, run DAX, detect functional dependencies, and automate checks (BPA, VertiPaq, refresh, reconciliation) in notebooks and pipelines.</li>
+</ul>
+
+<div class="reveal"><p><strong>Scenario.</strong> A 400-million-row imported sales fact table on F64 takes 3 hours to refresh nightly, the model is 38 GB, and morning users wait for the refresh to finish. Business users only analyse sales by month, product and store; finance occasionally needs order-level detail for the current year. Design improvements.</p>
+<div class="answer">(1) Run <strong>VertiPaq Analyzer</strong>: remove unused high-cardinality columns (order GUIDs, comments), split datetime, use integer keys. (2) Build a <strong>summary table at month × product × store grain</strong> for the main reports (rows drop from 400 M to a few million). (3) For detail, either keep a current-year detail table with <strong>incremental refresh</strong> (RangeStart/RangeEnd folding, 10-day refresh window, detect data changes) or a <strong>DirectQuery detail table with user-defined aggregations</strong> and Dual dimensions. (4) Enable <strong>large semantic model storage format</strong>; consider <strong>query scale-out</strong> so the read-only replica keeps serving users during refresh. (5) Trigger the refresh from the <strong>pipeline</strong> after the load (Semantic model refresh activity) or refresh just the current partitions via the <strong>enhanced refresh API</strong>, outside peak hours. (6) Alternative strategic option: move the fact to the lakehouse and use <strong>Direct Lake</strong>, which removes the data refresh entirely (check F64 guardrails: 1.5 billion rows, 5,000 files).</div></div>
+
+<div class="reveal"><p><strong>Scenario.</strong> A team wants automated quality gates before releasing model changes from Dev to Prod in a deployment pipeline: naming and performance rules must pass, and key measures must reconcile with the warehouse. What do you implement?</p>
+<div class="answer">Run the <strong>Best Practice Analyzer</strong> from the command line (Tabular Editor CLI on the PBIP/TMDL definition) or <code>run_model_bpa</code> from semantic-link-labs and fail the build on errors; in a Fabric notebook use <strong>semantic link</strong> (<code>evaluate_measure</code>/<code>evaluate_dax</code>) to compare measure totals with a T-SQL query against the warehouse and raise an exception on mismatch; time a set of representative DAX queries in the Test stage against a baseline before promoting to Prod.</div></div>
+
+<div class="check" data-answer="3">
+<p>A semantic model is refreshed hourly, but the underlying gold tables are loaded only once a day by a pipeline. What should you change?</p>
+<ul><li>Increase the refresh frequency to every 30 minutes</li><li>Switch the model to DirectQuery</li><li>Remove the schedule and add a Semantic model refresh activity at the end of the load pipeline</li><li>Enable query scale-out</li></ul>
+<p class="why">Triggering the refresh from the pipeline removes 23 wasted refreshes per day and guarantees the model is refreshed as soon as (and only if) the load succeeds.</p>
+</div>
+
+<h2>Key takeaways &amp; exam tips</h2>
+<ul>
+<li>Find the layer first: <strong>Performance analyzer</strong> (which visual) → <strong>DAX Studio Server Timings</strong> (FE vs SE) → <strong>VertiPaq Analyzer</strong> (column sizes/cardinality) → <strong>BPA</strong> (rules) → <strong>Capacity Metrics app</strong> (throttling, which item).</li>
+<li>FE is single-threaded, SE multi-threaded with a cache. Many small SE queries + high FE time = row-by-row pattern; callbacks (<code>CallbackDataID</code>) = expressions the SE can't handle.</li>
+<li>DAX: variables, column predicates instead of FILTER(table), DIVIDE not IFERROR, aggregate-then-divide, SUM over materialized columns, DISTINCTCOUNT, measure branching, blank not zero.</li>
+<li>Model: remove columns, reduce cardinality, split datetime, integer keys, correct types, star schema with single-direction relationships, disable auto date/time, summary tables at the needed grain.</li>
+<li>Aggregations: DirectQuery detail + Import agg + <strong>Dual</strong> dimensions; GroupBy/Sum/Count/Min/Max/Count table rows; higher precedence considered first; not for Direct Lake. Automatic aggregations = ML-trained for DirectQuery.</li>
+<li>Incremental refresh: <strong>RangeStart/RangeEnd</strong>, case-sensitive, <strong>Date/Time</strong>, <code>&gt;=</code> and <code>&lt;</code>, <strong>must fold</strong>; archive vs refresh window; detect data changes on an audit column (soft deletes); hybrid tables add a DirectQuery partition (capacity only); first refresh in service creates partitions; no PBIX download afterwards; XMLA for partition-level refresh.</li>
+<li>Large semantic model format: > 10 GB, XMLA writes, prerequisite for <strong>query scale-out</strong> (read-only replicas, auto-sync by default, <code>?readonly</code>/<code>?readwrite</code>).</li>
+<li>Refresh orchestration: pipeline Semantic model refresh activity (dependencies), enhanced refresh REST API (tables/partitions, commit mode, parallelism), XMLA (no time limit), notebooks with semantic link.</li>
+<li>Automate quality: BPA in CI/CD, semantic link reconciliation tests, performance baselines in a test stage.</li>
+</ul>
+<p>Related: <a href="11-direct-lake.html">Direct Lake in depth</a> · <a href="12-dax.html">DAX for the exam</a> · <a href="10-semantic-model-design.html">Semantic model design &amp; storage modes</a>.</p>
+</main>
+<script src="assets/app.js"></script>
+</body>
+</html>

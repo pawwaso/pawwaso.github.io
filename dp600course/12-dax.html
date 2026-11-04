@@ -1,0 +1,549 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>DAX for the exam – DP-600</title>
+<link rel="stylesheet" href="assets/style.css">
+</head>
+<body>
+<main>
+<h1>DAX for the exam</h1>
+<p class="lead">Evaluation contexts, CALCULATE and its filter modifiers, context transition, variables, iterators, table functions, time intelligence (classic and calendar-based), window functions, calculation groups, field parameters, dynamic format strings, visual calculations and the patterns DP-600 likes to test. Maps to <em>Implement and manage semantic models → Write calculations that use DAX variables and functions (iterators, table filtering, windowing, information functions), implement calculation groups, dynamic format strings and field parameters</em>.</p>
+
+<p>Examples use a classic star schema: <code>Sales</code> (fact: <code>SalesAmount</code>, <code>Quantity</code>, <code>NetPrice</code>, <code>UnitCost</code>, <code>OrderDateKey</code>, <code>ShipDateKey</code>, <code>CustomerKey</code>, <code>ProductKey</code>), <code>'Date'</code> (marked as date table: <code>Date</code>, <code>Year</code>, <code>YearMonth</code>, <code>MonthNumber</code>, <code>Month</code>), <code>Product</code> (<code>Category</code>, <code>Subcategory</code>, <code>Brand</code>), <code>Customer</code>, <code>Region</code>. Base measure:</p>
+<pre><code>Sales Amount = SUM ( Sales[SalesAmount] )
+Total Cost   = SUMX ( Sales, Sales[Quantity] * Sales[UnitCost] )
+Margin       = [Sales Amount] - [Total Cost]
+Margin %     = DIVIDE ( [Margin], [Sales Amount] )</code></pre>
+
+<h2>Evaluation contexts: filter context and row context</h2>
+<div class="tw"><table>
+<thead><tr><th></th><th>Filter context</th><th>Row context</th></tr></thead>
+<tbody>
+<tr><td>What it is</td><td>The set of filters active on model columns (from slicers, visual rows/columns, page/report filters, RLS, CALCULATE)</td><td>"The current row" of a table being iterated</td></tr>
+<tr><td>Created by</td><td>Report visuals, CALCULATE/CALCULATETABLE filter arguments</td><td>Calculated columns, iterators (SUMX, FILTER, ADDCOLUMNS…)</td></tr>
+<tr><td>Propagates through relationships?</td><td><strong>Yes</strong> – from the one side to the many side (both ways if bidirectional)</td><td><strong>No</strong> – use RELATED (many→one) or RELATEDTABLE (one→many)</td></tr>
+<tr><td>Filters aggregations?</td><td>Yes – <code>SUM(Sales[SalesAmount])</code> sees only filtered rows</td><td>No – an aggregation inside a row context still sees the whole filter context unless context transition happens</td></tr>
+</tbody>
+</table></div>
+<p>A <strong>measure</strong> is always evaluated in a filter context. A <strong>calculated column</strong> is evaluated row by row (row context) at refresh time and stored – it consumes memory and isn't affected by slicers.</p>
+<pre><code>-- Calculated column on Sales: row context, RELATED follows many-to-one
+Sales[Category] = RELATED ( Product[Category] )
+
+-- Calculated column on Customer: RELATEDTABLE follows one-to-many
+Customer[Order Lines] = COUNTROWS ( RELATEDTABLE ( Sales ) )</code></pre>
+
+<div class="exam"><p>"Value must be usable on an axis/slicer and is fixed per row" → column (ideally materialized upstream). "Value must react to slicers/filters" → measure. Implicit measures (dragging a numeric column) can be disabled with <strong>Discourage implicit measures</strong>, forcing authors to use governed explicit measures – required anyway when a model contains calculation groups.</p></div>
+
+<h2>CALCULATE and filter modifiers</h2>
+<p><strong>CALCULATE(&lt;expression&gt;, &lt;filter1&gt;, …)</strong> evaluates the expression in a <strong>modified filter context</strong>. That's what distinguishes it from a plain aggregation. Evaluation order:</p>
+<ol>
+<li>Filter arguments are evaluated in the <em>original</em> filter context.</li>
+<li>If CALCULATE is called inside a row context, <strong>context transition</strong> turns the current row into an equivalent filter.</li>
+<li>Modifiers (ALL/REMOVEFILTERS, USERELATIONSHIP, CROSSFILTER, KEEPFILTERS) are applied.</li>
+<li>Filter arguments are applied: a filter on a column <strong>replaces</strong> existing filters on the same column (unless wrapped in KEEPFILTERS); filters on different columns are combined (AND).</li>
+</ol>
+<pre><code>-- Boolean filter: shorthand for FILTER ( ALL ( Product[Color] ), Product[Color] = "Red" )
+Red Sales = CALCULATE ( [Sales Amount], Product[Color] = "Red" )
+
+-- Multiple filters = AND
+Red Bikes = CALCULATE ( [Sales Amount], Product[Color] = "Red", Product[Category] = "Bikes" )
+
+-- OR on the same column
+Red or Blue = CALCULATE ( [Sales Amount], Product[Color] IN { "Red", "Blue" } )
+
+-- OR across different columns needs a table filter
+Red or Bikes =
+CALCULATE (
+    [Sales Amount],
+    FILTER (
+        ALL ( Product[Color], Product[Category] ),
+        Product[Color] = "Red" || Product[Category] = "Bikes"
+    )
+)</code></pre>
+
+<h3>The modifiers</h3>
+<div class="tw"><table>
+<thead><tr><th>Function</th><th>Effect</th><th>Typical use</th></tr></thead>
+<tbody>
+<tr><td><code>ALL(table | col, …)</code></td><td>Removes filters (as a CALCULATE modifier); as a table function returns all rows/values ignoring filters</td><td>Grand totals, % of total</td></tr>
+<tr><td><code>REMOVEFILTERS(table | col, …)</code></td><td>Same as ALL used as a modifier, but clearer; can't be used as a table expression</td><td>Readable "ignore filters on X"</td></tr>
+<tr><td><code>ALLEXCEPT(table, col1, …)</code></td><td>Removes all filters on the table except those on the listed columns</td><td>"% of category total" keeping Category filter</td></tr>
+<tr><td><code>ALLSELECTED(table | col)</code></td><td>Restores the filters coming from outside the visual (slicers/filters) and removes those from the visual's rows/columns</td><td>"% of visible total", running totals that start at the slicer selection</td></tr>
+<tr><td><code>ALLNOBLANKROW</code></td><td>Like ALL but excludes the blank row added for invalid relationships</td><td>Rare</td></tr>
+<tr><td><code>KEEPFILTERS(filter)</code></td><td>Intersects the new filter with the existing one instead of replacing it</td><td>Measures that must respect a slicer on the same column</td></tr>
+<tr><td><code>USERELATIONSHIP(col1, col2)</code></td><td>Activates an <strong>inactive</strong> relationship for this calculation (the active one between the same tables is ignored)</td><td>Role-playing dates: sales by ship date</td></tr>
+<tr><td><code>CROSSFILTER(col1, col2, dir)</code></td><td>Changes filter direction for this calculation: <code>Both</code>, <code>OneWay</code>, <code>None</code> (also OneWay_LeftFiltersRight / OneWay_RightFiltersLeft)</td><td>Bidirectional filtering only where needed; disabling a relationship</td></tr>
+</tbody>
+</table></div>
+
+<pre><code>-- Ignore any slicer on the Region table, keep everything else
+Sales All Regions = CALCULATE ( [Sales Amount], REMOVEFILTERS ( Region ) )
+
+-- Share of the category inside the subcategory/product matrix
+% of Category =
+DIVIDE (
+    [Sales Amount],
+    CALCULATE ( [Sales Amount], ALLEXCEPT ( Product, Product[Category] ) )
+)
+
+-- Inactive relationship Sales[ShipDateKey] -&gt; 'Date'[DateKey]
+Sales by Ship Date =
+CALCULATE ( [Sales Amount], USERELATIONSHIP ( Sales[ShipDateKey], 'Date'[DateKey] ) )
+
+-- Count customers who bought the products selected in a Product slicer
+-- (Customer and Product both filter Sales; Customer isn't filtered by Product without this)
+Customers Buying Selection =
+CALCULATE (
+    DISTINCTCOUNT ( Customer[CustomerKey] ),
+    CROSSFILTER ( Sales[CustomerKey], Customer[CustomerKey], BOTH )
+)
+
+-- KEEPFILTERS: with a Color slicer = "Blue", this returns blank instead of red sales
+Red Sales (respect slicer) = CALCULATE ( [Sales Amount], KEEPFILTERS ( Product[Color] = "Red" ) )</code></pre>
+
+<div class="tip"><p>Prefer <strong>USERELATIONSHIP</strong> for role-playing dates when one Date table is enough; create a <em>second Date table</em> only when users need two independent date slicers at the same time. Prefer <strong>CROSSFILTER</strong> inside one measure over setting a relationship to bidirectional for the whole model (ambiguity, performance, RLS surprises).</p></div>
+
+<div class="check" data-answer="2">
+<p>A measure must always ignore any slicer on the Region table but respect all other filters. Which expression is correct?</p>
+<ul><li><code>CALCULATE([Sales Amount], ALL(Sales))</code></li><li><code>CALCULATE([Sales Amount], REMOVEFILTERS(Region))</code></li><li><code>CALCULATE([Sales Amount], ALLSELECTED(Region))</code></li><li><code>CALCULATE([Sales Amount], KEEPFILTERS(Region))</code></li></ul>
+<p class="why">REMOVEFILTERS(Region) clears only that table's filters. ALL(Sales) removes all filters on the expanded fact table (including dimension filters) – far too broad. ALLSELECTED keeps the slicer. KEEPFILTERS doesn't remove anything.</p>
+</div>
+
+<h2>Context transition</h2>
+<p>When <strong>CALCULATE</strong> (or CALCULATETABLE) is executed inside a <strong>row context</strong>, the row context is transformed into an equivalent <strong>filter context</strong> – a filter on every column of the iterated row. Every <strong>measure reference</strong> is implicitly wrapped in CALCULATE, so referencing a measure inside an iterator always triggers context transition.</p>
+<pre><code>-- Average sales per customer: SUMX/AVERAGEX iterate customers,
+-- [Sales Amount] is evaluated per customer thanks to context transition
+Avg Sales per Customer = AVERAGEX ( Customer, [Sales Amount] )
+
+-- Same thing WITHOUT a measure reference: no context transition -&gt; wrong
+Wrong Avg = AVERAGEX ( Customer, SUM ( Sales[SalesAmount] ) )   -- grand total repeated per row
+
+-- Explicit CALCULATE fixes it
+Right Avg = AVERAGEX ( Customer, CALCULATE ( SUM ( Sales[SalesAmount] ) ) )</code></pre>
+<div class="warn"><p>Context transition is <strong>expensive</strong> on large tables (one filter per row, many storage-engine requests) and can produce surprises when the iterated table has <strong>duplicate rows</strong> (the filter selects all identical rows, so values get multiplied). Iterate over a dimension or <code>VALUES(column)</code>, not over the fact table, when you need context transition.</p></div>
+
+<div class="check" data-answer="1">
+<p>Which statement about context transition is TRUE?</p>
+<ul><li>CALCULATE invoked in a row context converts the current row into an equivalent filter context, and every measure reference does this implicitly</li><li>Context transition happens in every iterator even without CALCULATE or measure references</li><li>Context transition converts a filter context into a row context</li><li>Context transition only happens in calculated tables</li></ul>
+<p class="why">Context transition = row context → filter context, triggered by CALCULATE (explicit or the implicit CALCULATE around a measure reference). That's why <code>SUMX(Customer, [Sales Amount])</code> works per customer.</p>
+</div>
+
+<h2>Variables</h2>
+<pre><code>YoY % =
+VAR CurrentSales = [Sales Amount]
+VAR PreviousSales = CALCULATE ( [Sales Amount], SAMEPERIODLASTYEAR ( 'Date'[Date] ) )
+VAR Result = DIVIDE ( CurrentSales - PreviousSales, PreviousSales )
+RETURN
+    IF ( NOT ISBLANK ( CurrentSales ) &amp;&amp; NOT ISBLANK ( PreviousSales ), Result )</code></pre>
+<ul>
+<li>A variable is evaluated <strong>once</strong>, in the context where it is <strong>defined</strong> – later CALCULATE filters don't change it. (<code>CALCULATE(CurrentSales, …)</code> returns the same value – a classic trap.)</li>
+<li>Variables improve readability, avoid repeated evaluation (performance) and make debugging easy (temporarily <code>RETURN</code> an intermediate variable).</li>
+<li>Variables can hold scalars or tables: <code>VAR TopProducts = TOPN(10, …)</code>.</li>
+</ul>
+
+<h2>Iterators (X functions)</h2>
+<div class="tw"><table>
+<thead><tr><th>Function</th><th>Returns</th><th>Notes</th></tr></thead>
+<tbody>
+<tr><td><code>SUMX(table, expr)</code></td><td>Sum of expr evaluated per row</td><td><code>SUM(col)</code> is syntax sugar for <code>SUMX(table, col)</code></td></tr>
+<tr><td><code>AVERAGEX</code>, <code>MINX</code>, <code>MAXX</code>, <code>COUNTX</code>, <code>COUNTAX</code></td><td>Aggregate of per-row expression</td><td>COUNTX counts non-blank results of the expression</td></tr>
+<tr><td><code>FILTER(table, condition)</code></td><td>A table</td><td>Iterator; returns rows where condition is TRUE. Use as CALCULATE filter or inside other iterators</td></tr>
+<tr><td><code>RANKX(table, expr, [value], [order], [ties])</code></td><td>Rank of the current value within the table</td><td>Default order <strong>DESC</strong>, ties <strong>SKIP</strong>; use <code>ALL</code>/<code>ALLSELECTED</code> table; combine with ISINSCOPE to blank totals</td></tr>
+<tr><td><code>CONCATENATEX(table, expr, delimiter, [orderBy])</code></td><td>Text list</td><td>Show selected items in a title</td></tr>
+<tr><td><code>ADDCOLUMNS</code>, <code>SELECTCOLUMNS</code>, <code>GENERATE</code></td><td>Tables</td><td>Also iterators (row context per row)</td></tr>
+</tbody>
+</table></div>
+<pre><code>-- Line-level multiplication must be done row by row
+Sales Amount (calc) = SUMX ( Sales, Sales[Quantity] * Sales[NetPrice] )
+
+-- If the fact already stores LineTotal, a plain SUM is the most efficient
+Sales Amount = SUM ( Sales[SalesAmount] )
+
+-- Distinct customers: purpose-built and storage-engine friendly
+Customers = DISTINCTCOUNT ( Sales[CustomerKey] )
+
+-- Max monthly sales within the current filter context
+Best Month Sales = MAXX ( VALUES ( 'Date'[YearMonth] ), [Sales Amount] )</code></pre>
+<p><strong>Cost:</strong> simple iterators whose expression uses only columns of the iterated table (e.g. <code>Quantity * NetPrice</code>) are pushed to the storage engine and are cheap. Expensive cases: iterating a huge fact table with a <strong>measure reference</strong> (context transition per row), complex expressions (IF, DIVIDE, text) that cause storage-engine <strong>callbacks</strong> to the formula engine, nested iterators, and FILTER over entire tables. See <a href="13-performance.html">Performance</a>.</p>
+
+<div class="match" data-task="Match each DAX function to what it does.">
+<dl>
+<dt>RELATED</dt><dd>Fetches a value from the one side of a relationship in a row context</dd>
+<dt>RELATEDTABLE</dt><dd>Returns the many-side rows related to the current row</dd>
+<dt>ALLEXCEPT</dt><dd>Removes all filters from a table except on the listed columns</dd>
+<dt>KEEPFILTERS</dt><dd>Intersects a CALCULATE filter with the existing filter on the same column</dd>
+<dt>USERELATIONSHIP</dt><dd>Activates an inactive relationship for one calculation</dd>
+<dt>CROSSFILTER</dt><dd>Changes the filter direction of a relationship inside one measure</dd>
+<dt>ALLSELECTED</dt><dd>Keeps filters from slicers outside the visual but removes the visual's own row/column filters</dd>
+<dt>TREATAS</dt><dd>Applies the values of a table expression as filters on unrelated columns (virtual relationship)</dd>
+</dl>
+</div>
+
+<h2>Table functions</h2>
+<h3>VALUES vs DISTINCT vs ALL</h3>
+<div class="tw"><table>
+<thead><tr><th>Function</th><th>Respects filters?</th><th>Includes the "blank row" for invalid relationships?</th></tr></thead>
+<tbody>
+<tr><td><code>VALUES(col | table)</code></td><td>Yes</td><td><strong>Yes</strong> (if the relationship has unmatched many-side keys)</td></tr>
+<tr><td><code>DISTINCT(col | table)</code></td><td>Yes</td><td>No</td></tr>
+<tr><td><code>ALL(col | table)</code></td><td>No</td><td>Yes</td></tr>
+<tr><td><code>ALLNOBLANKROW</code></td><td>No</td><td>No</td></tr>
+</tbody>
+</table></div>
+<p>The blank row explains a classic exam scenario: Sales contains 2027 orders but the Date table only covers 2020–2026 → those rows relate to the virtual blank row; they appear under "(Blank)" and in the grand total but not under any year, so years don't add up to the total. Fix the date table range (or the data).</p>
+
+<h3>SUMMARIZE vs SUMMARIZECOLUMNS vs ADDCOLUMNS</h3>
+<div class="tw"><table>
+<thead><tr><th>Function</th><th>Use</th><th>Notes</th></tr></thead>
+<tbody>
+<tr><td><code>SUMMARIZECOLUMNS(groupBy…, [filters…], name, expr…)</code></td><td>The query function used by Power BI visuals; group by columns from any tables, add measures</td><td>Removes rows where all measures are blank. Best for <code>EVALUATE</code> queries; its use inside measures has historically been restricted (context transition), so prefer other patterns in measures</td></tr>
+<tr><td><code>SUMMARIZE(table, groupBy…)</code></td><td>Distinct combinations of group-by columns reachable from <code>table</code></td><td>Use only for grouping; don't add calculated columns inside SUMMARIZE (unpredictable results) – wrap in ADDCOLUMNS instead</td></tr>
+<tr><td><code>ADDCOLUMNS(table, name, expr…)</code></td><td>Adds computed columns to a table (row context; measure refs → context transition)</td><td>Classic pattern: <code>ADDCOLUMNS(SUMMARIZE(Sales, Product[Brand]), "Sales", [Sales Amount])</code></td></tr>
+<tr><td><code>SELECTCOLUMNS</code></td><td>Projects/renames columns</td><td>Like SQL SELECT</td></tr>
+<tr><td><code>TOPN(n, table, orderBy, [order])</code></td><td>Top n rows by an expression</td><td>Returns <em>more</em> than n rows on ties; default order DESC</td></tr>
+<tr><td><code>GENERATESERIES</code>, <code>CALENDAR</code>, <code>DATATABLE</code></td><td>Create tables</td><td>What-if parameters use GENERATESERIES</td></tr>
+</tbody>
+</table></div>
+<pre><code>// DAX query view: validate a measure without building a visual
+EVALUATE
+SUMMARIZECOLUMNS (
+    'Date'[Year],
+    Product[Category],
+    TREATAS ( { "Europe" }, Region[Continent] ),
+    "Sales", [Sales Amount],
+    "Margin %", [Margin %]
+)
+ORDER BY 'Date'[Year], Product[Category]
+
+// Sales of the top 10 products in the current context
+Top 10 Products Sales =
+CALCULATE (
+    [Sales Amount],
+    TOPN ( 10, ALLSELECTED ( Product[ProductName] ), [Sales Amount] )
+)</code></pre>
+<p><strong>DAX query view</strong> (Power BI Desktop and web) runs <code>EVALUATE</code> queries against Import, DirectQuery and Direct Lake models; you can <code>DEFINE MEASURE</code> locally, test it and then update the model. Copilot can write and explain DAX queries there.</p>
+
+<h2>Time intelligence</h2>
+<h3>Date table requirements (classic time intelligence)</h3>
+<ul>
+<li>A dedicated date table with one row per day, a column of <strong>Date</strong> data type with <strong>unique</strong> values and <strong>no gaps</strong> (contiguous dates; full years recommended) – missing dates cause an error.</li>
+<li><strong>Mark as date table</strong> (Table tools → Mark as date table) on that column. Required when the relationship uses a non-date key (e.g. integer <code>DateKey</code>) so time intelligence removes filters on the date table correctly.</li>
+<li>Disable <strong>Auto date/time</strong> for enterprise models (it creates a hidden date table per date column, inflating the model).</li>
+</ul>
+<pre><code>Sales YTD        = TOTALYTD ( [Sales Amount], 'Date'[Date] )
+Sales YTD (FY June) = TOTALYTD ( [Sales Amount], 'Date'[Date], "6-30" )   -- fiscal year ending 30 June
+Sales YTD (alt)  = CALCULATE ( [Sales Amount], DATESYTD ( 'Date'[Date] ) )
+Sales MTD        = TOTALMTD ( [Sales Amount], 'Date'[Date] )
+
+Sales PY         = CALCULATE ( [Sales Amount], SAMEPERIODLASTYEAR ( 'Date'[Date] ) )
+Sales PY (DATEADD) = CALCULATE ( [Sales Amount], DATEADD ( 'Date'[Date], -1, YEAR ) )
+Sales Prev Month = CALCULATE ( [Sales Amount], DATEADD ( 'Date'[Date], -1, MONTH ) )
+
+-- Whole previous year regardless of the month in context
+Sales Full PY    = CALCULATE ( [Sales Amount], PARALLELPERIOD ( 'Date'[Date], -1, YEAR ) )
+
+-- Rolling 3 months ending at the last visible date
+Sales R3M =
+CALCULATE (
+    [Sales Amount],
+    DATESINPERIOD ( 'Date'[Date], MAX ( 'Date'[Date] ), -3, MONTH )
+)
+
+YoY % =
+VAR Cur = [Sales Amount]
+VAR Prev = [Sales PY]
+RETURN DIVIDE ( Cur - Prev, Prev )</code></pre>
+<div class="tw"><table>
+<thead><tr><th>Function</th><th>Returns for "March 2026" in context</th></tr></thead>
+<tbody>
+<tr><td><code>SAMEPERIODLASTYEAR</code> / <code>DATEADD(…, -1, YEAR)</code></td><td>March 2025 (same shape, shifted)</td></tr>
+<tr><td><code>PARALLELPERIOD(…, -1, YEAR)</code></td><td>All of 2025 (whole period of the given granularity)</td></tr>
+<tr><td><code>PREVIOUSMONTH</code></td><td>February 2026 (whole month)</td></tr>
+<tr><td><code>DATESYTD</code></td><td>1 Jan 2026 – 31 Mar 2026</td></tr>
+<tr><td><code>DATESINPERIOD(…, MAX(date), -3, MONTH)</code></td><td>1 Jan 2026 – 31 Mar 2026 (rolling window ending at the last date)</td></tr>
+</tbody>
+</table></div>
+
+<h3>Calendar-based time intelligence (preview)</h3>
+<p>Newer approach recommended by Microsoft: define one or more <strong>calendars</strong> on a table (<em>Calendar options</em> in Desktop, or TMDL) by mapping columns to categories (Year, Quarter, Month, Week, Date, Month of Year, Week of Year…), then pass the <strong>calendar name</strong> instead of a date column:</p>
+<pre><code>Sales YTD (fiscal) = TOTALYTD ( [Sales], 'Fiscal Calendar' )
+Sales WTD          = TOTALWTD ( [Sales], 'ISO-454' )             -- week-based functions are new
+Sales PY (cal)     = CALCULATE ( [Sales], SAMEPERIODLASTYEAR ( 'Fiscal Calendar' ) )</code></pre>
+<p>Benefits: any calendar (retail 4-4-5, 13-period, lunar), <strong>sparse dates allowed</strong>, week-based calculations, often better performance. Limitations (preview): can't author calendars in the service yet, not for live-connected/composite models, no nesting of calendar-based TI functions. Classic TI remains fully valid and is what most exam questions use.</p>
+
+<div class="check" data-answer="3">
+<p>Which expression returns total sales for the same period last year, assuming 'Date' is marked as the date table?</p>
+<ul><li><code>CALCULATE([Sales Amount], PREVIOUSYEAR('Date'[Year]))</code></li><li><code>[Sales Amount] - 365</code></li><li><code>CALCULATE([Sales Amount], SAMEPERIODLASTYEAR('Date'[Date]))</code></li><li><code>CALCULATE([Sales Amount], PARALLELPERIOD('Date'[Date], -1, YEAR))</code></li></ul>
+<p class="why">SAMEPERIODLASTYEAR shifts the dates in context back one year. PARALLELPERIOD returns the <em>entire</em> previous year, not the same period. PREVIOUSYEAR needs a date column (and also returns the whole year).</p>
+</div>
+
+<h2>Window functions: OFFSET, INDEX, WINDOW, RANK, ROWNUMBER</h2>
+<p>Introduced in late 2022, window functions work on a <strong>relation</strong> (a table, often <code>ALLSELECTED</code> of the axis columns), sorted by <strong>ORDERBY</strong>, optionally split by <strong>PARTITIONBY</strong>. The "current row" is found by matching the current filter/row context against the relation (optionally using <strong>MATCHBY</strong> columns that uniquely identify a row). They return a <em>table</em> (except RANK/ROWNUMBER which return a number) and are typically used as CALCULATE filters.</p>
+<div class="tw"><table>
+<thead><tr><th>Function</th><th>Signature (simplified)</th><th>Returns</th></tr></thead>
+<tbody>
+<tr><td><code>OFFSET</code></td><td><code>OFFSET(delta, [relation], [orderBy], [blanks], [partitionBy], [matchBy], [reset])</code></td><td>The row <em>delta</em> positions away (−1 = previous, like SQL LAG)</td></tr>
+<tr><td><code>INDEX</code></td><td><code>INDEX(position, [relation], [orderBy], …)</code></td><td>The row at an absolute position (1 = first, −1 = last)</td></tr>
+<tr><td><code>WINDOW</code></td><td><code>WINDOW(from, [ABS|REL], to, [ABS|REL], [relation], [orderBy], …)</code></td><td>A range of rows – running totals, moving averages</td></tr>
+<tr><td><code>RANK</code></td><td><code>RANK([DENSE|SKIP], [relation], [orderBy], …)</code></td><td>Rank number; ties share a rank; can order by several columns</td></tr>
+<tr><td><code>ROWNUMBER</code></td><td><code>ROWNUMBER([relation], [orderBy], …)</code></td><td>Unique sequential number (ties must be broken by ordering)</td></tr>
+</tbody>
+</table></div>
+<p>Helper functions: <code>ORDERBY(col, [ASC|DESC], …)</code> – default <strong>ASC</strong>; <code>PARTITIONBY(col, …)</code>; <code>MATCHBY(col, …)</code>. Note the default difference: <strong>RANKX ranks descending by default; RANK's ORDERBY defaults to ascending</strong> – specify DESC for "highest = 1".</p>
+<pre><code>-- Previous month's sales (works on any visual with Year-Month on rows)
+Sales Prev Month (OFFSET) =
+CALCULATE (
+    [Sales Amount],
+    OFFSET ( -1, ALLSELECTED ( 'Date'[YearMonth] ), ORDERBY ( 'Date'[YearMonth], ASC ) )
+)
+
+-- Running total from the first visible month to the current one
+Sales Running Total =
+CALCULATE (
+    [Sales Amount],
+    WINDOW ( 1, ABS, 0, REL, ALLSELECTED ( 'Date'[YearMonth] ), ORDERBY ( 'Date'[YearMonth] ) )
+)
+
+-- Running total that restarts every year
+Sales YTD (WINDOW) =
+CALCULATE (
+    [Sales Amount],
+    WINDOW (
+        1, ABS, 0, REL,
+        ALLSELECTED ( 'Date'[Year], 'Date'[YearMonth] ),
+        ORDERBY ( 'Date'[YearMonth] ),
+        PARTITIONBY ( 'Date'[Year] )        -- restart the window for each year
+    )
+)
+
+-- 3-month moving average (current + 2 previous)
+Sales MA3 =
+AVERAGEX (
+    WINDOW ( -2, REL, 0, REL, ALLSELECTED ( 'Date'[YearMonth] ), ORDERBY ( 'Date'[YearMonth] ) ),
+    [Sales Amount]
+)
+
+-- Rank brands by sales, ties broken by brand name, highest first
+Brand Rank =
+RANK (
+    DENSE,
+    ALLSELECTED ( Product[Brand] ),
+    ORDERBY ( [Sales Amount], DESC, Product[Brand], ASC )
+)</code></pre>
+<div class="warn"><p>Order by a column that sorts correctly (<code>YearMonth</code> as 202601…, or <code>MonthNumber</code>), not a month <em>name</em> text. If the visual sorts Month by MonthNumber, include both columns in the relation (or they leak into the filter context and the window function returns the wrong rows). Window functions return blank at subtotal rows where no "current row" can be identified – often exactly what you want for rankings.</p></div>
+
+<h3>Running total the classic way</h3>
+<pre><code>-- Running total starting at the first date selected in a slicer
+Sales RT (classic) =
+VAR LastVisibleDate = MAX ( 'Date'[Date] )
+RETURN
+    CALCULATE (
+        [Sales Amount],
+        FILTER ( ALLSELECTED ( 'Date'[Date] ), 'Date'[Date] &lt;= LastVisibleDate )
+    )</code></pre>
+<p><code>ALLSELECTED</code> keeps the slicer's date range; <code>FILTER</code> keeps the dates up to the current one. Using <code>ALL</code> instead would start the total at the first date in the table.</p>
+
+<div class="order" data-task="Build a 'previous month' measure with OFFSET: put the parts in the order you'd write them.">
+<ol>
+<li>Start with CALCULATE and the base measure [Sales Amount]</li>
+<li>Add OFFSET with delta -1 as the filter argument</li>
+<li>Define the relation: ALLSELECTED('Date'[YearMonth])</li>
+<li>Add ORDERBY('Date'[YearMonth], ASC)</li>
+<li>Optionally add PARTITIONBY to restart per year</li>
+<li>Test in DAX query view with EVALUATE SUMMARIZECOLUMNS</li>
+</ol>
+</div>
+
+<h2>Calculation groups</h2>
+<p>A <strong>calculation group</strong> is a special table with one column whose rows are <strong>calculation items</strong>. Each item is a DAX expression that <em>rewrites whichever measure is in scope</em> through <code>SELECTEDMEASURE()</code>. Four items (Current, YTD, PY, YoY %) cover 20 base measures – and every future one – instead of 80 separate measures.</p>
+<pre><code>-- Calculation group 'Time Calc', column [Time Calculation]
+Current = SELECTEDMEASURE ()
+YTD     = CALCULATE ( SELECTEDMEASURE (), DATESYTD ( 'Date'[Date] ) )
+PY      = CALCULATE ( SELECTEDMEASURE (), SAMEPERIODLASTYEAR ( 'Date'[Date] ) )
+YoY %   =
+    VAR Cur  = SELECTEDMEASURE ()
+    VAR Prev = CALCULATE ( SELECTEDMEASURE (), SAMEPERIODLASTYEAR ( 'Date'[Date] ) )
+    RETURN DIVIDE ( Cur - Prev, Prev )
+
+-- Format string expression on the YoY % item (keeps other items in the measure's own format)
+"0.0%"
+
+-- Apply only to some measures
+YTD (selective) =
+IF (
+    ISSELECTEDMEASURE ( [Sales Amount], [Margin] ),
+    CALCULATE ( SELECTEDMEASURE (), DATESYTD ( 'Date'[Date] ) ),
+    SELECTEDMEASURE ()
+)</code></pre>
+<ul>
+<li>Functions: <code>SELECTEDMEASURE()</code>, <code>SELECTEDMEASURENAME()</code>, <code>ISSELECTEDMEASURE(m1, …)</code>, <code>SELECTEDMEASUREFORMATSTRING()</code>.</li>
+<li><strong>Format string expression</strong> per item (e.g. <code>"0.0%"</code> for YoY %); otherwise the measure's own format is kept.</li>
+<li><strong>Ordinal</strong> controls item sort order; <strong>Precedence</strong> (property of the group) controls the order in which multiple calculation groups are applied – the group with the <strong>higher</strong> precedence is applied first (its item wraps the others).</li>
+<li>Calculation groups apply only to <strong>explicit measures</strong>. Creating a calculation group turns on <strong>Discourage implicit measures</strong> for the model (implicit measures aren't supported).</li>
+<li>Create them in Power BI Desktop (Model view → Calculation group), TMDL view, web modeling, or <strong>Tabular Editor via the XMLA endpoint</strong> (no PBIX republish needed). Supported in Direct Lake models too.</li>
+<li>Selecting a calculation item in a slicer or filter applies it to all measures in the visual; putting the column on columns of a matrix shows each item side by side.</li>
+<li>Optional items: <em>No selection</em> and <em>Multiple or empty selection</em> expressions handle those cases.</li>
+</ul>
+
+<div class="check" data-answer="4">
+<p>Which statement about calculation items is TRUE?</p>
+<ul><li>Each calculation item must reference a specific measure by name</li><li>Calculation items also modify implicit measures created by dragging numeric columns</li><li>Calculation groups require Import storage mode</li><li>SELECTEDMEASURE() is a placeholder for the measure in context, so one item can be reused across many measures</li></ul>
+<p class="why">SELECTEDMEASURE makes items generic. Implicit measures aren't supported (creating a calculation group turns on Discourage implicit measures). Calculation groups work in Import, DirectQuery and Direct Lake models.</p>
+</div>
+
+<h2>Field parameters and dynamic format strings</h2>
+<h3>Field parameters</h3>
+<p><strong>Modeling → New parameter → Fields</strong> creates a calculated table (using <code>NAMEOF()</code>) listing columns and/or measures. Add the parameter to a slicer and to a visual's axis or values: users switch the chart's dimension (Product / Region / Channel) or measure from the slicer. It's metadata; no data duplication.</p>
+<pre><code>Axis Selector = {
+    ( "Product", NAMEOF ( Product[Category] ), 0 ),
+    ( "Region",  NAMEOF ( Region[Region] ),    1 ),
+    ( "Channel", NAMEOF ( Sales[Channel] ),    2 )
+}</code></pre>
+
+<h3>Dynamic format strings for measures</h3>
+<p>Set the measure's <em>Format</em> to <strong>Dynamic</strong> and write a DAX expression that returns a format string. The value stays numeric (unlike <code>FORMAT()</code>, which returns text that can't be summed or charted).</p>
+<pre><code>-- Format string expression of [Sales (converted)]
+SWITCH (
+    SELECTEDVALUE ( Currency[Code], "USD" ),
+    "EUR", "€#,0.00",
+    "GBP", "£#,0.00",
+    "JPY", "¥#,0",
+    "$#,0.00"
+)
+
+-- Format string expression of a measure whose meaning depends on a metric selector
+IF ( SELECTEDVALUE ( Metric[Name] ) = "Margin %", "0.0%", "#,0" )</code></pre>
+
+<h2>Visual calculations (briefly)</h2>
+<p>A <strong>visual calculation</strong> is DAX defined <em>on a visual</em> and evaluated over the visual's own result matrix (rows/columns), not over the model. It's stored in the report, not the semantic model. Helpful functions: <code>RUNNINGSUM</code>, <code>MOVINGAVERAGE</code>, <code>PREVIOUS</code>, <code>NEXT</code>, <code>FIRST</code>, <code>LAST</code>, <code>COLLAPSE</code>, <code>EXPAND</code>, with axis parameters (<code>ROWS</code>, <code>COLUMNS</code>) and reset behavior.</p>
+<pre><code>Running total = RUNNINGSUM ( [Sales Amount] )
+vs previous   = [Sales Amount] - PREVIOUS ( [Sales Amount] )
+% of parent   = DIVIDE ( [Sales Amount], COLLAPSE ( [Sales Amount], ROWS ) )</code></pre>
+<p>Choose visual calculations for one-off, visual-specific logic by report authors; choose model measures for reusable, governed business logic.</p>
+
+<div class="sort" data-task="Where should each piece of logic live?">
+<ul data-bucket="Model measure"><li>Governed Total Sales excluding cancelled orders</li><li>Distinct customer count used in many reports</li><li>Margin % used in Excel pivot tables</li></ul>
+<ul data-bucket="Calculation group"><li>YTD, PY and YoY variants for 20 measures</li><li>Currency-specific format for all measures in one switch</li></ul>
+<ul data-bucket="Field parameter"><li>Let users switch a chart axis between Product, Region and Channel</li><li>Let users pick which measure a line chart shows</li></ul>
+<ul data-bucket="Visual calculation"><li>Difference to the previous row of one specific table visual</li><li>Running sum over the rows of one matrix only</li></ul>
+</div>
+
+<h2>Information functions</h2>
+<div class="tw"><table>
+<thead><tr><th>Function</th><th>Returns TRUE / value when…</th><th>Typical use</th></tr></thead>
+<tbody>
+<tr><td><code>SELECTEDVALUE(col, [alt])</code></td><td>The column has exactly one visible value → that value; else <em>alt</em> (blank)</td><td>Read a slicer selection, dynamic titles, what-if parameters</td></tr>
+<tr><td><code>HASONEVALUE(col)</code></td><td>Exactly one distinct value is visible</td><td>Older equivalent of SELECTEDVALUE check</td></tr>
+<tr><td><code>ISFILTERED(col)</code></td><td>The column is <em>directly</em> filtered</td><td>Show a value only when the user filtered</td></tr>
+<tr><td><code>ISCROSSFILTERED(col)</code></td><td>The column is filtered directly or via other columns/tables</td><td>Detect any filtering effect</td></tr>
+<tr><td><code>ISINSCOPE(col)</code></td><td>The column is a grouping level of the current visual row (not a total)</td><td>Different logic per hierarchy level; blank ranks at subtotals</td></tr>
+<tr><td><code>ISBLANK</code>, <code>COALESCE</code></td><td>Blank tests / first non-blank</td><td><code>COALESCE([Sales], 0)</code> – but beware showing all rows</td></tr>
+<tr><td><code>USERPRINCIPALNAME()</code></td><td>UPN of the signed-in user</td><td>Dynamic RLS filter: <code>[Email] = USERPRINCIPALNAME()</code></td></tr>
+</tbody>
+</table></div>
+<pre><code>Brand Rank (no totals) =
+IF (
+    ISINSCOPE ( Product[Brand] ),
+    RANKX ( ALLSELECTED ( Product[Brand] ), [Sales Amount] )
+)
+
+Title = "Sales for " &amp; SELECTEDVALUE ( Region[Region], "all regions" )</code></pre>
+
+<div class="check" data-answer="3">
+<p>A matrix shows Category → Brand. A rank measure returns 1 on every category subtotal and the grand total. Which function lets you blank the rank except at brand level?</p>
+<ul><li>HASONEVALUE(Product[Category])</li><li>ISFILTERED(Product[Brand])</li><li>ISINSCOPE(Product[Brand])</li><li>SELECTEDMEASURE()</li></ul>
+<p class="why">ISINSCOPE tests whether the column is a grouping level of the current cell – false on subtotals/totals. ISFILTERED can be true because of a slicer; HASONEVALUE on Category is true at the Brand level too and at the category subtotal.</p>
+</div>
+
+<h2>Error handling: DIVIDE, not IFERROR</h2>
+<pre><code>Margin % = DIVIDE ( [Margin], [Sales Amount] )          -- returns BLANK when denominator is 0/blank
+Margin % (alt 0) = DIVIDE ( [Margin], [Sales Amount], 0 ) -- optional alternate result
+
+-- Avoid:
+Margin % (bad) = IFERROR ( [Margin] / [Sales Amount], BLANK () )</code></pre>
+<ul>
+<li><code>/</code> returns an error/Infinity on division by zero; <strong>DIVIDE</strong> handles it safely with an optional alternate result and is optimized by the engine.</li>
+<li><strong>IFERROR / ISERROR</strong> force row-by-row error checking and prevent storage-engine optimizations – avoid them; test the condition instead (e.g. <code>IF(denominator &lt;&gt; 0, …)</code> or DIVIDE).</li>
+<li>Returning <strong>BLANK</strong> rather than 0 keeps visuals from showing every empty combination.</li>
+</ul>
+
+<div class="check" data-answer="1">
+<p>Which statement about DIVIDE compared with the / operator is TRUE?</p>
+<ul><li>DIVIDE returns BLANK (or an optional alternate result) when the denominator is zero or blank, while / can return an error or infinity</li><li>DIVIDE is always slower than / combined with IFERROR</li><li>/ automatically returns BLANK for division by zero</li><li>DIVIDE only works in calculated columns</li></ul>
+<p class="why">Safe division with an optional alternate result is the purpose of DIVIDE; it's also the recommended, optimizable pattern versus IFERROR.</p>
+</div>
+
+<h2>Common patterns</h2>
+<h3>% of total</h3>
+<pre><code>% of All Categories =
+DIVIDE ( [Sales Amount], CALCULATE ( [Sales Amount], REMOVEFILTERS ( Product[Category] ) ) )
+
+% of Visible Total =
+DIVIDE ( [Sales Amount], CALCULATE ( [Sales Amount], ALLSELECTED ( Product ) ) )
+
+% of Grand Total (ignore everything on Product) =
+DIVIDE ( [Sales Amount], CALCULATE ( [Sales Amount], ALL ( Product ) ) )</code></pre>
+<h3>YoY %, moving average, ranking</h3>
+<pre><code>Sales YoY % =
+VAR Cur = [Sales Amount]
+VAR PY  = CALCULATE ( [Sales Amount], DATEADD ( 'Date'[Date], -1, YEAR ) )
+RETURN IF ( NOT ISBLANK ( Cur ), DIVIDE ( Cur - PY, PY ) )
+
+Sales MA 30 days =
+AVERAGEX (
+    DATESINPERIOD ( 'Date'[Date], MAX ( 'Date'[Date] ), -30, DAY ),
+    [Sales Amount]
+)
+
+Product Rank =
+IF (
+    ISINSCOPE ( Product[ProductName] ),
+    RANKX ( ALLSELECTED ( Product[ProductName] ), [Sales Amount], , DESC, DENSE )
+)</code></pre>
+<h3>Measure branching</h3>
+<p>Build measures on top of other measures (<code>Margin = [Sales Amount] - [Total Cost]</code>, <code>Margin % = DIVIDE([Margin],[Sales Amount])</code>). One definition per business rule, easier testing, and the engine can reuse results. Implement business rules (e.g. "exclude cancelled orders") once – in the curated data or the base measure – so every report agrees.</p>
+
+<div class="reveal"><p><strong>Scenario.</strong> A product manager wants a line chart by month showing Sales, the previous month's Sales and a running total that starts at the first month selected in a date-range slicer. The chart must also let her switch between Sales Amount, Margin and Quantity with a slicer. Which DAX features do you use?</p>
+<div class="answer">Create a <strong>field parameter</strong> for the three measures (slicer switches the measure). For "previous month" and "running total" either: (a) a <strong>calculation group</strong> with items <em>Current</em>, <em>Previous month</em> (<code>CALCULATE(SELECTEDMEASURE(), OFFSET(-1, ALLSELECTED('Date'[YearMonth]), ORDERBY('Date'[YearMonth])))</code>) and <em>Running total</em> (<code>WINDOW(1, ABS, 0, REL, ALLSELECTED('Date'[YearMonth]), ORDERBY('Date'[YearMonth]))</code>) – they then work with whichever measure the field parameter selects; or (b) <strong>visual calculations</strong> <code>PREVIOUS</code> and <code>RUNNINGSUM</code> if the logic is needed only on this visual. <code>ALLSELECTED</code> makes the running total start at the slicer's first month.</div></div>
+
+<div class="reveal"><p><strong>Scenario.</strong> A measure <code>Customers Buying = CALCULATE(DISTINCTCOUNT(Customer[CustomerKey]), Sales)</code> is slow, and someone suggests making the Sales–Product and Sales–Customer relationships bidirectional to fix a "customers who bought the selected products" visual. What do you recommend?</p>
+<div class="answer">Keep single-direction one-to-many relationships for the model and enable bidirectional propagation only inside the measure: <code>CALCULATE(DISTINCTCOUNT(Customer[CustomerKey]), CROSSFILTER(Sales[CustomerKey], Customer[CustomerKey], BOTH))</code> – or simply <code>DISTINCTCOUNT(Sales[CustomerKey])</code>, which is filtered by Product through Sales already and is the most efficient. Model-wide bidirectional filters add ambiguity, slow every query and interact badly with RLS.</div></div>
+
+<div class="match" data-task="Match the requirement to the DAX technique.">
+<dl>
+<dt>Sales by ship date with one Date table</dt><dd>USERELATIONSHIP on the inactive ShipDate relationship</dd>
+<dt>Whole previous year total for each month</dt><dd>PARALLELPERIOD with -1 YEAR</dd>
+<dt>Rolling 3-month total</dt><dd>DATESINPERIOD ending at MAX of the date column</dd>
+<dt>Previous row in a sorted month list</dt><dd>OFFSET with delta -1 and ORDERBY</dd>
+<dt>Rank on two sort columns with dense ties</dt><dd>RANK with DENSE and multi-column ORDERBY</dd>
+<dt>Numeric value shown with currency symbol by selection</dt><dd>Dynamic format string</dd>
+</dl>
+</div>
+
+<div class="check" data-answer="2">
+<p>You need a running total of sales on a line chart that starts at the first date selected in a date-range slicer. Which expression is correct?</p>
+<ul><li><code>CALCULATE([Sales Amount], FILTER(ALL('Date'[Date]), 'Date'[Date] &lt;= MAX('Date'[Date])))</code></li><li><code>CALCULATE([Sales Amount], FILTER(ALLSELECTED('Date'[Date]), 'Date'[Date] &lt;= MAX('Date'[Date])))</code></li><li><code>CALCULATE([Sales Amount], DATESYTD('Date'[Date]))</code></li><li><code>SUMX(Sales, [Sales Amount])</code></li></ul>
+<p class="why">ALLSELECTED retains the slicer's range and removes the chart's per-point filter; FILTER keeps dates up to the current point. ALL would start at the very first date in the table; DATESYTD restarts every year; SUMX over Sales with a measure is slow and doesn't accumulate.</p>
+</div>
+
+<h2>Key takeaways &amp; exam tips</h2>
+<ul>
+<li><strong>Filter context</strong> propagates through relationships (one → many); <strong>row context</strong> doesn't – use RELATED/RELATEDTABLE, or CALCULATE for context transition.</li>
+<li><strong>CALCULATE</strong> modifies filter context; filters on a column replace existing ones unless <strong>KEEPFILTERS</strong>. Modifiers: ALL/REMOVEFILTERS, ALLEXCEPT, ALLSELECTED, USERELATIONSHIP (inactive relationships), CROSSFILTER (direction per measure).</li>
+<li>Every measure reference triggers <strong>context transition</strong>; it's powerful but expensive on large tables.</li>
+<li><strong>Variables</strong> are evaluated once where defined – readability + performance; later filters don't change them.</li>
+<li>Iterators: SUMX/AVERAGEX/MAXX/COUNTX/RANKX/FILTER. Prefer SUM over a materialized column and DISTINCTCOUNT for distinct counts.</li>
+<li>VALUES includes the blank row; DISTINCT doesn't. Unmatched fact keys → "(Blank)" member and totals that don't add up.</li>
+<li>Time intelligence needs a contiguous, marked date table; SAMEPERIODLASTYEAR/DATEADD shift, PARALLELPERIOD returns whole periods, DATESINPERIOD for rolling windows, TOTALYTD with a fiscal year-end string. Calendar-based TI (preview) adds custom calendars and week functions.</li>
+<li>Window functions: OFFSET (previous/next), WINDOW (running/moving), INDEX (first/last), RANK (ties DENSE/SKIP, multi-column ORDERBY, ascending default), ROWNUMBER; relation + ORDERBY + PARTITIONBY + MATCHBY.</li>
+<li>Calculation groups: SELECTEDMEASURE, format string expressions, precedence, explicit measures only (Discourage implicit measures is turned on).</li>
+<li>Field parameters = switch fields/measures from a slicer; dynamic format strings keep values numeric; visual calculations live in the report.</li>
+<li>Use DIVIDE, avoid IFERROR; use ISINSCOPE to handle subtotals; SELECTEDVALUE for single selections; USERPRINCIPALNAME for dynamic RLS.</li>
+</ul>
+<p>Next: <a href="13-performance.html">Performance &amp; enterprise-scale models</a>. Previous: <a href="11-direct-lake.html">Direct Lake in depth</a>.</p>
+</main>
+<script src="assets/app.js"></script>
+</body>
+</html>

@@ -1,0 +1,319 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Exam guide &amp; skills outline – DP-600</title>
+<link rel="stylesheet" href="assets/style.css">
+</head>
+<body>
+<main>
+<h1>Exam guide &amp; skills outline</h1>
+<p class="lead">Everything about the DP-600 exam itself: format, question types, scoring, renewal, the current three-domain skills outline (revised 2026-04-20) mapped skill-by-skill to the pages of this portal, what changed compared with older outlines, a study plan and exam-day tactics.</p>
+
+<h2>The exam at a glance</h2>
+<p><strong>Exam DP-600: Implementing Analytics Solutions Using Microsoft Fabric</strong> earns the
+<strong>Microsoft Certified: Fabric Analytics Engineer Associate</strong> credential. It is a role-based,
+associate-level exam. There are no formal prerequisites, but Microsoft describes the candidate as someone who
+designs, creates and deploys enterprise-scale analytics solutions and is comfortable with
+<strong>SQL, DAX and PySpark</strong>, data modeling, data transformation and Git-based source control.</p>
+
+<div class="tw"><table>
+<tr><th>Aspect</th><th>What to expect</th></tr>
+<tr><td>Duration</td><td>About <strong>100 minutes</strong> of answering time (plan for roughly 120 minutes of seat time including the NDA, instructions and the optional survey). Non-native speakers can request <strong>+30 minutes</strong> as an accommodation when the exam is not offered in their language.</td></tr>
+<tr><td>Number of questions</td><td>Typically <strong>40–60 items</strong>; the exact number varies per exam form. One or more <strong>case studies</strong> (each with several questions) are usually part of the exam.</td></tr>
+<tr><td>Passing score</td><td><strong>700</strong> on a scale of 1–1000. The score is <em>scaled</em>, not a percentage: 700 does not mean 70 % correct, and items can carry different weights.</td></tr>
+<tr><td>Scoring rules</td><td>No negative marking – never leave an item blank. Multi-part items (for example "select two" or hot-area items) may award partial credit per correct part. Some unscored "beta" items may be included; you cannot tell which.</td></tr>
+<tr><td>Delivery</td><td>Pearson VUE test center or online proctored (OnVUE). Online: clean desk, webcam, ID, no second monitor.</td></tr>
+<tr><td>Open book</td><td>Microsoft role-based exams allow access to <strong>Microsoft Learn</strong> in a split-screen window during the exam (the exam timer keeps running while you search). Use it only to confirm a fact, never to learn a topic – it is slow.</td></tr>
+<tr><td>Preview features</td><td>Most questions cover generally available (GA) features, but Microsoft states that commonly used <strong>preview</strong> features can appear.</td></tr>
+<tr><td>Price</td><td>Regional; USD 165 in the United States (discounts for students and some programs).</td></tr>
+<tr><td>Retake policy</td><td>Wait 24 hours after the first failed attempt, then 14 days between subsequent attempts; maximum 5 attempts in 12 months.</td></tr>
+<tr><td>Validity &amp; renewal</td><td>The certification is valid for <strong>1 year</strong>. Renew for free with an unproctored online <strong>renewal assessment</strong> on Microsoft Learn; the renewal window opens <strong>6 months (180 days)</strong> before expiration and you can retry it.</td></tr>
+<tr><td>Practice</td><td>Microsoft offers a free <strong>Practice Assessment</strong> (new experience on AI Skills Navigator, plus the legacy one on Learn) and an <strong>exam sandbox</strong> demo of the exam UI.</td></tr>
+</table></div>
+
+<div class="note"><p>Exam length, number of items and question types are not fixed by contract – Microsoft varies them between
+exam forms. Treat the numbers above as typical ranges, not guarantees.</p></div>
+
+<h2>Question types and how to handle them</h2>
+<div class="tw"><table>
+<tr><th>Type</th><th>Description</th><th>Tactics</th></tr>
+<tr><td>Multiple choice (single answer)</td><td>One correct option out of 4 (sometimes more).</td><td>Eliminate options that break a hard constraint (license, role, "without copying data", "least effort").</td></tr>
+<tr><td>Multiple response</td><td>"Select two/three" – each correct choice is often a complete solution or part of one.</td><td>Read whether each answer is a <em>complete solution</em> or <em>part of the solution</em>.</td></tr>
+<tr><td>Drag and drop / build list</td><td>Match items to targets or put steps in the correct order (e.g. deployment steps, T-SQL statements to build RLS).</td><td>Not all options are used; some may be used more than once.</td></tr>
+<tr><td>Hot area</td><td>Pick values in drop-downs inside a code snippet or a screenshot (e.g. complete a DAX measure, a KQL query, a PySpark write).</td><td>Know syntax precisely: <code>CALCULATE</code>/<code>REMOVEFILTERS</code>, <code>summarize ... by</code>, <code>.mode("overwrite")</code>, <code>MERGE</code> etc.</td></tr>
+<tr><td>Yes/No series ("Does this meet the goal?")</td><td>Same scenario repeated with a different proposed solution. <strong>Once answered you cannot return.</strong></td><td>Judge each proposal independently; more than one can be "Yes".</td></tr>
+<tr><td>Case study</td><td>Multi-tab scenario (overview, existing environment, requirements, technical requirements, problem statements) followed by several questions. Once you leave a case study section you cannot go back to it.</td><td>Read the questions first, then scan the tabs for the matching requirement. Requirements words like "minimize administrative effort", "must not copy data", "users must not be able to query the lakehouse directly" decide the answer.</td></tr>
+<tr><td>Lab-style / scenario tasks</td><td>Some Microsoft exams include interactive or performance-based components. If they appear, they test practical steps such as configuring a workspace setting or completing code.</td><td>Hands-on practice in a Fabric trial is the only preparation that works.</td></tr>
+</table></div>
+
+<div class="exam"><p>Exam questions are written around <em>constraints</em>. Underline the qualifiers: "least privilege",
+"minimize cost", "without duplicating data", "near real-time", "must be able to use T-SQL", "the solution must not
+require a Pro license". Usually two options are technically possible and only one meets every qualifier.</p></div>
+
+<h2>Skills outline (revised 2026-04-20)</h2>
+<p>The current outline has <strong>three domains</strong>. The percentages are the share of questions per domain:</p>
+<div class="tw"><table>
+<tr><th>#</th><th>Domain</th><th>Weight</th><th>Main portal pages</th></tr>
+<tr><td>1</td><td>Maintain a data analytics solution</td><td><strong>25–30 %</strong></td><td><a href="02-security-governance.html">Security &amp; governance</a>, <a href="03-lifecycle.html">Lifecycle</a></td></tr>
+<tr><td>2</td><td>Prepare data</td><td><strong>45–50 %</strong></td><td><a href="04-get-data.html">Get data</a>, <a href="05-lakehouse-spark.html">Lakehouse &amp; Spark</a>, <a href="06-warehouse-tsql.html">Warehouse &amp; T-SQL</a>, <a href="07-transform-data.html">Transform data</a>, <a href="08-kql-realtime.html">Eventhouse &amp; KQL</a>, <a href="09-query-analyze.html">Query &amp; analyze</a></td></tr>
+<tr><td>3</td><td>Implement and manage semantic models</td><td><strong>25–30 %</strong></td><td><a href="10-semantic-model-design.html">Model design</a>, <a href="11-direct-lake.html">Direct Lake</a>, <a href="12-dax.html">DAX</a>, <a href="13-performance.html">Performance</a></td></tr>
+</table></div>
+
+<div class="diagram">
+<svg viewBox="0 0 640 90" role="img" aria-label="Domain weights bar: Maintain 25 to 30 percent, Prepare data 45 to 50 percent, Semantic models 25 to 30 percent">
+<rect x="0" y="20" width="176" height="44" fill="var(--accent-soft)" stroke="var(--accent)"/>
+<rect x="176" y="20" width="304" height="44" fill="var(--ok-soft)" stroke="var(--ok)"/>
+<rect x="480" y="20" width="160" height="44" fill="var(--warn-soft)" stroke="var(--warn)"/>
+<text x="88" y="47" text-anchor="middle" fill="currentColor" font-size="13">Maintain 25–30 %</text>
+<text x="328" y="47" text-anchor="middle" fill="currentColor" font-size="13">Prepare data 45–50 %</text>
+<text x="560" y="47" text-anchor="middle" fill="currentColor" font-size="13">Semantic models 25–30 %</text>
+<text x="320" y="84" text-anchor="middle" fill="currentColor" font-size="11">Roughly half of your study time belongs to "Prepare data"</text>
+</svg>
+</div>
+
+<div class="warn"><p>The bullets below follow the official study guide wording as closely as possible. Microsoft revises
+outlines periodically (minor wording changes are common). Before booking, open the study guide on Microsoft Learn
+(<em>Study guide for Exam DP-600</em>) and compare its "Skills measured as of …" date and change log with this page.
+When this page was written, the cached copy of the Learn study guide served to automated tools still showed the old
+four-domain text, while the exam page and other sources reference the 2026-04-20 three-domain outline – so do the
+check yourself.</p></div>
+
+<h3>Domain 1 – Maintain a data analytics solution (25–30 %)</h3>
+<div class="tw"><table>
+<tr><th>Sub-area</th><th>Skill</th><th>Covered on</th></tr>
+<tr><td rowspan="6">Implement security and governance</td><td>Implement workspace-level access controls</td><td><a href="02-security-governance.html">02 Security &amp; governance</a></td></tr>
+<tr><td>Implement item-level access controls</td><td><a href="02-security-governance.html">02 Security &amp; governance</a></td></tr>
+<tr><td>Implement row-level, column-level, object-level, and folder/file-level access controls</td><td><a href="02-security-governance.html">02 Security &amp; governance</a> (+ RLS/OLS in <a href="10-semantic-model-design.html">10</a>)</td></tr>
+<tr><td>Implement dynamic data masking</td><td><a href="02-security-governance.html">02 Security &amp; governance</a></td></tr>
+<tr><td>Apply sensitivity labels to items</td><td><a href="02-security-governance.html">02 Security &amp; governance</a></td></tr>
+<tr><td>Endorse items</td><td><a href="02-security-governance.html">02 Security &amp; governance</a></td></tr>
+<tr><td rowspan="6">Maintain the analytics development lifecycle</td><td>Configure version control for a workspace (Git integration; Power BI Desktop projects .pbip)</td><td><a href="03-lifecycle.html">03 Lifecycle</a></td></tr>
+<tr><td>Implement database projects</td><td><a href="03-lifecycle.html">03 Lifecycle</a></td></tr>
+<tr><td>Create and configure deployment pipelines</td><td><a href="03-lifecycle.html">03 Lifecycle</a></td></tr>
+<tr><td>Perform impact analysis of downstream dependencies from lakehouses, data warehouses, dataflows, and semantic models</td><td><a href="03-lifecycle.html">03 Lifecycle</a>, <a href="02-security-governance.html">02</a> (lineage)</td></tr>
+<tr><td>Deploy and manage semantic models by using the XMLA endpoint</td><td><a href="03-lifecycle.html">03 Lifecycle</a>, <a href="13-performance.html">13</a></td></tr>
+<tr><td>Create and update reusable assets, including Power BI template (.pbit) files, Power BI data source (.pbids) files, and shared semantic models</td><td><a href="03-lifecycle.html">03 Lifecycle</a></td></tr>
+</table></div>
+<p class="muted">Platform knowledge that every Domain-1 question assumes (capacities, licensing, tenant/workspace settings,
+OneLake) is on <a href="01-fabric-platform.html">01 Fabric platform</a>.</p>
+
+<h3>Domain 2 – Prepare data (45–50 %)</h3>
+<div class="tw"><table>
+<tr><th>Sub-area</th><th>Skill</th><th>Covered on</th></tr>
+<tr><td rowspan="5">Get data</td><td>Create a data connection (connections, gateways: on-premises and VNet data gateway)</td><td><a href="04-get-data.html">04 Get data</a></td></tr>
+<tr><td>Discover data by using OneLake catalog and Real-Time hub</td><td><a href="04-get-data.html">04 Get data</a>, <a href="01-fabric-platform.html">01</a></td></tr>
+<tr><td>Ingest or access data as needed (pipelines, Copy job, Dataflow Gen2, notebooks, shortcuts, mirroring, eventstreams)</td><td><a href="04-get-data.html">04 Get data</a>, <a href="05-lakehouse-spark.html">05</a></td></tr>
+<tr><td>Choose between a lakehouse, warehouse, or eventhouse</td><td><a href="01-fabric-platform.html">01 Fabric platform</a>, <a href="04-get-data.html">04</a></td></tr>
+<tr><td>Implement OneLake integration for eventhouse and semantic models</td><td><a href="04-get-data.html">04 Get data</a>, <a href="08-kql-realtime.html">08</a></td></tr>
+<tr><td rowspan="9">Transform data</td><td>Create views, functions, and stored procedures</td><td><a href="06-warehouse-tsql.html">06 Warehouse &amp; T-SQL</a></td></tr>
+<tr><td>Enrich data by adding new columns or tables</td><td><a href="07-transform-data.html">07 Transform data</a></td></tr>
+<tr><td>Implement a star schema for a lakehouse or warehouse (incl. slowly changing dimensions, bridge tables)</td><td><a href="07-transform-data.html">07 Transform data</a></td></tr>
+<tr><td>Denormalize data</td><td><a href="07-transform-data.html">07 Transform data</a></td></tr>
+<tr><td>Aggregate data</td><td><a href="07-transform-data.html">07 Transform data</a></td></tr>
+<tr><td>Merge or join data</td><td><a href="07-transform-data.html">07 Transform data</a></td></tr>
+<tr><td>Identify and resolve duplicate data, missing data, or null values</td><td><a href="07-transform-data.html">07 Transform data</a></td></tr>
+<tr><td>Convert column data types</td><td><a href="07-transform-data.html">07 Transform data</a></td></tr>
+<tr><td>Filter data</td><td><a href="07-transform-data.html">07 Transform data</a></td></tr>
+<tr><td rowspan="4">Query and analyze data</td><td>Select, filter, and aggregate data by using the Visual Query Editor</td><td><a href="09-query-analyze.html">09 Query &amp; analyze</a></td></tr>
+<tr><td>Select, filter, and aggregate data by using SQL</td><td><a href="09-query-analyze.html">09 Query &amp; analyze</a>, <a href="06-warehouse-tsql.html">06</a></td></tr>
+<tr><td>Select, filter, and aggregate data by using KQL</td><td><a href="08-kql-realtime.html">08 Eventhouse &amp; KQL</a></td></tr>
+<tr><td>Select, filter, and aggregate data by using DAX (DAX queries)</td><td><a href="09-query-analyze.html">09 Query &amp; analyze</a>, <a href="12-dax.html">12</a></td></tr>
+</table></div>
+<p class="muted">Lakehouse/Delta/Spark mechanics (table maintenance, V-Order, partitioning, Spark pools) underpin many
+"ingest" and "transform" questions even though the outline does not list them as separate bullets –
+see <a href="05-lakehouse-spark.html">05 Lakehouse &amp; Spark</a>.</p>
+
+<h3>Domain 3 – Implement and manage semantic models (25–30 %)</h3>
+<div class="tw"><table>
+<tr><th>Sub-area</th><th>Skill</th><th>Covered on</th></tr>
+<tr><td rowspan="7">Design and build semantic models</td><td>Choose a storage mode (Import, DirectQuery, Dual, Direct Lake)</td><td><a href="10-semantic-model-design.html">10 Model design</a>, <a href="11-direct-lake.html">11</a></td></tr>
+<tr><td>Implement a star schema for a semantic model</td><td><a href="10-semantic-model-design.html">10 Model design</a></td></tr>
+<tr><td>Implement relationships, such as bridge tables and many-to-many relationships</td><td><a href="10-semantic-model-design.html">10 Model design</a></td></tr>
+<tr><td>Write calculations that use DAX variables and functions, such as iterators, table filtering, windowing, and information functions</td><td><a href="12-dax.html">12 DAX</a></td></tr>
+<tr><td>Implement calculation groups, dynamic format strings, and field parameters</td><td><a href="12-dax.html">12 DAX</a></td></tr>
+<tr><td>Identify use cases for and configure large semantic model storage format</td><td><a href="13-performance.html">13 Performance</a></td></tr>
+<tr><td>Design and build composite models</td><td><a href="10-semantic-model-design.html">10 Model design</a></td></tr>
+<tr><td rowspan="5">Optimize enterprise-scale semantic models</td><td>Implement performance improvements in queries and report visuals</td><td><a href="13-performance.html">13 Performance</a></td></tr>
+<tr><td>Improve DAX performance</td><td><a href="13-performance.html">13 Performance</a>, <a href="12-dax.html">12</a></td></tr>
+<tr><td>Configure Direct Lake, including default fallback and refresh behavior</td><td><a href="11-direct-lake.html">11 Direct Lake</a></td></tr>
+<tr><td>Choose between Direct Lake on OneLake and Direct Lake on SQL endpoint</td><td><a href="11-direct-lake.html">11 Direct Lake</a></td></tr>
+<tr><td>Implement incremental refresh for semantic models</td><td><a href="13-performance.html">13 Performance</a></td></tr>
+</table></div>
+
+<div class="sort" data-task="Sort each skill into the exam domain it belongs to.">
+  <ul data-bucket="Maintain a data analytics solution"><li>Endorse items</li><li>Implement dynamic data masking</li><li>Create and configure deployment pipelines</li><li>Deploy semantic models by using the XMLA endpoint</li></ul>
+  <ul data-bucket="Prepare data"><li>Discover data by using OneLake catalog and Real-Time hub</li><li>Choose between a lakehouse, warehouse, or eventhouse</li><li>Select, filter, and aggregate data by using KQL</li><li>Identify and resolve duplicate or missing data</li></ul>
+  <ul data-bucket="Implement and manage semantic models"><li>Implement calculation groups and field parameters</li><li>Configure Direct Lake fallback and refresh behavior</li><li>Implement incremental refresh</li><li>Design and build composite models</li></ul>
+</div>
+
+<h2>What changed compared with older outlines</h2>
+<p>Many free videos, blogs and dumps still teach the <strong>original 2024 outline</strong>. Know the differences so
+you don't over-study removed topics or skip new ones.</p>
+<div class="tw"><table>
+<tr><th>Outline generation</th><th>Structure</th><th>Key characteristics</th></tr>
+<tr><td>Launch outline (2024, until mid-November 2024)</td><td>4 domains: Plan, implement, and manage a solution for data analytics (10–15 %); Prepare and serve data (40–45 %); Implement and manage semantic models (20–25 %); Explore and analyze data (20–25 %)</td><td>Included custom Power BI report themes, choosing a gateway type as a planning task, descriptive/diagnostic/predictive analytics in reports, data profiling, named tools ("DAX Studio", "Tabular Editor 2"), large-format dataset, Copy data and scheduling bullets.</td></tr>
+<tr><td>Three-domain outline (from November 2024)</td><td>Maintain a data analytics solution (25–30 %); Prepare data (45–50 %); Implement and manage semantic models (25–30 %)</td><td>"Plan" content merged into <em>Maintain</em>; "Explore and analyze" merged into <em>Prepare data → Query and analyze</em>. New: security bullets (RLS/CLS/OLS/file-level, dynamic data masking, sensitivity labels, endorsement), database projects, eventhouse/KQL, Real-Time hub, OneLake integration for eventhouse and semantic models, Direct Lake fallback/refresh. Removed: report themes, exploratory/predictive analytics visuals, explicit report authoring.</td></tr>
+<tr><td>Current revision (2026-04-20)</td><td>Same three domains and weights</td><td>Terminology and feature refresh aligned with the current product: OneLake catalog (formerly OneLake data hub), OneLake security (formerly OneLake data access roles), DAX queries alongside SQL/KQL/visual queries, Direct Lake on OneLake vs Direct Lake on SQL endpoint, no automatic default semantic models (models are always created explicitly), Activator (formerly Data Activator), Copy job, Fabric data agent.</td></tr>
+</table></div>
+
+<div class="tip"><p><strong>Terminology you must recognize</strong> (old → current): Data Activator → <strong>Activator</strong>;
+OneLake data hub → <strong>OneLake catalog</strong>; OneLake data access roles → <strong>OneLake security</strong> roles;
+AI skill → <strong>Fabric data agent</strong>; dataset → <strong>semantic model</strong>; license mode → <strong>workspace type</strong>;
+Datamart → being retired (use a warehouse); "default semantic model" of a lakehouse/warehouse → no longer created automatically.
+Exam items use the current names, but distractors sometimes use retired ones.</p></div>
+
+<div class="match" data-task="Match each retired or older name to its current Fabric name.">
+<dl>
+<dt>Data Activator</dt><dd>Activator</dd>
+<dt>OneLake data hub</dt><dd>OneLake catalog</dd>
+<dt>OneLake data access roles</dt><dd>OneLake security roles</dd>
+<dt>AI skill</dt><dd>Fabric data agent</dd>
+<dt>Dataset</dt><dd>Semantic model</dd>
+<dt>Workspace license mode</dt><dd>Workspace type</dd>
+</dl>
+</div>
+
+<h2>How the domains feel on the exam</h2>
+<h3>Maintain a data analytics solution</h3>
+<ul>
+<li>Lots of "which role / which permission / least privilege" questions: workspace roles vs item permissions
+(Read, ReadData, ReadAll, Build, Write, Reshare), OneLake security roles, SQL GRANT/DENY, RLS/CLS/OLS, dynamic data masking.</li>
+<li>Governance: sensitivity labels and inheritance, endorsement (Promoted, Certified, Master data), domains, lineage and impact analysis.</li>
+<li>Lifecycle: Git integration (Azure DevOps / GitHub), branching, .pbip/.pbir/TMDL, deployment pipelines with deployment rules,
+database projects (SQL projects / .sqlproj / DACPAC), XMLA endpoint read-write, .pbit/.pbids, shared semantic models.</li>
+</ul>
+<h3>Prepare data (the largest domain)</h3>
+<ul>
+<li>Choosing an ingestion tool: pipeline Copy activity vs <strong>Copy job</strong> vs <strong>Dataflow Gen2</strong> vs notebook vs <strong>shortcut</strong> vs <strong>mirroring</strong> vs eventstream.</li>
+<li>Choosing a store: lakehouse vs warehouse vs eventhouse (and SQL database).</li>
+<li>Transformations in T-SQL, PySpark/Spark SQL and Power Query: star schemas, SCD Type 1/2, deduplication, null handling, type conversion.</li>
+<li>Querying with SQL, the visual query editor, KQL and DAX – expect code completion items.</li>
+</ul>
+<h3>Implement and manage semantic models</h3>
+<ul>
+<li>Storage modes and Direct Lake details (framing, fallback, guardrails, Direct Lake on OneLake vs on SQL endpoint).</li>
+<li>Modeling: star schema, relationships, many-to-many, bridge tables, composite models, Dual mode, aggregations.</li>
+<li>DAX: variables, iterators, CALCULATE and filter functions, window functions (OFFSET, INDEX, WINDOW), information functions, calculation groups, dynamic format strings, field parameters.</li>
+<li>Performance: Performance Analyzer, DAX Studio (server timings, VertiPaq Analyzer), Tabular Editor (Best Practice Analyzer), incremental refresh, large semantic model storage format.</li>
+</ul>
+
+<h2>Study plan</h2>
+<p>A realistic plan for someone with Power BI or SQL experience who studies 6–8 hours per week. Compress or stretch it to fit;
+the order matters more than the duration. Build everything in a <strong>Fabric trial</strong> (60 days, capacity equivalent to F64)
+or a small pay-as-you-go F2/F4 that you pause when idle.</p>
+<div class="tw"><table>
+<tr><th>Week</th><th>Focus</th><th>Hands-on deliverable</th><th>Portal pages</th></tr>
+<tr><td>1</td><td>Platform: OneLake, capacities, licensing, workspaces, items</td><td>Create a workspace on a trial capacity, a lakehouse, a warehouse and an eventhouse; browse them in the OneLake catalog and OneLake file explorer.</td><td><a href="01-fabric-platform.html">01</a></td></tr>
+<tr><td>2</td><td>Get data</td><td>Load the same CSV with a pipeline Copy activity, a Copy job, a Dataflow Gen2 and a notebook; create a shortcut to ADLS Gen2 or another lakehouse; mirror a database if possible.</td><td><a href="04-get-data.html">04</a>, <a href="05-lakehouse-spark.html">05</a></td></tr>
+<tr><td>3</td><td>Transform: lakehouse + warehouse</td><td>Build bronze/silver/gold; implement SCD Type 2 in T-SQL and in PySpark; write views, functions and stored procedures; run OPTIMIZE/VACUUM.</td><td><a href="05-lakehouse-spark.html">05</a>, <a href="06-warehouse-tsql.html">06</a>, <a href="07-transform-data.html">07</a></td></tr>
+<tr><td>4</td><td>Real-time + querying</td><td>Eventstream into an eventhouse; KQL queries with <code>where</code>, <code>summarize</code>, <code>bin()</code>, <code>render</code>; visual query editor; DAX query view.</td><td><a href="08-kql-realtime.html">08</a>, <a href="09-query-analyze.html">09</a></td></tr>
+<tr><td>5</td><td>Semantic models</td><td>Create a Direct Lake model explicitly from the gold tables, add relationships and measures; build a composite model; calculation group, field parameter, dynamic format string.</td><td><a href="10-semantic-model-design.html">10</a>, <a href="11-direct-lake.html">11</a>, <a href="12-dax.html">12</a></td></tr>
+<tr><td>6</td><td>Performance + security</td><td>Performance Analyzer → DAX Studio; incremental refresh; dynamic RLS with USERPRINCIPALNAME and "View as"; OLS; SQL RLS and DDM; OneLake security role.</td><td><a href="13-performance.html">13</a>, <a href="02-security-governance.html">02</a></td></tr>
+<tr><td>7</td><td>Lifecycle + governance</td><td>Connect the workspace to Git, edit a .pbip, create a deployment pipeline with deployment rules, connect Tabular Editor via XMLA, apply labels and endorsement, run impact analysis.</td><td><a href="03-lifecycle.html">03</a>, <a href="02-security-governance.html">02</a></td></tr>
+<tr><td>8</td><td>Review &amp; simulation</td><td>Practice questions in timed mode, Microsoft Practice Assessment, review every wrong answer and re-read the related page.</td><td><a href="practice.html">Practice</a>, <a href="glossary.html">Glossary</a></td></tr>
+</table></div>
+
+<div class="order" data-task="Put a sensible preparation sequence in order.">
+<ol>
+<li>Read the current skills outline and note the domain weights</li>
+<li>Learn the platform basics: OneLake, capacities, workspaces, items</li>
+<li>Practise data ingestion and transformation hands-on (largest domain)</li>
+<li>Build and optimize semantic models, including Direct Lake and DAX</li>
+<li>Implement security, governance and lifecycle (Git, deployment pipelines)</li>
+<li>Take timed practice tests and review every wrong answer</li>
+<li>Re-check the outline date and book the exam</li>
+</ol>
+</div>
+
+<h2>Exam-taking tips</h2>
+<h3>Time management</h3>
+<ul>
+<li>Budget ≈ 1.5–2 minutes per standalone question and ≈ 15–20 minutes per case study. Note the remaining time when you start a case study.</li>
+<li>Use <strong>Mark for review</strong> for long items – but remember Yes/No series and finished case studies can't be revisited.</li>
+<li>Don't burn time in Microsoft Learn: search only for a precise fact (e.g. a T-SQL option name) and only when you have time left.</li>
+</ul>
+<h3>Decoding questions</h3>
+<ul>
+<li><strong>"Least privilege"</strong> → choose the narrowest scope: item permission over workspace role, Viewer over Contributor, ReadData over workspace membership, Build only where report creation is needed.</li>
+<li><strong>"Without copying/duplicating data"</strong> → shortcuts, mirroring (a managed replica, but no pipeline you build), Direct Lake, OneLake availability for eventhouse.</li>
+<li><strong>"Minimize development effort / low-code"</strong> → Copy job or Dataflow Gen2 over notebooks; built-in features over custom code.</li>
+<li><strong>"T-SQL / multi-table transactions / stored procedures that write"</strong> → warehouse (the lakehouse SQL analytics endpoint is read-only).</li>
+<li><strong>"Spark / Python / unstructured files"</strong> → lakehouse. <strong>"Streaming telemetry, logs, time series, KQL"</strong> → eventhouse.</li>
+<li><strong>"Users must not access the source data directly"</strong> → semantic model with a <strong>fixed identity</strong> connection and model RLS; don't give lakehouse permissions.</li>
+<li><strong>"Free-license users must view reports"</strong> → capacity F64 or larger (or P SKU) and a Viewer role / app access.</li>
+</ul>
+<h3>Common traps</h3>
+<ul>
+<li>Contributors, Members and Admins are <strong>not</strong> restricted by semantic model RLS (they have Write on the model). Test with Viewers.</li>
+<li>Promoting needs Write permission; <strong>certifying</strong> needs to be in the group named in the tenant setting.</li>
+<li>Direct Lake on SQL endpoint <em>falls back</em> to DirectQuery; Direct Lake on OneLake does <em>not</em> fall back – it errors.</li>
+<li>Deployment pipelines move <strong>metadata</strong>, not lakehouse/warehouse data.</li>
+<li>Bursting and smoothing are automatic; throttling begins only after the 10-minute overage protection is exhausted.</li>
+</ul>
+
+<h2>Knowledge checks</h2>
+<div class="check" data-answer="3">
+<p>What is the weight of the "Prepare data" domain in the outline revised on 2026-04-20?</p>
+<ul><li>10–15 %</li><li>25–30 %</li><li>45–50 %</li><li>40–45 %</li></ul>
+<p class="why">Prepare data is 45–50 %, by far the largest domain. 40–45 % was "Prepare and serve data" in the old four-domain outline; 25–30 % applies to the other two current domains; 10–15 % was the old "Plan, implement and manage" domain.</p>
+</div>
+
+<div class="check" data-answer="2">
+<p>Your DP-600 certification expires on 30 June. What must you do to keep it?</p>
+<ul><li>Retake the full proctored exam before 30 June</li><li>Pass the free online renewal assessment on Microsoft Learn, available from about six months before expiry</li><li>Nothing – associate certifications don't expire</li><li>Pay a renewal fee every two years</li></ul>
+<p class="why">Associate certifications are valid for one year and are renewed with a free, unproctored renewal assessment on Microsoft Learn that opens 180 days before expiration. No retake or fee is needed.</p>
+</div>
+
+<div class="check" data-answer="4">
+<p>Which statement about the passing score is correct?</p>
+<ul><li>You need 70 % of questions correct</li><li>You need 700 correct points out of exactly 1000 equal-weight points</li><li>Wrong answers subtract points, so skipping is safer</li><li>The passing score is a scaled 700, and blank answers are simply scored as wrong</li></ul>
+<p class="why">Microsoft uses a scaled score with 700 as the pass mark; it is not a simple percentage and items can carry different weights. There is no negative marking, so always answer every item.</p>
+</div>
+
+<div class="check" data-answer="1">
+<p>In a case study, you answered all questions and moved to the next section. You now want to change one answer. What happens?</p>
+<ul><li>You can't – once you leave a case study section, you can't return to it</li><li>You can return via the review screen at the end of the exam</li><li>You can return only if you marked the question for review</li><li>You can return but only to read, not to change answers</li></ul>
+<p class="why">Case studies are separate sections. You can review questions inside the case study before leaving it, but after you finish the section it is locked. The same "no return" rule applies to Yes/No series questions.</p>
+</div>
+
+<div class="check" data-answer="2">
+<p>A blog post lists "Create a custom Power BI report theme" and "Integrate prescriptive and predictive analytics into a visual" as DP-600 skills. What should you conclude?</p>
+<ul><li>These are core skills of the current outline</li><li>The post is based on the original 2024 four-domain outline; these bullets are no longer listed</li><li>These skills moved to Domain 3 in 2026</li><li>These skills are tested only in case studies</li></ul>
+<p class="why">Report themes and exploratory/predictive analytics were part of the launch outline. The three-domain outline (from November 2024, refreshed 2026-04-20) dropped them in favour of security, governance, eventhouse/KQL and Direct Lake topics.</p>
+</div>
+
+<div class="check" data-answer="3">
+<p>A question asks for the solution that gives an analyst access with "least privilege". Which option pattern usually wins?</p>
+<ul><li>Add the analyst to the workspace Member role so all needs are covered</li><li>Make the analyst a capacity administrator</li><li>Grant the narrowest item-level permission (for example ReadData or Build on a single item) that satisfies the requirement</li><li>Grant Contributor so the analyst can test RLS</li></ul>
+<p class="why">"Least privilege" signals the narrowest scope: item permissions rather than workspace roles, and only the specific permission needed (Read, ReadData, ReadAll or Build). Member, Contributor and capacity admin rights all go beyond the requirement.</p>
+</div>
+
+<h2>Practice scenario</h2>
+<div class="reveal">
+<p>You have eight weeks before your exam and strong Power BI skills (PL-300 level) but little SQL or Spark experience. Your colleague
+suggests spending most of your time on DAX and report design "because that's what you know best and DP-600 is a Power BI exam".
+How should you plan instead?</p>
+<div class="answer"><p>Weight your plan by the outline, not by comfort. <strong>Prepare data is 45–50 %</strong> and is your weakest area:
+spend roughly half of the time on ingestion choices (pipeline, Copy job, Dataflow Gen2, notebook, shortcut, mirroring), lakehouse/Delta/Spark,
+warehouse T-SQL (views, procedures, SCD), KQL and querying. Report design is barely tested any more (report themes were removed).
+For semantic models, focus on the parts PL-300 does not cover deeply: Direct Lake (framing, fallback, Direct Lake on OneLake vs SQL endpoint),
+composite models, calculation groups, XMLA/Tabular Editor/DAX Studio and incremental refresh. Reserve the final weeks for security/governance/lifecycle
+(25–30 %) and timed practice. Use a Fabric trial for hands-on work every week.</p></div>
+</div>
+
+<h2>Key takeaways &amp; exam tips</h2>
+<ul>
+<li>DP-600: ≈100 minutes, ≈40–60 items, case studies included, pass mark 700 (scaled), no penalty for guessing, one-year validity with a free renewal assessment.</li>
+<li>Current outline (revised 2026-04-20): <strong>Maintain 25–30 %</strong>, <strong>Prepare data 45–50 %</strong>, <strong>Implement and manage semantic models 25–30 %</strong>.</li>
+<li>Older material with four domains, report themes or "explore and analyze" analytics is outdated – but most of its technical content is still useful.</li>
+<li>Learn current names: Activator, OneLake catalog, OneLake security, Fabric data agent, Copy job, Dataflow Gen2, Direct Lake on OneLake vs on SQL endpoint, workspace type.</li>
+<li>Read each scenario for constraints (least privilege, no data copies, low code, T-SQL required, free-license viewers) – they decide between two plausible answers.</li>
+<li>Case studies and Yes/No series can't be revisited; budget time before entering them.</li>
+<li>Hands-on practice in a trial capacity is the single best predictor of success – every page of this portal suggests what to build.</li>
+</ul>
+</main>
+<script src="assets/app.js"></script>
+</body>
+</html>

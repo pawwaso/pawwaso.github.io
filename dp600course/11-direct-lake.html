@@ -1,0 +1,498 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Direct Lake in depth – DP-600</title>
+<link rel="stylesheet" href="assets/style.css">
+</head>
+<body>
+<main>
+<h1>Direct Lake in depth</h1>
+<p class="lead">How Direct Lake loads Delta tables into VertiPaq on demand, the two flavours (Direct Lake on OneLake vs Direct Lake on SQL endpoint), framing and automatic updates, DirectQuery fallback, SKU guardrails, file layout, security and monitoring. Maps to the exam skills <em>Implement and manage semantic models → Choose a storage mode / Configure Direct Lake, including default fallback and refresh behavior</em> and <em>Optimize enterprise-scale semantic models</em>.</p>
+
+<h2>The big picture: why Direct Lake exists</h2>
+<p>Before Fabric you had two classic choices for a Power BI table:</p>
+<ul>
+<li><strong>Import</strong> – data is copied into the VertiPaq in-memory column store during a scheduled refresh. Very fast queries, but refreshes cost time, memory and capacity, and data is only as fresh as the last refresh.</li>
+<li><strong>DirectQuery</strong> – no copy; every visual query is translated (e.g. to T-SQL) and sent to the source. Always current, but typically much slower and it loads the source.</li>
+</ul>
+<p><strong>Direct Lake</strong> is a third table storage mode available only on a Fabric capacity. Because Fabric stores lakehouse and warehouse tables as <strong>Delta tables (Parquet column files + a Delta transaction log) in OneLake</strong>, and Parquet is also a column store, the semantic model can read the column data <em>directly from OneLake</em> into VertiPaq memory – no Power Query, no scheduled data copy. Queries are then answered by the same VertiPaq engine as Import mode.</p>
+
+<div class="diagram">
+<svg viewBox="0 0 760 230" role="img" aria-label="Direct Lake architecture: ETL writes Delta tables to OneLake; the semantic model frames the Delta version and transcodes columns into VertiPaq memory on demand; reports send DAX queries">
+<g fill="none" stroke="currentColor" stroke-width="1.5">
+<rect x="10" y="70" width="140" height="80" rx="8"/>
+<rect x="210" y="40" width="190" height="140" rx="8"/>
+<rect x="460" y="40" width="160" height="140" rx="8"/>
+<rect x="670" y="80" width="80" height="60" rx="8"/>
+<path d="M150 110 H205" marker-end="url(#a11)"/>
+<path d="M400 90 H455" marker-end="url(#a11)"/>
+<path d="M455 140 H405" stroke-dasharray="5 4" marker-end="url(#a11)"/>
+<path d="M670 110 H625" marker-end="url(#a11)"/>
+</g>
+<defs><marker id="a11" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto"><path d="M0 0 L10 5 L0 10z" fill="currentColor"/></marker></defs>
+<g fill="currentColor" font-size="13" text-anchor="middle">
+<text x="80" y="100">Spark / T-SQL /</text><text x="80" y="118">Dataflow Gen2 /</text><text x="80" y="136">pipelines (ETL)</text>
+<text x="305" y="64" font-weight="bold">OneLake</text>
+<text x="305" y="88">Delta log (versions)</text>
+<text x="305" y="110">Parquet files</text>
+<text x="305" y="130">row groups → column chunks</text>
+<text x="305" y="160">V-Order recommended</text>
+<text x="540" y="64" font-weight="bold">Semantic model</text>
+<text x="540" y="88">framing = pin Delta version</text>
+<text x="540" y="110">transcoding = load</text>
+<text x="540" y="128">columns on demand</text>
+<text x="540" y="160">VertiPaq memory</text>
+<text x="710" y="106">Report</text><text x="710" y="124">(DAX)</text>
+<text x="428" y="82" font-size="11">read</text>
+<text x="430" y="158" font-size="11">metadata</text>
+</g>
+</svg>
+</div>
+
+<div class="tip"><p>Mental model: <strong>Direct Lake = Import-mode query speed + DirectQuery-like freshness, with the data preparation moved upstream into OneLake.</strong> All shaping (joins, derived columns, aggregations) happens in Spark, T-SQL, Dataflow Gen2 or pipelines – not in Power Query inside the model.</p></div>
+
+<h3>Direct Lake vs Import vs DirectQuery at a glance</h3>
+<div class="tw"><table>
+<thead><tr><th>Aspect</th><th>Import</th><th>DirectQuery</th><th>Direct Lake</th></tr></thead>
+<tbody>
+<tr><td>Where data lives at query time</td><td>VertiPaq copy</td><td>Source database</td><td>VertiPaq, loaded from Delta files in OneLake on demand</td></tr>
+<tr><td>What "refresh" does</td><td>Copies all data (or partitions) – expensive</td><td>Nothing to load (metadata only)</td><td><strong>Framing</strong>: metadata-only, usually seconds</td></tr>
+<tr><td>Query engine</td><td>VertiPaq</td><td>Source engine (SQL etc.)</td><td>VertiPaq (unless it falls back to DirectQuery – Direct Lake on SQL only)</td></tr>
+<tr><td>Data transformations in model</td><td>Power Query (M)</td><td>Limited, must fold</td><td>None – prepare data upstream</td></tr>
+<tr><td>Licensing</td><td>Any (Pro, PPU, capacity)</td><td>Any</td><td><strong>Fabric capacity (F SKU) only</strong></td></tr>
+<tr><td>Data volume vs memory</td><td>Whole model must fit</td><td>No memory limit for data</td><td>Only columns used by queries are loaded; total data can exceed max memory</td></tr>
+<tr><td>Gateways</td><td>Possible</td><td>Possible</td><td>Not supported – cloud connections only</td></tr>
+</tbody>
+</table></div>
+
+<h2>How Direct Lake works: transcoding, residency and temperature</h2>
+<h3>Column loading (transcoding)</h3>
+<p>Nothing is loaded when the model is created or framed. When a DAX (or MDX) query arrives, the engine determines <strong>which columns</strong> it needs – columns used directly by the query plus columns needed by relationships and measures. Any of those columns that aren't already in memory are loaded <strong>completely</strong> (the whole column, across all row groups of the framed version) from OneLake. This on-demand load is called <strong>transcoding</strong>: Parquet's per-row-group <em>local</em> dictionaries are merged into one <em>global</em> VertiPaq dictionary, and Parquet column chunks are remapped into VertiPaq column segments.</p>
+<ul>
+<li>Once loaded, a column is <strong>resident</strong>. Later queries that only touch resident columns need no OneLake reads.</li>
+<li>Direct Lake loads <em>whole columns</em>, not row ranges. It does <strong>not</strong> use Delta/Parquet statistics for file or row-group skipping when loading.</li>
+<li>For queries across tables, <strong>join indexes</strong> are built for relationships (requires dictionaries of key columns and segments of the one-side key column).</li>
+<li>If the Delta table uses <strong>deletion vectors</strong>, they are loaded so deleted rows are excluded.</li>
+</ul>
+
+<h3>Eviction (paging out)</h3>
+<p>A resident column can be removed from memory when:</p>
+<ul>
+<li>the model/table is reframed after the underlying Delta table changed (affected segments are dropped);</li>
+<li>no query has used the column for some time (it "cools down");</li>
+<li>the capacity is under memory pressure (other models, refreshes, concurrent operations).</li>
+</ul>
+<p>The SKU's <strong>Max memory</strong> value is the upper limit for how much data a Direct Lake model can page into memory. It is <em>not</em> a guardrail that triggers fallback – exceeding it means columns are paged in and out repeatedly, which hurts performance.</p>
+
+<h3>Temperature and the cold / semiwarm / warm / hot states</h3>
+<div class="tw"><table>
+<thead><tr><th>State</th><th>What is in memory</th><th>Performance</th></tr></thead>
+<tbody>
+<tr><td><strong>Cold</strong></td><td>Nothing; all required data must be transcoded from Delta (after model load, after a destructive overwrite, or after <code>processClear</code>)</td><td>Slowest – first-query penalty</td></tr>
+<tr><td><strong>Semiwarm</strong></td><td>Most data is resident; only segments of removed/changed row groups were dropped during framing (or unloaded under memory pressure)</td><td>Only new/changed data must be loaded</td></tr>
+<tr><td><strong>Warm</strong></td><td>All columns needed by the query are resident</td><td>On par with Import</td></tr>
+<tr><td><strong>Hot</strong></td><td>Resident and VertiScan caches populated – queries hit the cache</td><td>Fastest</td></tr>
+</tbody>
+</table></div>
+<p>Each column has a <strong>temperature</strong> value that rises when queries use it and decays over time; cold columns are the first candidates for eviction. You can inspect residency, temperature and last access with the DMV <code>DISCOVER_STORAGE_TABLE_COLUMN_SEGMENTS</code> or the DAX function <code>INFO.STORAGETABLECOLUMNSEGMENTS()</code> (columns such as <code>ISRESIDENT</code>, <code>TEMPERATURE</code>, <code>LAST_ACCESSED</code>).</p>
+<pre><code>-- DAX query view / DAX Studio: which columns are resident and how "hot" are they?
+EVALUATE
+SELECTCOLUMNS (
+    INFO.STORAGETABLECOLUMNSEGMENTS (),
+    "Table", [TABLE_ID],
+    "Column", [COLUMN_ID],
+    "Resident", [ISRESIDENT],
+    "Temperature", [TEMPERATURE],
+    "LastAccessed", [LAST_ACCESSED]
+)</code></pre>
+
+<div class="check" data-answer="3">
+<p>A report on a Direct Lake model is slow only for the first user each morning; later queries are fast. Nothing falls back to DirectQuery. What is the most likely explanation?</p>
+<ul><li>The model is refreshed with a full data copy every morning</li><li>Fallback to DirectQuery happens silently for the first query</li><li>Columns must be transcoded (loaded) from OneLake into memory on first use after framing/eviction – a cold-cache effect</li><li>V-Order is applied at query time on the first request</li></ul>
+<p class="why">Direct Lake loads columns on demand. After overnight ETL + reframing, or after columns were evicted, the first query pays the transcoding cost (cold/semiwarm state). Framing never copies data, fallback was ruled out, and V-Order is applied at write time, not query time. Mitigations: V-Order, fewer/larger row groups, fewer columns, non-destructive (append) loads, or a warm-up query after the reframe.</p>
+</div>
+
+<h2>Direct Lake on OneLake vs Direct Lake on SQL endpoint</h2>
+<p>Direct Lake now has <strong>two variants</strong>. You must be able to choose between them – this is a favourite exam topic.</p>
+<ul>
+<li><strong>Direct Lake on OneLake</strong> – the model's shared expression uses <code>AzureStorage.DataLake(...)</code> pointing straight at the OneLake location. Schema discovery, security checks and data loading all go through OneLake APIs. Can combine tables from <strong>one or more</strong> Fabric items. <strong>Never falls back to DirectQuery</strong> (effectively always <em>DirectLakeOnly</em>). Integrates with <strong>OneLake security</strong>. Recommended option for new models.</li>
+<li><strong>Direct Lake on SQL (analytics endpoint)</strong> – the original variant. The expression uses <code>Sql.Database(...)</code> (or <code>OneLake.SqlAnalytics()</code>) pointing at the SQL analytics endpoint of <strong>a single</strong> lakehouse/warehouse. The endpoint is used for table/view discovery and permission checks; column data is still read directly from OneLake. <strong>Can fall back to DirectQuery</strong> through the SQL endpoint, controlled by the <em>Direct Lake behavior</em> property.</li>
+</ul>
+
+<div class="tw"><table>
+<thead><tr><th>Capability (per Microsoft Learn, 2026)</th><th>Direct Lake on OneLake</th><th>Direct Lake on SQL endpoint</th></tr></thead>
+<tbody>
+<tr><td>Number of Fabric sources</td><td>One or more items that resolve to Delta tables (natively or via shortcuts)</td><td>A single item with a SQL analytics endpoint</td></tr>
+<tr><td>SQL views as tables</td><td>No (non-materialized views not supported; use a lakehouse materialized view, or add the view as an Import/DirectQuery table)</td><td>Yes – but always falls back to DirectQuery</td></tr>
+<tr><td>DirectQuery fallback</td><td>Not supported – queries error instead</td><td>Yes (default <em>Automatic</em>)</td></tr>
+<tr><td>Composite with Import tables</td><td>Yes (web modeling); DirectQuery tables via XMLA tools</td><td>No mixing in the same model (but you can build a composite model <em>on top of</em> it in Desktop)</td></tr>
+<tr><td>Calculated columns referencing DL tables</td><td>Yes – "user context only" (preview)</td><td>No</td></tr>
+<tr><td>Calculated tables referencing DL tables</td><td>Yes (preview)</td><td>No</td></tr>
+<tr><td>Calculation groups, what-if &amp; field parameters, calc tables not referencing DL tables</td><td>Supported</td><td>Supported</td></tr>
+<tr><td>Security engine</td><td>OneLake security (RLS/CLS/OLS roles) or Read + ReadAll</td><td>SQL analytics endpoint permissions (Read + SELECT); SQL RLS/DDM → fallback; SQL OLS/CLS → errors</td></tr>
+<tr><td>Guardrail exceeded</td><td>Refresh fails; model can't be queried until tables are optimized</td><td>Falls back to DirectQuery (refresh succeeds with warning)</td></tr>
+<tr><td>Auto date/time</td><td>Supported</td><td>Not supported</td></tr>
+<tr><td>Deployment pipeline rebinding</td><td>Use text M parameters + parameter rules (data source rules not supported)</td><td>Data source rules supported</td></tr>
+<tr><td>Created from Power BI Desktop / OneLake catalog</td><td>Yes (this is what Desktop creates)</td><td>No</td></tr>
+<tr><td>Created from SQL analytics endpoint page ("New semantic model")</td><td>Yes</td><td>Yes (dialog lets you pick)</td></tr>
+</tbody>
+</table></div>
+
+<div class="exam"><p>Keywords → choice. "Tables from <strong>several lakehouses/warehouses</strong> in one Direct Lake model", "add an <strong>Import</strong> table", "<strong>OneLake security</strong>", "never silently degrade to DirectQuery" → <strong>Direct Lake on OneLake</strong>. "Depends on <strong>SQL endpoint RLS/CLS</strong>", "needs <strong>SQL views</strong>", "wants <strong>fallback</strong>" → <strong>Direct Lake on SQL</strong>.</p></div>
+
+<h3>Which Direct Lake type does each tool create?</h3>
+<ul>
+<li><strong>Power BI Desktop → OneLake catalog → pick a lakehouse/warehouse → Connect</strong>: creates a <em>Direct Lake on OneLake</em> model <strong>in the Fabric workspace</strong> and opens it in <strong>live edit</strong> mode.</li>
+<li><strong>Fabric portal → Create → OneLake catalog</strong>: Direct Lake on OneLake.</li>
+<li><strong>SQL analytics endpoint (or warehouse) → New semantic model</strong>: a dialog lets you choose either type. It defaults to OneLake if the endpoint is in <em>user identity</em> mode and to SQL if it's in <em>delegated identity</em> mode.</li>
+<li><strong>XMLA tools / notebooks</strong> (Tabular Editor, SSMS 19.1+, semantic link / semantic-link-labs) can create either type programmatically. Requires <code>compatibilityLevel</code> 1604 or higher. Tables created via XMLA are <em>unprocessed</em> until you send a refresh.</li>
+</ul>
+<p>You can tell the type of an existing model in <strong>TMDL view</strong>: the shared expression uses <code>AzureStorage.DataLake</code> (OneLake) or <code>Sql.Database</code> / <code>OneLake.SqlAnalytics</code> (SQL).</p>
+
+<div class="match" data-task="Match each statement to the Direct Lake variant (or concept) it describes.">
+<dl>
+<dt>Direct Lake on OneLake</dt><dd>Can combine Delta tables from several lakehouses and warehouses and add Import tables</dd>
+<dt>Direct Lake on SQL endpoint</dt><dd>Uses the SQL analytics endpoint for discovery and permission checks of a single item</dd>
+<dt>DirectQuery fallback</dt><dd>Query is answered by the SQL analytics endpoint because Direct Lake conditions are not met</dd>
+<dt>Framing</dt><dd>Metadata-only refresh that pins the model to the latest Delta table version</dd>
+<dt>Transcoding</dt><dd>On-demand loading of whole columns from Parquet into VertiPaq</dd>
+<dt>Fixed identity</dt><dd>Cloud connection with SSO disabled so users need no permission on the lakehouse</dd>
+</dl>
+</div>
+
+<h2>DirectQuery fallback and the Direct Lake behavior property</h2>
+<p>Only <strong>Direct Lake on SQL</strong> models can fall back. When a query can't be answered in Direct Lake mode, it's sent as DirectQuery (T-SQL) to the SQL analytics endpoint of the lakehouse or warehouse. Fallback queries always return the <em>latest</em> data (they aren't bound to the framed version) but are usually slower. Even when no fallback occurs, enabling fallback forces <em>hybrid query plans</em> that cost a little performance – another reason Microsoft recommends avoiding it.</p>
+
+<h3>Causes of fallback (queries stay in Direct Lake only if ALL are true)</h3>
+<ol>
+<li>No referenced table has <strong>SQL row-level security</strong> (security policy) on the SQL analytics endpoint.</li>
+<li>No referenced table has <strong>dynamic data masking (DDM)</strong> on the endpoint.</li>
+<li>No referenced table has <strong>SQL object-level security</strong> defined at the endpoint.</li>
+<li>No table is based on a <strong>non-materialized SQL view</strong>.</li>
+<li>No table exceeds the <strong>guardrails</strong> of the SKU (Parquet files, row groups, rows per table).</li>
+<li>The model was <strong>framed</strong> (refreshed) after the Delta tables were created or modified (an unframed/unprocessed table falls back).</li>
+</ol>
+<p>Learn also lists <em>capacity memory pressure</em> and transient errors as reasons. Note the distinction: SQL endpoint <strong>RLS</strong> (and views) cause <em>fallback</em>, whereas a query touching a column/table blocked by SQL endpoint <strong>OLS/CLS</strong> returns an <em>error</em>.</p>
+
+<h3>DirectLakeBehavior values</h3>
+<div class="tw"><table>
+<thead><tr><th>Value</th><th>Behavior when Direct Lake conditions aren't met</th><th>Typical use</th></tr></thead>
+<tbody>
+<tr><td><strong>Automatic</strong> (default)</td><td>Silently falls back to DirectQuery; reports keep working, possibly slower</td><td>Production, when availability matters more than speed</td></tr>
+<tr><td><strong>DirectLakeOnly</strong></td><td>Query fails with an error – no fallback</td><td>Development/testing to surface fallback causes; production when you'd rather fail than be slow</td></tr>
+<tr><td><strong>DirectQueryOnly</strong></td><td>Always uses DirectQuery</td><td>Measuring fallback performance during development</td></tr>
+</tbody>
+</table></div>
+<p>Set it in <strong>Model view → Properties of the semantic model → Direct Lake behavior</strong> (Desktop live edit or web modeling), or programmatically via TOM/TMSL:</p>
+<pre><code>// C# / TOM: disable fallback
+database.Model.DirectLakeBehavior = DirectLakeBehavior.DirectLakeOnly;
+database.Model.SaveChanges();</code></pre>
+<p>The property is meaningful only for Direct Lake on SQL – Direct Lake on OneLake always behaves like <em>DirectLakeOnly</em>.</p>
+
+<h3>Diagnosing which table falls back and why</h3>
+<pre><code>// Returns one row per table; DirectLakeFallbackInfo = None means the table runs in Direct Lake
+EVALUATE TABLETRAITS()</code></pre>
+<div class="tw"><table>
+<thead><tr><th>Fallback cause</th><th>Fix</th></tr></thead>
+<tbody>
+<tr><td>Table not framed (e.g. added via TOM/TMSL)</td><td>Refresh (frame) the model</td></tr>
+<tr><td>Table based on a SQL view</td><td>Materialize the view logic as a Delta table (Spark, CTAS in the warehouse, materialized lake view) – or accept DirectQuery</td></tr>
+<tr><td>SQL endpoint RLS / DDM</td><td>Move RLS to the semantic model (with fixed identity) or to OneLake security + Direct Lake on OneLake</td></tr>
+<tr><td>SQL endpoint OLS</td><td>Move OLS to the semantic model (OLS on the endpoint otherwise produces errors/fallback)</td></tr>
+<tr><td>Guardrail exceeded</td><td>Run <code>OPTIMIZE</code> (compaction) and <code>VACUUM</code>; reduce rows (aggregate, archive); otherwise scale up the SKU</td></tr>
+<tr><td>Memory pressure</td><td>Reduce concurrent workloads, trim columns, or scale up</td></tr>
+</tbody>
+</table></div>
+
+<div class="check" data-answer="2">
+<p>Model1 uses Direct Lake on SQL endpoint with the default Direct Lake behavior and SSO. The SQL analytics endpoint of the lakehouse has a security policy (RLS) on the Sales table. A restricted user opens a report. What happens?</p>
+<ul><li>The query fails because Direct Lake doesn't support RLS</li><li>The query falls back to DirectQuery and the endpoint filters rows by the user's identity</li><li>The query runs in Direct Lake mode and ignores the SQL RLS</li><li>The semantic model automatically converts the SQL RLS into model roles</li></ul>
+<p class="why">With Direct Lake on SQL and <em>Automatic</em> behavior, SQL endpoint RLS causes fallback to DirectQuery so the SQL engine can enforce the policy for the SSO user. With <em>DirectLakeOnly</em> the query would fail. With Direct Lake on OneLake, SQL-based RLS isn't applied at all (OneLake security is used instead).</p>
+</div>
+
+<div class="check" data-answer="4">
+<p>During development you want any table that cannot be served from memory to raise an error so you can fix the design. The model is Direct Lake on SQL endpoint. What should you configure?</p>
+<ul><li>Turn off "Keep your Direct Lake data up to date"</li><li>Set Direct Lake behavior to Automatic</li><li>Set Direct Lake behavior to DirectQueryOnly</li><li>Set Direct Lake behavior to DirectLakeOnly</li></ul>
+<p class="why">DirectLakeOnly disables fallback; anything that would have fallen back produces an error, which surfaces views, SQL RLS or guardrail issues during testing. Automatic hides the problem; DirectQueryOnly forces DirectQuery for every query; the automatic-updates setting controls reframing, not fallback.</p>
+</div>
+
+<h2>Guardrails per Fabric SKU</h2>
+<p>Direct Lake guardrails are per <strong>table</strong> (files, row groups, rows) and per <strong>model</strong> (size on disk). Values from Microsoft Learn (<em>Direct Lake overview → Fabric capacity requirements</em>, verified November 2026):</p>
+<div class="tw"><table>
+<thead><tr><th>Fabric SKU</th><th>Parquet files per table</th><th>Row groups per table</th><th>Rows per table (millions)</th><th>Max model size on disk/OneLake (GB)</th><th>Max memory (GB)*</th></tr></thead>
+<tbody>
+<tr><td>F2</td><td>1,000</td><td>1,000</td><td>300</td><td>10</td><td>3</td></tr>
+<tr><td>F4</td><td>1,000</td><td>1,000</td><td>300</td><td>10</td><td>3</td></tr>
+<tr><td>F8</td><td>1,000</td><td>1,000</td><td>300</td><td>10</td><td>3</td></tr>
+<tr><td>F16</td><td>1,000</td><td>1,000</td><td>300</td><td>20</td><td>5</td></tr>
+<tr><td>F32</td><td>1,000</td><td>1,000</td><td>300</td><td>40</td><td>10</td></tr>
+<tr><td>F64 / FT1 / P1</td><td>5,000</td><td>5,000</td><td>1,500</td><td>Unlimited</td><td>25</td></tr>
+<tr><td>F128 / P2</td><td>5,000</td><td>5,000</td><td>3,000</td><td>Unlimited</td><td>50</td></tr>
+<tr><td>F256 / P3</td><td>5,000</td><td>5,000</td><td>6,000</td><td>Unlimited</td><td>100</td></tr>
+<tr><td>F512 / P4</td><td>10,000</td><td>10,000</td><td>12,000</td><td>Unlimited</td><td>200</td></tr>
+<tr><td>F1024 / P5</td><td>10,000</td><td>10,000</td><td>24,000</td><td>Unlimited</td><td>400</td></tr>
+<tr><td>F2048 – F8192</td><td>10,000</td><td>10,000</td><td>24,000</td><td>Unlimited</td><td>400</td></tr>
+</tbody>
+</table></div>
+<p>* <strong>Max memory</strong> is <em>not</em> a guardrail: it is the upper limit of data that can be paged in. Exceeding it causes paging (slower), not fallback.</p>
+<ul>
+<li><strong>Max model size on disk/OneLake</strong> is evaluated at <strong>model level</strong> and affects all queries; the other guardrails are evaluated <strong>per query</strong>. Learn notes that a single table exceeding a guardrail can prevent Direct Lake mode for the model.</li>
+<li>When exceeded: <strong>Direct Lake on OneLake</strong> → refresh (framing) <em>fails</em> and the model can't be queried until the tables are optimized (just like an Import refresh failure). <strong>Direct Lake on SQL</strong> → refresh succeeds with a warning and queries <em>fall back to DirectQuery</em> (if fallback is enabled).</li>
+<li>Memorize the pattern: <strong>F2–F32: 1,000 files / 1,000 row groups / 300 M rows</strong>; <strong>F64–F256: 5,000 / 5,000 / 1.5–6 billion</strong>; <strong>F512+: 10,000 / 10,000 / 12–24 billion</strong>.</li>
+</ul>
+
+<div class="check" data-answer="1">
+<p>A Direct Lake on SQL endpoint model runs on an F8 capacity. After a large load the FactSales Delta table contains 420 million rows in 1,600 small Parquet files. Reports became slow and traces show DirectQuery events. What is the most likely cause?</p>
+<ul><li>The table exceeds the F8 guardrails (300 million rows and 1,000 Parquet files per table), so queries fall back to DirectQuery</li><li>F8 doesn't support Direct Lake at all</li><li>The max memory of 3 GB was exceeded, which always forces fallback</li><li>Automatic updates were disabled</li></ul>
+<p class="why">F2–F32 allow 300 million rows, 1,000 files and 1,000 row groups per table. Exceeding them makes Direct Lake on SQL fall back (Direct Lake on OneLake would fail instead). Max memory isn't a guardrail – it causes paging. Fix: compact (OPTIMIZE), reduce rows/aggregate, or scale to F64 (5,000 files / 1.5 billion rows).</p>
+</div>
+
+<div class="sort" data-task="Sort each event into what happens when the guardrail or condition is hit.">
+<ul data-bucket="Falls back to DirectQuery (DL on SQL, Automatic)"><li>Table based on a non-materialized SQL view</li><li>SQL analytics endpoint security policy (RLS) on a table</li><li>Rows per table above SKU limit on DL on SQL</li><li>Dynamic data masking defined on the endpoint</li></ul>
+<ul data-bucket="Error / refresh failure"><li>Parquet file guardrail exceeded on Direct Lake on OneLake</li><li>DirectLakeBehavior = DirectLakeOnly and a view is used</li><li>Query touches a column denied by SQL endpoint CLS</li></ul>
+<ul data-bucket="Only slower (paging), no fallback"><li>Data paged in exceeds the SKU's Max memory</li><li>Many columns evicted after a reframe (cold cache)</li></ul>
+</div>
+
+<h2>Framing, refresh and automatic updates</h2>
+<h3>Framing</h3>
+<p>A Delta table is a sequence of <em>versions</em>; each commit in the Delta log adds/removes Parquet files. <strong>Framing</strong> is what a refresh of a Direct Lake model does: it reads the Delta log of each table and pins the model to the <strong>latest committed version</strong> (the list of Parquet files). It copies no data and usually takes seconds. From then on, all transcoding loads data <em>as of that framed version</em> – later commits are invisible until the next framing.</p>
+<ul>
+<li><strong>Incremental framing</strong>: the engine compares the new version with the previous one and drops only the column segments belonging to removed row groups; dictionaries are usually kept and extended. Append-only loads therefore keep the model semiwarm.</li>
+<li><strong>Destructive patterns</strong> (overwrite mode, deletes/updates that rewrite most files, OPTIMIZE rewrites) invalidate segments → the next queries are cold.</li>
+<li>Because a framed model references specific Parquet files, <strong>VACUUM must not remove files of the framed version</strong> before the model is reframed – otherwise queries error with missing files.</li>
+<li>Framing can fail if a table exceeds guardrails.</li>
+</ul>
+
+<h3>Automatic updates – "Keep your Direct Lake data up to date"</h3>
+<p>Model setting in <strong>Semantic model settings → Refresh</strong>. <strong>Enabled by default</strong>. When on, the model reframes automatically whenever it detects changes in the underlying Delta tables (scoped to the changed tables). Recommended for small/medium models and low-latency needs.</p>
+<p><strong>Disable it</strong> when users must not see partially loaded data – e.g. a multi-step ETL that loads facts before dimensions, or validation steps that must pass first. Then reframe explicitly when the load is complete:</p>
+<ul>
+<li>manual <strong>Refresh</strong> in the Fabric portal, or a <strong>scheduled refresh</strong>;</li>
+<li><strong>Semantic model refresh activity</strong> at the end of a Fabric <strong>pipeline</strong> (runs only after load activities succeed);</li>
+<li><strong>Power BI REST API</strong> (enhanced refresh), <strong>TOM/TMSL</strong> via XMLA, or <code>sempy.fabric.refresh_dataset()</code> from a notebook.</li>
+</ul>
+<p>If a refresh hits a non-recoverable error, Power BI <strong>suspends automatic updates</strong>; they resume after a successful on-demand refresh.</p>
+
+<div class="order" data-task="Put the nightly Direct Lake load in the correct order so users never see half-loaded data.">
+<ol>
+<li>Disable "Keep your Direct Lake data up to date" on the semantic model (one-time setup)</li>
+<li>Pipeline loads and validates the dimension and fact Delta tables</li>
+<li>Pipeline runs the Semantic model refresh activity to reframe the model</li>
+<li>Optionally run a warm-up DAX query against key measures</li>
+<li>Run table maintenance (OPTIMIZE/VACUUM) in a maintenance window, keeping files the framed version needs, then reframe</li>
+</ol>
+</div>
+
+<div class="reveal"><p><strong>Scenario.</strong> A retail company loads its gold lakehouse every night in three notebooks: DimProduct, DimStore, then FactSales (90 minutes). Analysts in Asia use the Direct Lake report during that window and complain that sales sometimes appear under "(Blank)" products and totals jump around. Automatic updates are on. What do you change?</p>
+<div class="answer">With automatic updates on, the model reframes as soon as each Delta table changes, so users see a mix of new dimensions and old/partial facts. Disable <em>Keep your Direct Lake data up to date</em>, orchestrate the three notebooks in a <strong>pipeline</strong>, and add a <strong>Semantic model refresh</strong> activity after all of them succeed. The model stays framed on the previous consistent version during the load and switches atomically in seconds. Also make sure VACUUM retention keeps the previously framed files until the reframe.</div></div>
+
+<h3>Refresh in Power BI Desktop live edit vs scheduled refresh</h3>
+<p>In Desktop live edit, the <strong>Refresh</strong> button performs a <strong>schema refresh</strong> (detects new/changed columns in the source) <em>and</em> reframes. A <strong>scheduled refresh</strong> in the service only reframes – no schema sync. Renaming a source column removes it from the model on the next schema refresh unless you update its <code>SourceLineageTag</code> in TMDL view.</p>
+
+<h2>File layout: V-Order, row groups, partitioning and maintenance</h2>
+<p>Direct Lake performance depends on <strong>Delta table health</strong> as much as on model design.</p>
+<div class="tw"><table>
+<thead><tr><th>Factor</th><th>Recommendation</th><th>Why</th></tr></thead>
+<tbody>
+<tr><td><strong>V-Order</strong></td><td>Enable for read-heavy gold tables consumed by Direct Lake</td><td>Write-time sort/encoding/compression compatible with VertiPaq → faster transcoding, VertiScan works on compressed data. Costs extra write time (Learn: often ~15% on average).</td></tr>
+<tr><td>Row group size</td><td>~1 M – 16 M rows per row group; larger is OK; avoid tiny row groups</td><td>Row groups map 1:1 to VertiPaq segments; many small segments and many local dictionaries slow transcoding and queries</td></tr>
+<tr><td>Number of files</td><td>Few, large files; compact regularly</td><td>Guardrails count files and row groups; metadata overhead</td></tr>
+<tr><td>Partitioning</td><td>Only on low-cardinality columns (&lt; 100–200 distinct values, e.g. month)</td><td>Limits the rewrite impact of deletes/updates; high-cardinality partitions explode file counts</td></tr>
+<tr><td>Update pattern</td><td>Prefer append; avoid overwrite of large tables</td><td>Preserves incremental framing (semiwarm instead of cold)</td></tr>
+<tr><td>Columns</td><td>Only include columns needed for filtering, grouping, sorting, summarizing and relationships</td><td>Less to transcode and less memory</td></tr>
+<tr><td>Data types</td><td>Integers instead of strings, no GUID/binary/complex types</td><td>Better compression; complex types, binary and GUID are unsupported</td></tr>
+</tbody>
+</table></div>
+
+<h3>V-Order defaults in 2026</h3>
+<p>Fabric Spark uses <strong>resource profiles</strong>. New workspaces default to the <strong>writeHeavy</strong> profile, in which <strong>V-Order is disabled</strong> to maximise ingestion throughput. For gold tables served to Direct Lake, enable V-Order (session config <code>spark.sql.parquet.vorder.default=true</code>, a read-heavy resource profile such as <code>readHeavyForSpark</code>, the table property, or the writer option <code>parquet.vorder.enabled</code>) and rewrite existing files with <code>OPTIMIZE ... VORDER</code>. Disabling V-Order is defensible for write-heavy staging tables that are rarely read.</p>
+<pre><code>-- Spark SQL in a Fabric notebook
+SET spark.sql.parquet.vorder.default = true;           -- V-Order for writes in this session
+
+ALTER TABLE gold.fact_sales
+  SET TBLPROPERTIES ('delta.parquet.vorder.enabled' = 'true');   -- table-level property
+
+OPTIMIZE gold.fact_sales VORDER;                      -- compact small files and apply V-Order
+VACUUM gold.fact_sales RETAIN 168 HOURS;              -- remove unreferenced files older than 7 days</code></pre>
+<p>No-code alternative: <strong>Lakehouse explorer → table → Maintenance</strong> runs OPTIMIZE (optionally with V-Order) and VACUUM with a retention threshold. Data engineers can also use <em>optimize write</em> to produce well-sized files at write time.</p>
+<div class="warn"><p>OPTIMIZE replaces Parquet files, so the affected column segments become invalid after the next reframe – a short-term cold penalty for a long-term gain. Schedule compaction in quiet periods (weekends/month end) unless small files accumulate quickly (streaming), in which case optimize daily to stay within guardrails.</p></div>
+
+<div class="check" data-answer="3">
+<p>A workspace created in 2026 writes gold tables with notebooks using default Spark settings. A Direct Lake model on these tables is slower than expected; the tables are written once a day and read constantly. What should you do?</p>
+<ul><li>Switch the model to DirectQuery</li><li>Partition the fact table by OrderDate at day level</li><li>Enable V-Order for the gold tables (e.g. read-heavy profile or table property) and rewrite the files with OPTIMIZE</li><li>Disable automatic updates</li></ul>
+<p class="why">New workspaces default to the write-optimized profile with V-Order off. V-Order applies VertiPaq-friendly sorting and compression at write time and helps read-heavy Direct Lake tables. Day-level partitioning creates thousands of small files (bad); DirectQuery is slower; automatic updates are about freshness.</p>
+</div>
+
+<h2>Unsupported features and limitations (current status)</h2>
+<div class="tw"><table>
+<thead><tr><th>Feature</th><th>Status with Direct Lake</th></tr></thead>
+<tbody>
+<tr><td>Power Query transformations inside the model</td><td>Not available for Direct Lake tables – prepare data upstream (Import tables in a DL-on-OneLake composite model still use Power Query)</td></tr>
+<tr><td>Calculated columns on Direct Lake tables</td><td>DL on SQL: not supported. DL on OneLake: preview, "user context only". Exam-safe approach: <strong>materialize the column in the Delta table</strong></td></tr>
+<tr><td>Calculated tables referencing DL tables</td><td>DL on SQL: no; DL on OneLake: preview. Calculation groups, field parameters, what-if parameters and calc tables that don't reference DL tables are fine everywhere</td></tr>
+<tr><td>Composite models</td><td>DL on OneLake + Import (web modeling) / DirectQuery (XMLA tools). DL on SQL: not in the same model</td></tr>
+<tr><td>Hybrid tables / incremental refresh partitions</td><td>No – partition at the Delta table level instead</td></tr>
+<tr><td>User-defined aggregations</td><td>Not supported on Direct Lake tables</td></tr>
+<tr><td>Complex Delta types, binary, GUID</td><td>Not supported – convert to string/supported types</td></tr>
+<tr><td>Strings</td><td>Max 32,764 Unicode characters per value</td></tr>
+<tr><td>NaN floating-point values</td><td>Not supported</td></tr>
+<tr><td>Relationships</td><td>Related column data types must match; one-side columns must be unique (queries fail if duplicates are found)</td></tr>
+<tr><td>Gateways (on-premises/VNet)</td><td>Not supported – cloud connections only</td></tr>
+<tr><td>My Workspace</td><td>Can't create Direct Lake models in personal workspaces</td></tr>
+<tr><td>Cross-region</td><td>Model must be in the same region as the source (workaround for DL on SQL: shortcut tables into a lakehouse in the other region)</td></tr>
+<tr><td>Analyze in Excel / MDX</td><td>Same limits as DirectQuery: no session-scoped MDX; user-defined hierarchies on DL tables not supported in MDX clients</td></tr>
+<tr><td>Embedding</td><td>Requires a V2 embed token; service principal → fixed identity</td></tr>
+<tr><td>Same source table twice</td><td>Not in Desktop/web modeling (possible via XMLA tools, but Edit tables/refresh then error)</td></tr>
+</tbody>
+</table></div>
+
+<div class="check" data-answer="2">
+<p>Model1 is Direct Lake on SQL endpoint over a 900-million-row FactSales table. Authors need a row-level Profit column (SalesAmount − TotalCost) to use as a slicer and axis. You have write access to the lakehouse. What should you do?</p>
+<ul><li>Add a DAX calculated column to FactSales</li><li>Add Profit as a column of the Delta table in the ETL (notebook/SQL) and refresh the model</li><li>Create a measure Profit = SUM(SalesAmount) − SUM(TotalCost) and use it as the slicer</li><li>Switch FactSales to Import mode inside the same model</li></ul>
+<p class="why">Direct Lake on SQL doesn't support calculated columns or mixing Import tables. Materializing upstream keeps the model in Direct Lake, makes the value usable for grouping/slicing, and gives every consumer the same definition. A measure can't be a slicer/axis.</p>
+</div>
+
+<h2>Creating and editing Direct Lake models</h2>
+<h3>Ways to create</h3>
+<ol>
+<li><strong>From a lakehouse/warehouse in the Fabric portal</strong>: open the item (or its SQL analytics endpoint) → <strong>New semantic model</strong> → name, workspace, select tables. Remember: Fabric <strong>no longer creates automatic default semantic models</strong> – you create models explicitly, which gives full control over relationships, measures and security.</li>
+<li><strong>Power BI Desktop</strong>: <em>OneLake catalog</em> → select lakehouse/warehouse → <em>Connect</em> → choose name, workspace and tables. Creates a <strong>Direct Lake on OneLake</strong> model in the workspace. Add tables from other items the same way.</li>
+<li><strong>Web modeling</strong> (open data model in the browser): edit relationships, measures, RLS, calculation groups; <em>Edit tables</em>; add Import tables (DL on OneLake) via Power Query.</li>
+<li><strong>XMLA / code</strong>: Tabular Editor, SSMS, notebooks with semantic link labs (e.g. generate a Direct Lake model from lakehouse tables).</li>
+</ol>
+
+<h3>Live editing in Power BI Desktop</h3>
+<ul>
+<li>The model lives in the <strong>workspace</strong>; Desktop edits it <strong>live</strong>. There's <strong>no Publish</strong> and no Save – every change is applied immediately. There is no undo; <strong>version history</strong> creates a version at the start of each live-edit session.</li>
+<li>Report view is removed while live editing (unless using PBIP); build reports in a separate Desktop file with a live connection.</li>
+<li><strong>TMDL view</strong> and <strong>DAX query view</strong> are available.</li>
+<li>To keep metadata in source control: <strong>File → Export → Power BI Project (PBIP)</strong>, then deploy via Git integration / item APIs (PBIP can't be published from Desktop).</li>
+<li>Requirements: XMLA read-write enabled on the capacity, <strong>Write</strong> permission on the model, at least Viewer on the lakehouse, not a free license. RLS roles can't be validated from Desktop – test in the service.</li>
+</ul>
+
+<h3>Deployment pipelines</h3>
+<p>Deploying a Direct Lake model doesn't rebind it to the lakehouse in the target stage automatically. For Direct Lake on OneLake use <strong>text M parameters</strong> (e.g. <code>WorkspaceId</code>, <code>LakehouseId</code> or a full <code>OneLakeSourceUrl</code>) in the connection expression and configure <strong>parameter rules</strong>; data source rules work for Direct Lake on SQL.</p>
+<pre><code>expression 'DirectLake - Sales' =
+    let
+        Source = AzureStorage.DataLake(
+            "https://onelake.dfs.fabric.microsoft.com/" &amp; WorkspaceId &amp; "/" &amp; LakehouseId,
+            [HierarchicalNavigation = true])
+    in
+        Source
+expression WorkspaceId = "&lt;workspace-id&gt;" meta [IsParameterQuery = true, IsParameterQueryRequired = true, Type = "Text"]
+expression LakehouseId = "&lt;lakehouse-id&gt;" meta [IsParameterQuery = true, IsParameterQueryRequired = true, Type = "Text"]</code></pre>
+
+<h3>Migrating Direct Lake on SQL → Direct Lake on OneLake</h3>
+<p>In Desktop live edit: create a version (version history) → TMDL view → script the model → change <code>Sql.Database("&lt;endpoint&gt;", "&lt;endpoint id&gt;")</code> to <code>AzureStorage.DataLake("https://onelake.dfs.fabric.microsoft.com/&lt;workspace id&gt;/&lt;item id&gt;")</code> → for a lakehouse without schemas remove <code>schemaName</code> properties → Apply → Refresh. Not recommended if the model relies on SQL views.</p>
+
+<h2>Security: identities, permissions and OneLake security</h2>
+<h3>SSO vs fixed identity</h3>
+<p>Direct Lake checks data access for the <strong>effective identity</strong>:</p>
+<ul>
+<li><strong>SSO (Microsoft Entra ID) – default.</strong> The identity of the user running the report is checked. Every report user needs read access to the data (DL on SQL: Read on the item + SELECT on tables; DL on OneLake: Read + ReadAll or a OneLake security role).</li>
+<li><strong>Fixed identity</strong> – bind the model to a <strong>shareable cloud connection</strong> with <strong>SSO disabled</strong>, authenticated as OAuth 2.0 account, <strong>service principal</strong> or <strong>workspace identity</strong> (key/SAS methods aren't supported). The fixed identity's permissions determine what is read; users need only Read on the model/report and <strong>no permission on the lakehouse</strong>. Data restrictions are then implemented with <strong>semantic model RLS/OLS</strong>.</li>
+<li>A connection can have both: SSO for queries and the fixed identity for framing/transcoding at refresh time.</li>
+</ul>
+<p>Independently of the effective identity, the <strong>semantic model owner</strong> must have read access to the source tables, because framing checks the owner's permissions; otherwise refresh fails with "…ensure that the owner of this semantic model does have read access to these tables".</p>
+
+<div class="tw"><table>
+<thead><tr><th>Requirement</th><th>Design</th></tr></thead>
+<tbody>
+<tr><td>Users see only permitted rows in reports and must NOT query the lakehouse/endpoint directly</td><td>Fixed identity cloud connection (SSO off) + semantic model RLS; grant users nothing on the lakehouse</td></tr>
+<tr><td>Same row rules everywhere (Spark, SQL endpoint, Direct Lake)</td><td>OneLake security roles + Direct Lake on OneLake with SSO</td></tr>
+<tr><td>Security already defined as SQL endpoint RLS and must be reused</td><td>Direct Lake on SQL with SSO (accept DirectQuery fallback)</td></tr>
+<tr><td>Engineers need full lakehouse access, report consumers don't</td><td>Engineers: Contributor+ on the data workspace; consumers: Viewer on report workspace or app, fixed identity on the model</td></tr>
+</tbody>
+</table></div>
+
+<div class="warn"><p>Semantic model RLS/OLS is <strong>not enforced</strong> for users with <strong>Write</strong> permission on the model – i.e. workspace <strong>Admin, Member and Contributor</strong>. Test roles with Viewer-level identities. Also: model RLS applies only inside the model – if users also have SQL or OneLake access, they can bypass it, which is why Microsoft "strongly recommends" a fixed identity when using model RLS.</p></div>
+
+<h3>OneLake security interaction</h3>
+<ul>
+<li>With Direct Lake on OneLake and OneLake security on, the effective identity's OneLake roles are resolved and their RLS/OLS applied. If a user is in several OneLake roles and model roles, OneLake roles are <strong>unioned</strong>, then <strong>intersected</strong> with the model roles.</li>
+<li>OneLake security applies to <strong>Viewers</strong> (and users with explicit Read); Contributors and above have full access.</li>
+<li>Limitations: no backup for models relying on OneLake security; bidirectional relationships not supported when the source uses OneLake security RLS; refresh models after OneLake security changes.</li>
+<li>If a lakehouse's SQL analytics endpoint is switched to user identity (SSO) mode, OneLake roles become SQL granular rules and Direct Lake on SQL falls back to DirectQuery 100% of the time – another argument for Direct Lake on OneLake.</li>
+</ul>
+
+<div class="check" data-answer="3">
+<p>Report consumers must see only their region's rows in a Direct Lake model and must not be able to query the lakehouse. Data engineers keep full access. What should you do?</p>
+<ul><li>Keep SSO, grant consumers ReadAll on the lakehouse and add model RLS</li><li>Define RLS on the SQL analytics endpoint and keep SSO</li><li>Bind the model to a cloud connection with a fixed identity (SSO disabled), grant that identity read access, add model RLS roles for consumers and give consumers no lakehouse permissions</li><li>Give consumers the Contributor role so they can use the model</li></ul>
+<p class="why">Fixed identity reads the data on the users' behalf, so consumers need no lakehouse permissions, and model RLS filters their rows. SSO would require consumers to have data access (letting them bypass model RLS). SQL RLS causes fallback; Contributors bypass model RLS entirely.</p>
+</div>
+
+<h2>Migrating an Import model to Direct Lake</h2>
+<ol>
+<li><strong>Move transformations upstream.</strong> Power Query logic must be re-implemented to produce Delta tables (Dataflow Gen2 with a lakehouse destination – you can export a Power Query template from the model – or notebooks/T-SQL).</li>
+<li><strong>Materialize calculated columns and calculated tables</strong> into the lakehouse (Direct Lake on SQL can't host them; DL on OneLake supports them only in preview).</li>
+<li><strong>Create the Direct Lake model</strong> on the gold tables, then <strong>copy model objects</strong>: measures, relationships, hierarchies, calculation groups, field parameters, RLS/OLS, perspectives, translations, formats. Tools: Tabular Editor scripts or the migration functions in <strong>semantic-link-labs</strong> (Python library for Fabric notebooks).</li>
+<li><strong>Rebind reports</strong> to the new model and <strong>validate</strong> results (compare measure totals with DAX queries / semantic link).</li>
+<li>Check guardrails for your SKU, enable V-Order, decide on automatic updates and fallback behavior, configure the connection (SSO vs fixed identity).</li>
+</ol>
+<p>Alternatively, when you can't redesign yet, <strong>OneLake integration</strong> for Import models writes Import tables to Delta in OneLake, making them available to lakehouses via shortcuts, SQL and notebooks – a quick win without migration.</p>
+
+<div class="order" data-task="Order the steps to migrate an Import model to Direct Lake.">
+<ol>
+<li>Re-implement Power Query transformations upstream so they write Delta tables to the lakehouse</li>
+<li>Materialize calculated columns and calculated tables as Delta columns/tables</li>
+<li>Create a new Direct Lake semantic model on the gold tables</li>
+<li>Copy measures, relationships, calculation groups and security roles to the new model</li>
+<li>Rebind reports to the new model</li>
+<li>Validate results against the old model and monitor for fallback/guardrails</li>
+</ol>
+</div>
+
+<h2>Monitoring and detecting fallback</h2>
+<div class="tw"><table>
+<thead><tr><th>Tool</th><th>What it shows for Direct Lake</th></tr></thead>
+<tbody>
+<tr><td><strong>Performance analyzer</strong> (Power BI Desktop, report connected to the model)</td><td>Per-visual timings. A <strong>"Direct query"</strong> line under a visual indicates the query fell back to DirectQuery.</td></tr>
+<tr><td><strong>SQL Server Profiler</strong> / Workspace monitoring / DAX Studio traces (via XMLA endpoint)</td><td><code>DirectQuery_Begin</code>/<code>DirectQuery_End</code> events → fallback (ignore EngineEdition/OLS check queries). <code>VertiPaq_SE_Query_Begin/End/Cache_Match/Cache_Miss</code> → served in Direct Lake (same events as Import).</td></tr>
+<tr><td><strong>DAX Studio</strong> (Server Timings, query plan)</td><td>Storage engine queries in xmSQL vs SQL; cold vs warm timings; VertiPaq Analyzer for column sizes and residency</td></tr>
+<tr><td><strong>DAX query view</strong></td><td><code>EVALUATE TABLETRAITS()</code> → <code>DirectLakeFallbackInfo</code>; <code>INFO.STORAGETABLECOLUMNSEGMENTS()</code> → residency/temperature</td></tr>
+<tr><td><strong>Refresh history → Direct Lake tab</strong></td><td>Framing failures (successful framings are typically not listed unless status changes)</td></tr>
+<tr><td><strong>Fabric Capacity Metrics app</strong></td><td>CU consumption of queries and framing per item; throttling</td></tr>
+<tr><td><strong>Semantic link labs</strong> (notebook)</td><td><code>delta_analyzer</code> for row groups/files/V-Order; model BPA; VertiPaq analyzer; Direct Lake guardrail checks</td></tr>
+</tbody>
+</table></div>
+
+<div class="match" data-task="Match each tool or artifact to what it tells you about a Direct Lake model.">
+<dl>
+<dt>DirectQuery_Begin event in a Profiler trace</dt><dd>A query was sent to the SQL analytics endpoint (possible fallback)</dd>
+<dt>VertiPaq_SE_Query_End event</dt><dd>The query was served from in-memory column data</dd>
+<dt>TABLETRAITS()</dt><dd>Fallback reason per table</dd>
+<dt>INFO.STORAGETABLECOLUMNSEGMENTS()</dt><dd>Residency and temperature of column segments</dd>
+<dt>Delta Analyzer (semantic-link-labs)</dt><dd>Row groups, Parquet files and V-Order status of a Delta table</dd>
+<dt>Performance analyzer "Direct query" line</dt><dd>A visual's query fell back, seen from Power BI Desktop</dd>
+</dl>
+</div>
+
+<div class="check" data-answer="4">
+<p>Model1 is Direct Lake on SQL endpoint. A table is based on the view vw_Sales in a warehouse. Reports are slow and Profiler shows DirectQuery events. You need the table served in Direct Lake mode. What should you do?</p>
+<ul><li>Set Direct Lake behavior to DirectLakeOnly</li><li>Enable V-Order on the warehouse</li><li>Turn on automatic updates</li><li>Materialize the view logic into a Delta table (e.g. CREATE TABLE AS SELECT in the warehouse) and point the model table at it</li></ul>
+<p class="why">Direct Lake reads Delta tables, not SQL views – a view-based table always falls back. DirectLakeOnly would just make the queries fail. V-Order and automatic updates don't affect view handling.</p>
+</div>
+
+<div class="reveal"><p><strong>Scenario.</strong> You must design a Direct Lake model for a company on F64. Requirements: (1) facts in Lakehouse_Sales, the product dimension in Warehouse_MDM; (2) a small budget table maintained in an Excel file on SharePoint; (3) the security team defined row filters once in OneLake security and wants them enforced everywhere; (4) reports must never silently become slow. Which Direct Lake flavour and settings?</p>
+<div class="answer"><strong>Direct Lake on OneLake.</strong> (1) It can combine tables from multiple Fabric items. (2) DL on OneLake supports composite models, so the budget can be an <strong>Import</strong> table added via web modeling (Power Query). (3) DL on OneLake enforces <strong>OneLake security</strong> roles for the SSO user (keep SSO so the user's roles apply; consumers need Read + a OneLake role). (4) DL on OneLake never falls back – problems surface as errors rather than slow DirectQuery. Also check F64 guardrails (5,000 files/row groups, 1.5 billion rows per table) and enable V-Order on the gold tables.</div></div>
+
+<h2>Key takeaways &amp; exam tips</h2>
+<ul>
+<li>Direct Lake = VertiPaq queries over Delta tables in OneLake; <strong>Fabric capacity only</strong>; no Power Query for DL tables; prepare data upstream.</li>
+<li><strong>Transcoding</strong> loads whole columns on first use; columns get evicted on reframe, inactivity or memory pressure. States: cold → semiwarm → warm → hot.</li>
+<li><strong>Framing</strong> = metadata-only refresh that pins the latest Delta version; automatic updates ("Keep your Direct Lake data up to date") are <strong>on by default</strong>; disable them for multi-step ETL and reframe from the pipeline.</li>
+<li><strong>Direct Lake on OneLake</strong>: multiple sources, composite with Import, OneLake security, calculated columns/tables in preview, <strong>no fallback</strong> – guardrail breaches make refresh fail. Desktop creates this type.</li>
+<li><strong>Direct Lake on SQL</strong>: single source, SQL endpoint permissions, views allowed but always fall back; <strong>fallback causes: SQL views, SQL RLS/DDM/OLS, guardrails exceeded, unframed tables</strong>. <em>DirectLakeBehavior</em>: Automatic (default) / DirectLakeOnly / DirectQueryOnly.</li>
+<li>Guardrails: F2–F32 → 1,000 files, 1,000 row groups, 300 M rows; F64 → 5,000 / 5,000 / 1.5 B; F128 → 3 B; F256 → 6 B; F512 → 10,000 / 12 B; F1024+ → 24 B. Max memory is not a guardrail.</li>
+<li>Performance: V-Order on read-heavy gold tables (off by default in new workspaces' writeHeavy profile), large row groups (1–16 M rows), few files, OPTIMIZE/VACUUM, append-only loads, low-cardinality partitions, only needed columns.</li>
+<li>Can't do on DL tables: calculated columns (DL on SQL), user-defined aggregations, incremental refresh/hybrid partitions, gateways, complex/binary/GUID types → materialize in the lakehouse.</li>
+<li>Security: SSO default; <strong>fixed identity</strong> + model RLS when users must not access the lakehouse; model owner needs read access for framing; Admin/Member/Contributor bypass model RLS.</li>
+<li>Detect fallback: Performance analyzer "Direct query", Profiler <code>DirectQuery_Begin/End</code>, <code>TABLETRAITS()</code>; test with DirectLakeOnly.</li>
+</ul>
+<p>Continue with <a href="12-dax.html">DAX for the exam</a> and <a href="13-performance.html">Performance &amp; enterprise-scale models</a>. Further reading (online): Microsoft Learn "Direct Lake overview", "How Direct Lake works", "Understand Direct Lake query performance", "Integrate Direct Lake security".</p>
+</main>
+<script src="assets/app.js"></script>
+</body>
+</html>

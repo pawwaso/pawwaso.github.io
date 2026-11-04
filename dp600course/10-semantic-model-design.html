@@ -1,0 +1,358 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Semantic model design &amp; storage modes – DP-600</title>
+<link rel="stylesheet" href="assets/style.css">
+</head>
+<body>
+<main>
+<h1>Semantic model design &amp; storage modes</h1>
+<p class="lead">How to choose a storage mode (Import, DirectQuery, Dual, Direct Lake on OneLake, Direct Lake on SQL endpoint), build composite models, and design a clean star schema in the model: relationships, date table, hierarchies, measures vs calculated columns, field parameters, dynamic format strings, large model format, perspectives, translations and the model's service settings. Maps to <em>Implement and manage semantic models → Design and build semantic models</em> (storage mode, star schema, relationships, bridge tables, composite models, large model format).</p>
+
+<h2>Storage modes</h2>
+<p>Storage mode is a property of each <strong>table</strong> (more precisely, of its partitions). A model whose tables use different modes — or that combines local tables with a remote model — is a <strong>composite model</strong>.</p>
+<div class="tw"><table>
+<thead><tr><th></th><th>Import</th><th>DirectQuery</th><th>Dual</th><th>Direct Lake on OneLake</th><th>Direct Lake on SQL endpoint</th></tr></thead>
+<tbody>
+<tr><td>Where data lives at query time</td><td>VertiPaq in-memory copy</td><td>Source database (query sent each time)</td><td>Both: in memory and source</td><td>Delta files in OneLake, paged into VertiPaq on demand</td><td>Same as OneLake variant</td></tr>
+<tr><td>Engine</td><td>VertiPaq</td><td>Source (DAX → SQL/KQL)</td><td>VertiPaq or source, chosen per query</td><td>VertiPaq</td><td>VertiPaq, falls back to DirectQuery</td></tr>
+<tr><td>Freshness</td><td>As of last refresh</td><td>Real time</td><td>Import part as of refresh</td><td>Latest Delta version after framing (automatic updates)</td><td>Same</td></tr>
+<tr><td>"Refresh"</td><td>Copies all data (heavy)</td><td>None (metadata only)</td><td>Like Import</td><td><strong>Framing</strong>: metadata only, seconds</td><td>Framing</td></tr>
+<tr><td>Sources</td><td>Any connector</td><td>Connectors supporting DQ</td><td>DQ-capable sources</td><td>One or more Fabric items with Delta tables (lakehouse, warehouse, SQL DB, mirrored DB, KQL DB with OneLake availability…), incl. shortcuts</td><td>A single Fabric item with a SQL analytics endpoint</td></tr>
+<tr><td>Power Query transforms</td><td>Yes</td><td>Foldable only</td><td>Foldable only</td><td>No — prepare data upstream</td><td>No</td></tr>
+<tr><td>Calculated columns</td><td>Yes</td><td>Yes (limited)</td><td>Yes</td><td>Preview, limited</td><td>No</td></tr>
+<tr><td>Calculated tables</td><td>Yes</td><td>Become Import</td><td>—</td><td>Preview, limited</td><td>No (except calc groups, field/what-if parameters)</td></tr>
+<tr><td>SQL views as source</td><td>Yes</td><td>Yes</td><td>Yes</td><td><strong>No</strong> (use materialized lake views/Delta tables)</td><td>Yes, but <strong>falls back to DirectQuery</strong></td></tr>
+<tr><td>Guardrail exceeded</td><td>—</td><td>—</td><td>—</td><td>Refresh/queries <strong>fail</strong></td><td><strong>Fallback</strong> to DirectQuery (if behaviour = Automatic)</td></tr>
+<tr><td>Composite</td><td>With DQ, Dual, Direct Lake</td><td>With Import, Dual, Direct Lake</td><td>—</td><td>Yes: + Import tables (web modeling); DQ via XMLA tools</td><td>Not in the same model (but a composite <em>on top of</em> it via DQ to the model)</td></tr>
+<tr><td>Licence</td><td>Any</td><td>Any</td><td>Any</td><td>Fabric capacity</td><td>Fabric capacity</td></tr>
+<tr><td>Gateway</td><td>For on-premises/VNet sources</td><td>For on-premises/VNet sources</td><td>Same</td><td>Never (cloud connections only)</td><td>Never</td></tr>
+</tbody>
+</table></div>
+
+<h3>Choice rules</h3>
+<ul>
+<li><strong>Import</strong> — default for most models: fastest queries, full DAX/Power Query, any source. Downsides: data copy, refresh time and memory; latency = refresh schedule. Self-service authors without write access to the lake typically use Import (Power Query lives in the model).</li>
+<li><strong>DirectQuery</strong> — data too large or must be real-time, or must stay in the source (sovereignty, source-side security). Every visual = queries to the source, so performance depends on the source; minimise visuals, avoid bidirectional filters, add aggregations.</li>
+<li><strong>Dual</strong> — for <strong>dimension tables shared</strong> by Import and DirectQuery facts in a composite model: the engine answers from memory when it can and joins in the source when the query involves the DirectQuery fact (avoids limited relationships and extra source queries).</li>
+<li><strong>Direct Lake</strong> — data already in OneLake as well-maintained Delta (gold layer), large volumes, near-import speed without scheduled data copies; Fabric capacity required. Prepare columns upstream (no Power Query, limited calculated columns).
+  <ul>
+  <li><strong>Direct Lake on OneLake</strong>: tables from <em>several</em> Fabric items, can add Import tables (composite), never falls back — guardrail breach = failure; SQL endpoint RLS/OLS is <em>not</em> applied (OneLake security is).</li>
+  <li><strong>Direct Lake on SQL endpoint</strong>: one source item, can use SQL views and SQL-endpoint security but those cause <strong>DirectQuery fallback</strong>; property <em>Direct Lake behavior</em> = Automatic / DirectLakeOnly / DirectQueryOnly.</li>
+  </ul></li>
+</ul>
+<p>Details on framing, transcoding, guardrails and fallback: <a href="11-direct-lake.html">Direct Lake in depth</a>.</p>
+
+<div class="sort" data-task="Which storage mode fits each requirement best?">
+<ul data-bucket="Import"><li>Excel files on SharePoint, refreshed daily</li><li>Analyst needs Power Query merges and calculated columns, no lake access</li></ul>
+<ul data-bucket="DirectQuery"><li>Operational SQL Server data that must show changes within seconds</li><li>Data must not leave the source database</li></ul>
+<ul data-bucket="Dual"><li>Date dimension shared by an Import aggregate and a DirectQuery fact</li></ul>
+<ul data-bucket="Direct Lake"><li>2 billion-row gold Delta table in a lakehouse, near-import speed, no nightly copy</li><li>Model over tables from a lakehouse and a warehouse in OneLake</li></ul>
+</div>
+
+<div class="check" data-answer="2">
+<p>A Direct Lake on SQL endpoint model has a table based on a warehouse SQL view. Reports on it are slow and monitoring shows DirectQuery queries. You must keep the table in Direct Lake. What should you do?</p>
+<ul><li>Set Direct Lake behavior to DirectLakeOnly</li><li>Materialize the view's logic into a Delta table (e.g. CTAS) and base the model table on it</li><li>Change the table to Dual</li><li>Enable the large semantic model storage format</li></ul>
+<p class="why">Direct Lake reads Delta tables; a view always forces fallback in Direct Lake on SQL. DirectLakeOnly would just make the queries fail. Dual is not available for Direct Lake tables, and the large format has nothing to do with fallback.</p>
+</div>
+
+<h2>Composite models</h2>
+<ul>
+<li><strong>Mixed storage modes</strong>: e.g. a DirectQuery <code>Sales</code> detail table + an Import aggregation table + Dual dimensions. User-defined aggregations (Manage aggregations, <em>GroupBy</em> on grain columns, <em>Sum</em> etc. on values) answer summary queries from memory; detail falls through to DirectQuery. Not supported for Direct Lake tables.</li>
+<li><strong>DirectQuery to a published semantic model</strong> ("chaining"): in Desktop, connect live to a model and choose <em>Make changes to this model</em> → the remote model becomes a DirectQuery source and you can add local tables, measures, relationships. Needs the tenant setting <em>Allow DirectQuery connections to Power BI semantic models</em> and <strong>Build</strong> permission on the source model; the source model's RLS still applies to each user; maximum chain length is <strong>three</strong> models.</li>
+<li><strong>Direct Lake on OneLake + Import</strong>: in web modeling, use <em>OneLake catalog</em> to add Direct Lake tables to an Import model, or <em>Get data</em> to add Import tables (any Power Query connector) to a Direct Lake model.</li>
+<li><strong>Source groups</strong>: each remote source (and all local Import data together) forms a source group. Relationships that cross source groups are <strong>limited relationships</strong>.</li>
+</ul>
+
+<h3>Regular vs limited relationships</h3>
+<div class="tw"><table>
+<thead><tr><th></th><th>Regular</th><th>Limited</th></tr></thead>
+<tbody>
+<tr><td>When</td><td>One-to-many or one-to-one within the same source group (one side guaranteed unique)</td><td>Many-to-many cardinality, <strong>or</strong> the relationship crosses source groups</td></tr>
+<tr><td>Missing keys</td><td>Engine adds a <strong>blank row</strong> on the one side for unmatched fact keys</td><td>No blank row — unmatched rows are excluded (inner join semantics)</td></tr>
+<tr><td><code>RELATED()</code></td><td>Works</td><td>Doesn't work (use <code>LOOKUPVALUE</code>)</td></tr>
+<tr><td>Performance</td><td>Optimal (expanded tables)</td><td>Join computed at query time</td></tr>
+<tr><td>Diagram</td><td>Solid line</td><td>Line with gaps/parentheses marks</td></tr>
+</tbody>
+</table></div>
+
+<div class="check" data-answer="1">
+<p>In a composite model, why would you set a shared <code>Date</code> dimension to <strong>Dual</strong>?</p>
+<ul><li>So it can serve both Import aggregation queries from memory and DirectQuery joins in the source</li><li>To make relationships to the dimension bidirectional</li><li>To store the table both in OneLake and in the source</li><li>To allow incremental refresh of the dimension</li></ul>
+<p class="why">Dual lets the engine behave as Import or DirectQuery per query, avoiding limited relationships and unnecessary source queries.</p>
+</div>
+
+<h2>Star schema in the model</h2>
+<p>The VertiPaq engine and DAX are optimized for a <strong>star schema</strong>: narrow <strong>fact</strong> tables (keys + numeric measures at a declared grain, many rows) surrounded by denormalized <strong>dimension</strong> tables (descriptive attributes, fewer rows), related with <strong>one-to-many, single-direction</strong> relationships from dimension to fact on <strong>integer surrogate keys</strong>. Benefits: simpler DAX, predictable filter propagation, better compression, easier self-service. Snowflakes (Product → Subcategory → Category) should usually be flattened into one dimension.</p>
+<ul>
+<li>Fact tables answer "how much / how many"; dimensions answer "by what / who / when / where".</li>
+<li>Avoid one giant flat table (poor compression, ambiguous totals) and avoid fact-to-fact relationships (relate both facts to shared, conformed dimensions instead).</li>
+<li>Hide key columns and fact columns that are only used through measures.</li>
+<li>Unmatched fact keys go to the dimension's <strong>blank row</strong>: totals include them, but no listed member shows them — extend the dimension (e.g. date table covering all years) or map unknowns to an "Unknown" member.</li>
+</ul>
+
+<h3>Relationship properties</h3>
+<div class="tw"><table>
+<thead><tr><th>Property</th><th>Options</th><th>Guidance</th></tr></thead>
+<tbody>
+<tr><td>Cardinality</td><td><strong>One-to-many (1:*)</strong> / many-to-one, <strong>one-to-one (1:1)</strong>, <strong>many-to-many (*:*)</strong></td><td>1:* from dimension to fact is the norm. 1:1 often means two tables should be merged (cross-filter is always both). *:* creates a limited relationship — prefer a bridge table when modeling true many-to-many entities.</td></tr>
+<tr><td>Cross-filter direction</td><td><strong>Single</strong> (one side filters many side) / <strong>Both</strong></td><td>Default and recommended: Single. Both can cause <strong>ambiguous paths</strong>, unexpected filtering, slower queries, and interferes with RLS. Enable bidirectional behaviour per measure with <code>CROSSFILTER(…, BOTH)</code> instead.</td></tr>
+<tr><td>Active / inactive</td><td>Only <strong>one active</strong> path between two tables</td><td>Extra relationships (e.g. ShipDate) are inactive; activate in a measure with <code>USERELATIONSHIP</code>.</td></tr>
+<tr><td>Apply security filter in both directions</td><td>On a bidirectional relationship</td><td>Lets RLS propagate from the many side to the one side — use sparingly.</td></tr>
+<tr><td>Assume referential integrity</td><td>DirectQuery only</td><td>Generates INNER JOIN instead of OUTER JOIN — faster, but rows with missing keys disappear.</td></tr>
+</tbody>
+</table></div>
+
+<pre><code>-- Role-playing date: active relationship on OrderDateKey, inactive on ShipDateKey
+Sales by Ship Date =
+CALCULATE ( [Total Sales], USERELATIONSHIP ( Sales[ShipDateKey], 'Date'[DateKey] ) )
+
+-- Bidirectional only where needed: customers who bought the selected products
+Customers Buying Selected Products =
+CALCULATE (
+    DISTINCTCOUNT ( Sales[CustomerKey] ),
+    CROSSFILTER ( Sales[CustomerKey], Customer[CustomerKey], BOTH )
+)</code></pre>
+
+<h3>Role-playing dimensions</h3>
+<p>One dimension used in several roles (Order date, Ship date, Due date). Two options:</p>
+<ul>
+<li><strong>One table + inactive relationships + USERELATIONSHIP</strong> measures — fewer tables, but users can't slice by two roles at once with independent slicers.</li>
+<li><strong>Duplicate the dimension</strong> per role (e.g. <code>Order Date</code>, <code>Ship Date</code> as separate tables/views, or calculated tables in Import) — each with an active relationship; clearer for self-service, more memory.</li>
+</ul>
+
+<h3>Bridge tables for many-to-many</h3>
+<p>Example: a bank account can belong to several customers and a customer can own several accounts. Model: <code>DimCustomer 1─* BridgeCustomerAccount *─1 DimAccount 1─* FactBalance</code>. Filters must flow from the bridge to <code>DimAccount</code> — set that relationship to <strong>Both</strong> (or use <code>CROSSFILTER</code> in measures). Totals across customers are <strong>non-additive</strong> (a joint account counts once in the grand total but under each owner) — validate and document this.</p>
+
+<div class="diagram">
+<svg viewBox="0 0 720 150" role="img" aria-label="DimCustomer one-to-many to Bridge; DimAccount one-to-many to Bridge with bidirectional filter; DimAccount one-to-many to FactBalance.">
+<defs><marker id="a2" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto"><path d="M0,0 L10,5 L0,10 z" fill="currentColor"/></marker></defs>
+<g fill="none" stroke="currentColor" stroke-width="1.5">
+<rect x="10" y="50" width="130" height="50" rx="6"/>
+<rect x="200" y="50" width="160" height="50" rx="6"/>
+<rect x="420" y="50" width="130" height="50" rx="6"/>
+<rect x="600" y="50" width="110" height="50" rx="6"/>
+<path d="M140 75 H198" marker-end="url(#a2)"/>
+<path d="M420 70 H362" marker-end="url(#a2)"/>
+<path d="M362 82 H418" marker-end="url(#a2)" stroke-dasharray="4 3"/>
+<path d="M550 75 H598" marker-end="url(#a2)"/>
+</g>
+<g fill="currentColor" font-size="12" text-anchor="middle">
+<text x="75" y="80">DimCustomer</text>
+<text x="280" y="80">BridgeCustAccount</text>
+<text x="485" y="80">DimAccount</text>
+<text x="655" y="80">FactBalance</text>
+<text x="170" y="68" font-size="10">1 → *</text>
+<text x="390" y="62" font-size="10">1 → *</text>
+<text x="390" y="100" font-size="10">both</text>
+<text x="575" y="68" font-size="10">1 → *</text>
+<text x="360" y="135" font-size="11">Customer filter → bridge → (bidirectional) account → balances</text>
+</g>
+</svg>
+</div>
+
+<div class="match" data-task="Match each modeling problem to its fix.">
+<dl>
+<dt>Sales by ship date as well as order date, one Date table</dt><dd>Inactive relationship + USERELATIONSHIP in a measure</dd>
+<dt>Customers jointly own accounts</dt><dd>Bridge table between the two dimensions</dd>
+<dt>Count customers for selected products only in one measure</dt><dd>CROSSFILTER(..., BOTH) inside CALCULATE</dd>
+<dt>Customer slicer doesn't filter the sales visual</dt><dd>Check the relationship exists, is active and filters from dimension to fact</dd>
+<dt>Yearly values don't add up to the grand total</dt><dd>Extend the dimension so fact keys don't fall into the blank row</dd>
+<dt>Shared dimension between Import aggregates and a DirectQuery fact</dt><dd>Set the dimension's storage mode to Dual</dd>
+</dl>
+</div>
+
+<h2>Date table</h2>
+<ul>
+<li>Use one <strong>conformed date dimension</strong> (ideally built in the lakehouse/warehouse so every model and storage mode can use it) with Year, Quarter, Month, MonthNumber, Week, fiscal columns, IsWorkingDay, etc.</li>
+<li><strong>Mark as date table</strong> (Table tools → Mark as date table, pick the date column). The column must be of <em>date</em> type, <strong>unique</strong>, <strong>no blanks</strong>, <strong>no gaps</strong> (contiguous days); covering whole years is best practice. Marking lets time-intelligence functions work reliably even when relationships use an integer DateKey.</li>
+<li>Turn off <strong>Auto date/time</strong> (File → Options → Data load, for the current file and globally). It creates a hidden date table <em>per date column</em>, wasting memory and bypassing your conformed dimension. It's also not available for Direct Lake on SQL tables.</li>
+<li>Set <strong>Sort by column</strong> (MonthName by MonthNumber), hide the key, and build a Year → Quarter → Month → Date hierarchy.</li>
+</ul>
+
+<div class="check" data-answer="4">
+<p>Which statement about the Auto date/time option in an enterprise model is MOST accurate?</p>
+<ul><li>It should be enabled so that time-intelligence functions work</li><li>It only affects DirectQuery tables</li><li>It creates one shared date table for all date columns</li><li>It should be disabled, because it creates hidden date tables per date column and bypasses the conformed date dimension</li></ul>
+<p class="why">Auto date/time adds a hidden table for every date column. Use one marked date dimension instead; time intelligence works with it.</p>
+</div>
+
+<h2>Columns, measures and the field list</h2>
+<h3>Calculated columns vs measures</h3>
+<div class="tw"><table>
+<thead><tr><th></th><th>Calculated column</th><th>Measure</th></tr></thead>
+<tbody>
+<tr><td>Evaluated</td><td>At refresh, row by row (row context), stored</td><td>At query time, in the filter context of the visual</td></tr>
+<tr><td>Memory</td><td>Uses memory (compressed column)</td><td>None (only the formula)</td></tr>
+<tr><td>Use as axis/slicer/filter/relationship key</td><td>Yes</td><td>No (except via field parameters/visual filters)</td></tr>
+<tr><td>Responds to slicers</td><td>No (static)</td><td>Yes</td></tr>
+<tr><td>Typical use</td><td>Banding/categories, keys, attributes you slice by</td><td>Sums, ratios, KPIs, time intelligence</td></tr>
+<tr><td>Better alternative</td><td>Compute upstream (Power Query, SQL, Spark) — mandatory for Direct Lake on SQL</td><td>—</td></tr>
+</tbody>
+</table></div>
+<p>Rule: "Can I slice by it?" → column (preferably upstream). "Is it an aggregate that must react to filters?" → measure.</p>
+
+<h3>Implicit vs explicit measures</h3>
+<ul>
+<li><strong>Implicit</strong>: dragging a numeric column into a visual (Sum/Count/Average via <em>Summarize by</em>). <strong>Explicit</strong>: a DAX measure.</li>
+<li>Prefer explicit measures: they carry governed business logic, can be formatted, documented and reused, work in calculation groups and in Excel PivotTables (Analyze in Excel/MDX clients can't use implicit aggregations).</li>
+<li>Model property <strong>Discourage implicit measures</strong> stops report authors from aggregating columns directly. It's switched on automatically when you add a calculation group.</li>
+<li>Set <em>Summarize by = None</em> for numeric attributes like Year or keys.</li>
+</ul>
+
+<h3>Making the model friendly</h3>
+<ul>
+<li><strong>Hide</strong> keys and technical columns; <strong>descriptions</strong> on tables/columns/measures (shown as tooltips, used by Copilot/Q&amp;A).</li>
+<li><strong>Display folders</strong> group measures/columns (nest with <code>\</code>, e.g. <code>Sales\Time intelligence</code>); a dedicated, otherwise empty <em>measures table</em> is a common convention.</li>
+<li><strong>Hierarchies</strong>: an ordered drill path from columns of the <em>same table</em> (Category → Subcategory → Product); metadata only. (Not supported for Direct Lake tables in Excel/MDX clients.)</li>
+<li><strong>Data category</strong> (City, Country, Web URL, Image URL), <strong>Sort by column</strong>, consistent naming (business names, no prefixes like <code>dim_</code>).</li>
+<li><strong>Synonyms/linguistic schema</strong> help Q&amp;A and Copilot.</li>
+</ul>
+
+<h2>Field parameters, calculation groups, dynamic format strings</h2>
+<h3>Field parameters</h3>
+<p>Modeling → New parameter → <strong>Fields</strong>. Creates a calculated table listing fields (columns and/or measures); a slicer on it lets <em>report users switch the axis or value</em> of a visual (Product / Region / Channel, or Sales / Margin / Quantity). Supported in Import, DirectQuery and Direct Lake models.</p>
+<pre><code>Axis Selector = {
+    ( "Product", NAMEOF ( Product[Category] ), 0 ),
+    ( "Region",  NAMEOF ( Geography[Region] ), 1 ),
+    ( "Channel", NAMEOF ( Sales[Channel] ),    2 )
+}</code></pre>
+<h3>Calculation groups (intro)</h3>
+<p>A calculation group is a table whose <strong>calculation items</strong> rewrite whatever measure is in context via <code>SELECTEDMEASURE()</code>: e.g. items <em>Current</em>, <em>YTD</em>, <em>PY</em>, <em>YoY %</em> applied to 20 measures = 4 items instead of 80 measures. Created in Power BI Desktop model view, TMDL view or Tabular Editor (XMLA). Details and DAX patterns: <a href="12-dax.html">DAX for the exam</a>.</p>
+<h3>Dynamic format strings</h3>
+<p>A measure's <em>Format</em> can be set to <strong>Dynamic</strong>: a DAX expression returns the <em>format string</em>, while the value stays numeric (unlike <code>FORMAT()</code>, which returns text and breaks sorting/charts). Typical uses: currency symbol from a selected currency, K/M/B scaling, % vs absolute. Calculation items can also have a format string expression.</p>
+<pre><code>-- Format string expression of measure [Sales (selected currency)]
+SELECTEDVALUE ( Currency[FormatString], "#,0.00" )
+
+-- Scale to K / M
+VAR v = SELECTEDMEASURE ()            -- or [Total Sales] for a measure
+RETURN SWITCH ( TRUE (),
+    ABS ( v ) &gt;= 1E6, "#,0.0,,"" M""",     -- "" = escaped quote in DAX
+    ABS ( v ) &gt;= 1E3, "#,0.0,"" K""",
+    "#,0" )</code></pre>
+
+<div class="check" data-answer="3">
+<p>Report users must switch a chart's axis between Product, Region and Channel with a slicer, without bookmarks. What should you create?</p>
+<ul><li>A calculation group with three items</li><li>A hierarchy Product → Region → Channel</li><li>A field parameter</li><li>Three inactive relationships</li></ul>
+<p class="why">Field parameters let users choose which field a visual uses. Calculation groups modify measures, not axes; a hierarchy needs columns from one table and is a drill path, not a switch.</p>
+</div>
+
+<h2>Model size, perspectives, translations</h2>
+<h3>Large semantic model storage format</h3>
+<ul>
+<li>Required for an Import model to grow <strong>beyond 10 GB</strong> in the service; with it, the limit becomes the capacity's max memory (or the admin's <em>Max offline semantic model size</em>). The upload from Power BI Desktop is still limited to 10 GB — the model grows in the service through refresh (typically with incremental refresh).</li>
+<li>Recommended also for smaller models managed with <strong>XMLA write</strong> operations (partition refresh, deployments) — it improves XMLA write performance — and it is a prerequisite for <strong>query scale-out</strong>.</li>
+<li>Available on Fabric F SKUs, Premium P, Embedded A, PPU. Enable per model (Settings → Large semantic model storage format) or set it as the workspace's <em>Default storage format</em>. <strong>Don't assume it is on</strong>: check the model setting (many capacity workspaces now default to it, but it is a setting).</li>
+<li>Comes with on-demand load (pages of data loaded as needed) and an 8-million-row default segment size.</li>
+</ul>
+<h3>Perspectives</h3>
+<p>A <strong>perspective</strong> is a named subset of tables/columns/measures to simplify the field list for an audience (finance vs operations) in one governed model. It is <strong>not security</strong> — hidden objects are still queryable. Created with Tabular Editor or TMDL; used in Power BI for <em>personalize visuals</em> and by clients that support perspectives.</p>
+<h3>Translations</h3>
+<p><strong>Metadata translations</strong> (object captions, descriptions, display folders) per culture, defined with Tabular Editor/TMDL or Translations Builder. The service shows them according to the user's language setting; Desktop shows the default culture. Data values aren't translated (use translated columns/tables for that).</p>
+<h3>Security reminders (details in <a href="02-security-governance.html">Security &amp; governance</a>)</h3>
+<ul>
+<li>RLS filters rows via roles (filters propagate one-side → many-side), OLS hides tables/columns from metadata. Members with write access (Admin/Member/Contributor) are not restricted by RLS.</li>
+<li>Bidirectional relationships and RLS: use <em>Apply security filter in both directions</em> only when required.</li>
+</ul>
+
+<h2>Semantic model settings in the service</h2>
+<div class="tw"><table>
+<thead><tr><th>Setting</th><th>What to know</th></tr></thead>
+<tbody>
+<tr><td>Data source credentials / gateway connection</td><td>Map sources to cloud connections or an on-premises/VNet data gateway (needed for on-premises/private sources with Import/DQ; never for Direct Lake). Use a service principal or shared connection, not a personal account.</td></tr>
+<tr><td>Scheduled refresh</td><td>Up to <strong>8 per day</strong> on shared (Pro) capacity, <strong>48 per day</strong> on Fabric/Premium capacity; more via API/pipeline. Better: trigger a <em>Semantic model refresh</em> activity after the load in a pipeline.</td></tr>
+<tr><td>Refresh failure notifications</td><td>Send to the owner <em>and</em> other contacts (a monitored group mailbox).</td></tr>
+<tr><td>Take over</td><td>New owner takes ownership (and must re-enter credentials) when the original owner leaves.</td></tr>
+<tr><td>Incremental refresh / real-time (hybrid)</td><td>Defined in Desktop (RangeStart/RangeEnd, must fold); hybrid table adds a DirectQuery partition for the latest data.</td></tr>
+<tr><td>Direct Lake: Keep data up to date</td><td>Automatic updates (reframing when Delta tables change) on/off.</td></tr>
+<tr><td>Q&amp;A</td><td>Can be turned off per model; when on, linguistic schema/synonyms improve answers.</td></tr>
+<tr><td>Large semantic model storage format, query caching, query scale-out</td><td>Capacity features; query caching speeds up the initial load of popular reports at the cost of memory.</td></tr>
+<tr><td>Endorsement &amp; discovery</td><td><strong>Promoted</strong> (anyone with write permission), <strong>Certified</strong> (only security groups named by the Fabric admin in tenant settings), <strong>Master data</strong> (for core reference data items). Mark as discoverable so users can request access in the OneLake catalog.</td></tr>
+<tr><td>Sensitivity label</td><td>Purview label; inherited downstream (reports, exports); encryption travels with exports.</td></tr>
+<tr><td>Permissions</td><td><strong>Read</strong> (view reports), <strong>Build</strong> (create reports, Analyze in Excel, composite on top), <strong>Write</strong> (edit), Reshare.</td></tr>
+</tbody>
+</table></div>
+
+<div class="check" data-answer="2">
+<p>You have Write permission on a semantic model but are not in any security group listed in the endorsement tenant settings. Which endorsement can you apply?</p>
+<ul><li>Certified, because Write permission includes certification</li><li>Promoted</li><li>Master data</li><li>None — only Fabric administrators can endorse content</li></ul>
+<p class="why">Any user with write permission can promote. Certification (and master data) is limited to people the Fabric administrator designates in tenant settings.</p>
+</div>
+
+<h2>Where to model: Desktop, web, TMDL view, external tools</h2>
+<div class="tw"><table>
+<thead><tr><th>Tool</th><th>Strengths</th><th>Notes</th></tr></thead>
+<tbody>
+<tr><td><strong>Power BI Desktop</strong></td><td>Full modeling, Power Query, DAX query view, TMDL view, PBIP/Git</td><td>Create Direct Lake on OneLake models from the OneLake catalog; <strong>live edit</strong> published Direct Lake/composite models</td></tr>
+<tr><td><strong>Web modeling</strong> (Open data model / Edit in the service)</td><td>Relationships, measures, calculated columns/tables, RLS, display folders, hierarchies, Power Query for Import, add Direct Lake tables from the OneLake catalog, version history</td><td>Requires workspace setting <em>Users can edit data models in the Power BI service</em> and Write permission. Validation for Direct Lake relationships is limited (no cardinality check queries).</td></tr>
+<tr><td><strong>TMDL view</strong> (Desktop)</td><td>Script any object as TMDL (drag from Data pane), edit in a code editor, <strong>Apply</strong>; bulk changes, copy objects between models</td><td>Scripts saved in PBIP <code>TMDLScripts</code> folder; applying metadata doesn't refresh data</td></tr>
+<tr><td><strong>Tabular Editor / SSMS / ALM Toolkit</strong> via XMLA</td><td>Calculation groups, perspectives, translations, partitions, BPA rules, deployment</td><td>XMLA read-write enabled on the capacity; large model format recommended</td></tr>
+<tr><td>Fabric notebook (semantic link labs)</td><td>Programmatic model creation/changes, e.g. Direct Lake migration</td><td>Python, TOM wrapper</td></tr>
+</tbody>
+</table></div>
+<pre><code>// TMDL view: a measure with folder, description and format
+createOrReplace
+	ref table Sales
+		/// Total sales amount in local currency
+		measure 'Total Sales' = SUM ( Sales[SalesAmount] )
+			formatString: #,0
+			displayFolder: Base measures</code></pre>
+
+<div class="order" data-task="Order the steps to build a Direct Lake + Import composite model in the web.">
+<ol>
+<li>From the lakehouse, create a new semantic model and select the gold Delta tables (Direct Lake)</li>
+<li>Open the model in web modeling and choose Get data to add an Import table from an Excel budget file</li>
+<li>Set the credentials of the new Import source in the model settings and refresh</li>
+<li>Create relationships from the dimensions to the budget table</li>
+<li>Add explicit measures, display folders, and hide key columns</li>
+</ol>
+</div>
+
+<div class="reveal">
+<p><strong>Scenario.</strong> A company has a 3-billion-row <code>FactSales</code> Delta table and conformed dimensions in a gold lakehouse (F64), a small budget Excel file maintained by finance on SharePoint, and an on-premises SQL Server with live inventory levels that must be current to the minute. Requirements: one model for all; sales by order date and by ship date; finance wants a currency selector with correct currency symbols; report authors must only use governed measures; analysts in another workspace want to extend the model with their own tables. Design it.</p>
+<div class="answer">
+<ul>
+<li><strong>Sales and dimensions:</strong> Direct Lake on OneLake (large, already Delta, near-import speed; supports composite with Import). Direct Lake on SQL could not be combined with other storage modes in the same model.</li>
+<li><strong>Budget:</strong> Import table added through Get data (Power Query) in web modeling — composite Direct Lake + Import.</li>
+<li><strong>Live inventory:</strong> needs DirectQuery through a gateway. Direct Lake on OneLake + DirectQuery can be combined only with XMLA tools and Direct Lake can't use a gateway, so the cleaner options are: replicate inventory into OneLake (mirroring/eventstream) and read it via Direct Lake, or build a separate DirectQuery model / composite on top. Discussing this trade-off is the point.</li>
+<li><strong>Dates:</strong> one marked date table, active relationship on OrderDateKey, inactive on ShipDateKey, measure with <code>USERELATIONSHIP</code>. Auto date/time off.</li>
+<li><strong>Currency:</strong> dynamic format string from a Currency table (<code>SELECTEDVALUE(Currency[FormatString])</code>) — values stay numeric.</li>
+<li><strong>Governed measures:</strong> explicit measures in display folders, <em>Discourage implicit measures</em>, hide numeric fact columns, certify the model.</li>
+<li><strong>Extension by analysts:</strong> grant <strong>Build</strong>; they create a composite model with DirectQuery to the published model (tenant setting enabled), RLS of the source still applies.</li>
+</ul>
+</div>
+</div>
+
+<div class="check" data-answer="1">
+<p>Which statement about relationships in a star schema is MOST accurate?</p>
+<ul><li>Dimension-to-fact relationships should be one-to-many with single-direction filtering by default</li><li>All relationships should be bidirectional so slicers always work</li><li>Fact tables should be related directly to each other on shared keys</li><li>Many-to-many cardinality is preferred because it avoids blank rows</li></ul>
+<p class="why">1:* from the dimension with single direction is the pattern the engine optimizes and the easiest to reason about. Bidirectional everywhere creates ambiguity and cost; facts should share dimensions, not relate to each other.</p>
+</div>
+
+<div class="check" data-answer="3">
+<p>When should you enable the large semantic model storage format?</p>
+<ul><li>Only for DirectQuery models over 1 TB</li><li>Whenever a model uses Direct Lake</li><li>When an Import model must grow beyond 10 GB, or when you manage the model with XMLA write operations</li><li>To allow the model to be edited in the web</li></ul>
+<p class="why">The format is required beyond 10 GB and recommended for XMLA-based write operations. It is unrelated to Direct Lake and web editing.</p>
+</div>
+
+<h2>Key takeaways &amp; exam tips</h2>
+<ul>
+<li><strong>Import</strong> = speed + flexibility, data copy and refresh; <strong>DirectQuery</strong> = real-time/source-resident, slower; <strong>Dual</strong> = shared dimensions in composite models; <strong>Direct Lake</strong> = Delta in OneLake, framing instead of copy, Fabric capacity, prepare data upstream.</li>
+<li><strong>Direct Lake on OneLake</strong>: multiple items, composite with Import, no fallback (fails on guardrails), no SQL views, SQL-endpoint RLS not applied. <strong>Direct Lake on SQL endpoint</strong>: one item, views/SQL security → DirectQuery fallback, controlled by <em>Direct Lake behavior</em>.</li>
+<li>Composite on a published model needs <strong>Build</strong>, the tenant setting, max chain of 3; source RLS still applies. Cross-source-group and many-to-many relationships are <strong>limited</strong> (no blank row, no RELATED).</li>
+<li>Star schema: 1:* single-direction from dimension to fact, integer surrogate keys, flattened dimensions, no fact-to-fact relationships.</li>
+<li>One active relationship between two tables; <code>USERELATIONSHIP</code> for role-playing dates (or duplicate the dimension for independent slicers). <code>CROSSFILTER(…, BOTH)</code> in a measure beats a model-wide bidirectional relationship.</li>
+<li>Many-to-many entities → <strong>bridge table</strong> with controlled bidirectional filtering; totals are non-additive.</li>
+<li>Mark a date table (unique, no blanks, contiguous); turn Auto date/time off.</li>
+<li>Calculated column = static, sliceable, uses memory (prefer upstream); measure = dynamic aggregate. Prefer explicit measures; set <strong>Discourage implicit measures</strong>.</li>
+<li>Field parameters switch fields in visuals; calculation groups apply logic to any measure via <code>SELECTEDMEASURE()</code>; dynamic format strings change formatting while keeping numbers numeric.</li>
+<li>Large model format: &gt; 10 GB, XMLA writes, scale-out. Perspectives = convenience, not security. Translations = metadata per culture.</li>
+<li>Service settings: credentials/gateway, scheduled refresh (8/day Pro, 48/day capacity), failure notification contacts, Q&amp;A, endorsement (Promoted by writers, Certified by designated groups), sensitivity labels, Build permission.</li>
+<li>Edit in Desktop, web modeling (workspace setting + Write), <strong>TMDL view</strong> for scripted changes, Tabular Editor via XMLA for calculation groups/perspectives/translations.</li>
+</ul>
+<p>Next: <a href="11-direct-lake.html">Direct Lake in depth</a>. Related: <a href="12-dax.html">DAX for the exam</a>, <a href="13-performance.html">Performance &amp; enterprise-scale models</a>, <a href="07-transform-data.html">Transform data: star schema</a>.</p>
+</main>
+<script src="assets/app.js"></script>
+</body>
+</html>

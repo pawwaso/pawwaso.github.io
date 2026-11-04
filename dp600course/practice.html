@@ -1,0 +1,295 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Practice questions – DP-600</title>
+<link rel="stylesheet" href="assets/style.css">
+<style>
+  .setup label { display: block; margin: 8px 0 3px; font-weight: 600; }
+  .setup select { font: inherit; padding: 5px 8px; border: 1px solid var(--line); border-radius: 6px; background: var(--bg); color: var(--fg); min-width: 260px; max-width: 100%; }
+  .row { display: flex; gap: 18px; flex-wrap: wrap; }
+  .qhead { display: flex; gap: 10px; flex-wrap: wrap; align-items: center; font-size: .9em; color: var(--muted); }
+  .qhead .spacer { flex: 1; }
+  .qtext { font-size: 1.08em; font-weight: 600; margin: 10px 0 12px; white-space: pre-line; }
+  .opt { display: flex; gap: 10px; width: 100%; text-align: left; margin: 7px 0; padding: 9px 12px; line-height: 1.45; }
+  .opt .l { font-weight: 700; }
+  .opt.chosen { border-color: var(--accent); background: var(--accent-soft); }
+  .opt.right { border-color: var(--ok); background: var(--ok-soft); }
+  .opt.wrong { border-color: var(--bad); background: var(--bad-soft); }
+  .just { margin-top: 12px; }
+  .just p { margin: 5px 0; padding: 6px 10px; border-radius: 6px; background: var(--soft); }
+  .just p.c { background: var(--ok-soft); }
+  .nav { display: flex; gap: 8px; flex-wrap: wrap; margin-top: 14px; align-items: center; }
+  .grid { display: flex; flex-wrap: wrap; gap: 4px; margin: 10px 0; }
+  .grid button { width: 38px; padding: 4px 0; font-size: .85em; }
+  .grid button.ans { background: var(--accent-soft); border-color: var(--accent); }
+  .grid button.cur { outline: 2px solid var(--accent); }
+  .grid button.flag { box-shadow: inset 0 -3px 0 var(--warn); }
+  .grid button.right { background: var(--ok-soft); border-color: var(--ok); }
+  .grid button.wrong { background: var(--bad-soft); border-color: var(--bad); }
+  .timer { font-weight: 700; font-variant-numeric: tabular-nums; }
+  .timer.low { color: var(--bad); }
+  .big { font-size: 2em; font-weight: 700; }
+</style>
+</head>
+<body>
+<main data-notoc>
+<h1>Practice questions &amp; exam simulation</h1>
+<p class="lead">300 exam-style questions with explanations for every option. Use <strong>Practice</strong> mode to learn (you get feedback after each question) and <strong>Exam simulation</strong> to test yourself under time pressure (results at the end).</p>
+
+<section id="setup" class="widget setup">
+  <div class="wtitle">Start a session</div>
+  <div class="row">
+    <div>
+      <label for="mode">Mode</label>
+      <select id="mode">
+        <option value="practice">Practice (feedback after each question)</option>
+        <option value="exam">Exam simulation (timed, results at the end)</option>
+      </select>
+    </div>
+    <div>
+      <label for="topic">Topic</label>
+      <select id="topic"><option value="">All topics</option></select>
+    </div>
+  </div>
+  <div class="row">
+    <div>
+      <label for="pool">Questions</label>
+      <select id="pool">
+        <option value="all">All questions</option>
+        <option value="new">Not attempted yet</option>
+        <option value="wrong">Answered wrong last time</option>
+        <option value="flag">Flagged by me</option>
+      </select>
+    </div>
+    <div>
+      <label for="count">Number of questions</label>
+      <select id="count">
+        <option value="10">10</option>
+        <option value="20" selected>20</option>
+        <option value="50">50 (exam length)</option>
+        <option value="100">100</option>
+        <option value="9999">All matching</option>
+      </select>
+    </div>
+    <div>
+      <label for="order">Order</label>
+      <select id="order"><option value="rand">Random</option><option value="seq">By question number</option></select>
+    </div>
+  </div>
+  <p id="avail" class="muted"></p>
+  <div class="controls"><button id="start" class="primary">Start</button><span class="muted">Exam simulation: 2 minutes per question, pass mark 70%.</span></div>
+</section>
+
+<section id="stats" class="muted"></section>
+
+<section id="session" hidden>
+  <div class="qhead">
+    <span id="qpos"></span><span id="qtopic"></span><span class="spacer"></span>
+    <span id="timer" class="timer"></span><span id="score"></span>
+  </div>
+  <div id="grid" class="grid"></div>
+  <div class="widget">
+    <div id="qtext" class="qtext"></div>
+    <div id="opts"></div>
+    <div id="just" class="just"></div>
+    <div class="nav">
+      <button id="prevq">&larr; Previous</button>
+      <button id="nextq" class="primary">Next &rarr;</button>
+      <button id="flagq">Flag</button>
+      <span class="spacer" style="flex:1"></span>
+      <button id="finish">Finish</button>
+    </div>
+    <p id="confirm" class="muted"></p>
+  </div>
+</section>
+
+<section id="results" hidden></section>
+</main>
+<script src="data/questions.js"></script>
+<script src="data/question-topics.js"></script>
+<script src="assets/app.js"></script>
+<script>
+(function () {
+  var D = window.DP600, Q = window.questions || [], T = window.questionTopics || {};
+  var pages = {}; (window.DP600_PAGES || []).forEach(function (p) { var k = p.file.slice(0, 2); if (/^\d\d$/.test(k)) pages[k] = p; });
+  var $ = function (id) { return document.getElementById(id); };
+  var stats = D.load('qstats', {}), flags = D.load('flags', {});
+
+  // topic select
+  var tc = {}; Q.forEach(function (q) { var t = T[q.id]; if (t) tc[t] = (tc[t] || 0) + 1; });
+  Object.keys(pages).sort().forEach(function (k) {
+    if (!tc[k]) return;
+    var o = D.el('option', null, pages[k].title + ' (' + tc[k] + ')'); o.value = k; $('topic').appendChild(o);
+  });
+  if (!Object.keys(T).length) $('topic').disabled = true;
+
+  function matching() {
+    var tp = $('topic').value, pool = $('pool').value;
+    return Q.filter(function (q) {
+      if (tp && T[q.id] !== tp) return false;
+      var s = stats[q.id];
+      if (pool === 'new') return !s;
+      if (pool === 'wrong') return s && !s.last;
+      if (pool === 'flag') return !!flags[q.id];
+      return true;
+    });
+  }
+  function showAvail() { $('avail').textContent = matching().length + ' questions match these filters.'; }
+  ['topic', 'pool'].forEach(function (id) { $(id).onchange = showAvail; });
+  function showStats() {
+    var ids = Object.keys(stats), ok = ids.filter(function (k) { return stats[k].last; }).length;
+    var ex = D.load('exams', []);
+    var t = 'Your history: ' + ids.length + ' of ' + Q.length + ' questions attempted, ' + ok + ' correct on the last attempt, ' + Object.keys(flags).length + ' flagged.';
+    if (ex.length) t += ' Exam simulations: ' + ex.slice(-5).map(function (e) { return e.pct + '%'; }).join(', ') + ' (most recent last).';
+    $('stats').textContent = t;
+  }
+  showAvail(); showStats();
+
+  // session state
+  var S = null, timerId = null;
+  $('start').onclick = function () {
+    var list = matching();
+    if (!list.length) { $('avail').textContent = 'No questions match these filters.'; return; }
+    if ($('order').value === 'rand') list = D.shuffle(list);
+    list = list.slice(0, +$('count').value);
+    S = { mode: $('mode').value, qs: list, i: 0, ans: {}, checked: {}, end: null };
+    if (S.mode === 'exam') S.end = Date.now() + list.length * 120000;
+    $('setup').hidden = true; $('stats').hidden = true; $('results').hidden = true; $('session').hidden = false;
+    $('grid').hidden = S.mode !== 'exam';
+    if (timerId) clearInterval(timerId);
+    if (S.end) { timerId = setInterval(tick, 1000); tick(); } else $('timer').textContent = '';
+    render();
+  };
+  function tick() {
+    var ms = S.end - Date.now();
+    if (ms <= 0) { clearInterval(timerId); finish(); return; }
+    var m = Math.floor(ms / 60000), s = Math.floor(ms / 1000) % 60;
+    $('timer').textContent = 'Time left ' + m + ':' + (s < 10 ? '0' : '') + s;
+    $('timer').className = 'timer' + (ms < 300000 ? ' low' : '');
+  }
+  function letterOf(i) { return 'ABCD'[i]; }
+  function stripLetter(t) { return t.replace(/^[a-dA-D]\)\s*/, ''); }
+
+  function render() {
+    var q = S.qs[S.i], a = S.ans[q.id], checked = S.checked[q.id];
+    $('confirm').textContent = '';
+    $('qpos').textContent = 'Question ' + (S.i + 1) + ' of ' + S.qs.length + ' · #' + q.id + ' · ' + q.k_level;
+    var tp = pages[T[q.id]]; $('qtopic').innerHTML = '';
+    if (tp && (S.mode === 'practice' || checked)) { var l = D.el('a', null, tp.title); l.href = tp.file; l.target = '_blank'; $('qtopic').appendChild(l); }
+    if (S.mode === 'practice') {
+      var c = 0, n = 0; S.qs.forEach(function (x) { if (S.checked[x.id]) { n++; if (S.ans[x.id] === x.correct_answer) c++; } });
+      $('score').textContent = 'Score ' + c + ' / ' + n;
+    } else $('score').textContent = Object.keys(S.ans).length + ' answered';
+    $('qtext').textContent = q.question;
+    var box = $('opts'); box.innerHTML = '';
+    q.options.forEach(function (o, i) {
+      var L = letterOf(i), b = D.el('button', 'opt');
+      b.appendChild(D.el('span', 'l', L)); b.appendChild(D.el('span', null, stripLetter(o)));
+      if (checked) { if (L === q.correct_answer) b.classList.add('right'); else if (L === a) b.classList.add('wrong'); }
+      else if (L === a) b.classList.add('chosen');
+      b.onclick = function () { choose(q, L); };
+      box.appendChild(b);
+    });
+    var j = $('just'); j.innerHTML = '';
+    if (checked) {
+      j.appendChild(D.el('p', null, a === q.correct_answer ? '✓ Correct.' : '✗ Incorrect. The correct answer is ' + q.correct_answer + '.'));
+      ['a', 'b', 'c', 'd'].forEach(function (k) {
+        if (!q.justification[k]) return;
+        var p = D.el('p', k.toUpperCase() === q.correct_answer ? 'c' : '', k.toUpperCase() + ': ' + q.justification[k]); j.appendChild(p);
+      });
+    }
+    $('prevq').disabled = S.i === 0;
+    $('nextq').textContent = S.i === S.qs.length - 1 ? 'Finish' : 'Next →';
+    $('flagq').textContent = flags[q.id] ? '⚑ Flagged' : 'Flag';
+    $('finish').hidden = S.mode !== 'exam' || !!S.done;
+    renderGrid();
+  }
+  function renderGrid() {
+    if (S.mode !== 'exam') return;
+    var g = $('grid'); g.innerHTML = '';
+    S.qs.forEach(function (q, i) {
+      var b = D.el('button', null, String(i + 1));
+      if (S.done) b.classList.add(S.ans[q.id] === q.correct_answer ? 'right' : 'wrong');
+      else if (S.ans[q.id]) b.classList.add('ans');
+      if (flags[q.id]) b.classList.add('flag');
+      if (i === S.i) b.classList.add('cur');
+      b.onclick = function () { S.i = i; render(); };
+      g.appendChild(b);
+    });
+  }
+  function record(q, ok) {
+    var s = stats[q.id] || { seen: 0, right: 0 };
+    s.seen++; if (ok) s.right++; s.last = ok; stats[q.id] = s; D.save('qstats', stats);
+  }
+  function choose(q, L) {
+    if (S.checked[q.id]) return;
+    S.ans[q.id] = L;
+    if (S.mode === 'practice') { S.checked[q.id] = true; record(q, L === q.correct_answer); }
+    render();
+  }
+  $('prevq').onclick = function () { if (S.i > 0) { S.i--; render(); } };
+  $('nextq').onclick = function () {
+    if (S.i < S.qs.length - 1) { S.i++; render(); return; }
+    if (S.mode === 'exam' && !S.done) askFinish(); else finish();
+  };
+  $('flagq').onclick = function () { var id = S.qs[S.i].id; if (flags[id]) delete flags[id]; else flags[id] = 1; D.save('flags', flags); render(); };
+  var armed = false;
+  function askFinish() {
+    var left = S.qs.length - Object.keys(S.ans).length;
+    if (!armed) { armed = true; $('confirm').textContent = (left ? left + ' question(s) unanswered. ' : '') + 'Click Finish again to submit the exam.'; setTimeout(function () { armed = false; }, 6000); return; }
+    armed = false; finish();
+  }
+  $('finish').onclick = askFinish;
+
+  function finish() {
+    if (timerId) { clearInterval(timerId); timerId = null; }
+    var exam = S.mode === 'exam';
+    if (exam && !S.done) { S.qs.forEach(function (q) { S.checked[q.id] = true; record(q, S.ans[q.id] === q.correct_answer); }); S.done = true; }
+    var n = 0, c = 0, byT = {};
+    S.qs.forEach(function (q) {
+      if (!S.checked[q.id]) return; n++;
+      var ok = S.ans[q.id] === q.correct_answer; if (ok) c++;
+      var t = T[q.id] || '?'; byT[t] = byT[t] || [0, 0]; byT[t][1]++; if (ok) byT[t][0]++;
+    });
+    var pct = n ? Math.round(100 * c / n) : 0;
+    if (exam) { var ex = D.load('exams', []); ex.push({ date: new Date().toISOString(), n: S.qs.length, pct: Math.round(100 * c / S.qs.length) }); D.save('exams', ex); pct = Math.round(100 * c / S.qs.length); n = S.qs.length; }
+    var R = $('results'); R.innerHTML = ''; R.hidden = false;
+    var w = D.el('div', 'widget'); w.appendChild(D.el('div', 'wtitle', exam ? 'Exam simulation result' : 'Practice session result'));
+    w.appendChild(D.el('div', 'big ' + (pct >= 70 ? 'result ok' : 'result bad'), pct + '%'));
+    w.appendChild(D.el('p', null, c + ' of ' + n + ' correct.' + (exam ? (pct >= 70 ? ' Pass (70% or more). The real exam scales scores, so aim for 80% or more.' : ' Below the 70% pass mark.') : '')));
+    var tw = D.el('div', 'tw'), tb = D.el('table'); tw.appendChild(tb);
+    var hr = D.el('tr'); ['Topic', 'Correct', '%'].forEach(function (h) { hr.appendChild(D.el('th', null, h)); }); tb.appendChild(hr);
+    Object.keys(byT).sort().forEach(function (k) {
+      var tr = D.el('tr'), td = D.el('td'), p = pages[k];
+      if (p) { var a = D.el('a', null, p.title); a.href = p.file; td.appendChild(a); } else td.textContent = 'Other';
+      tr.appendChild(td); tr.appendChild(D.el('td', null, byT[k][0] + ' / ' + byT[k][1])); tr.appendChild(D.el('td', null, Math.round(100 * byT[k][0] / byT[k][1]) + '%'));
+      tb.appendChild(tr);
+    });
+    w.appendChild(tw);
+    var ctl = D.el('div', 'controls');
+    if (exam) { var rv = D.el('button', null, 'Review answers'); rv.onclick = function () { R.hidden = true; $('session').hidden = false; S.i = 0; render(); }; ctl.appendChild(rv); }
+    var wrong = S.qs.filter(function (q) { return S.checked[q.id] && S.ans[q.id] !== q.correct_answer; });
+    if (wrong.length) {
+      var rw = D.el('button', null, 'Practice the ' + wrong.length + ' wrong ones');
+      rw.onclick = function () { S = { mode: 'practice', qs: wrong, i: 0, ans: {}, checked: {} }; $('grid').hidden = true; $('timer').textContent = ''; R.hidden = true; $('session').hidden = false; render(); };
+      ctl.appendChild(rw);
+    }
+    var nw = D.el('button', 'primary', 'New session'); nw.onclick = function () { location.reload(); }; ctl.appendChild(nw);
+    w.appendChild(ctl);
+    R.appendChild(w);
+    $('session').hidden = true;
+    R.scrollIntoView();
+  }
+  document.addEventListener('keydown', function (e) {
+    if (!S || $('session').hidden || /SELECT|INPUT/.test(e.target.tagName)) return;
+    var k = e.key.toUpperCase();
+    if ('ABCD'.indexOf(k) >= 0 && k.length === 1) choose(S.qs[S.i], k);
+    else if (e.key === 'ArrowRight') $('nextq').click();
+    else if (e.key === 'ArrowLeft') $('prevq').click();
+  });
+})();
+</script>
+</body>
+</html>

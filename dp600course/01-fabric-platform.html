@@ -1,0 +1,355 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Fabric platform: OneLake, capacities, workspaces – DP-600</title>
+<link rel="stylesheet" href="assets/style.css">
+</head>
+<body>
+<main>
+<h1>Fabric platform: OneLake, capacities, workspaces</h1>
+<p class="lead">The foundation every DP-600 question assumes: Fabric as a SaaS platform, its workloads, OneLake, which data store to choose,
+capacities and F SKUs (CUs, bursting, smoothing, throttling, pause/resume), licensing, the tenant → capacity → workspace → item hierarchy,
+domains, regions, the admin portal and workspace settings. Maps mainly to "Choose between a lakehouse, warehouse, or eventhouse" and to the
+platform knowledge behind Domain 1.</p>
+
+<h2>Fabric as a SaaS platform</h2>
+<p>Microsoft Fabric is an end-to-end analytics platform delivered as <strong>Software as a Service</strong>. You don't deploy clusters,
+storage accounts or servers: you buy (or try) a <strong>capacity</strong>, create <strong>workspaces</strong> on it and create
+<strong>items</strong> (lakehouse, warehouse, notebook, pipeline, semantic model, report…) inside the workspaces. All items share
+<strong>one data lake (OneLake)</strong>, <strong>one compute currency (capacity units)</strong>, one identity system (Microsoft Entra ID)
+and one governance layer (admin portal, Microsoft Purview integration).</p>
+
+<div class="tw"><table>
+<tr><th>SaaS characteristic</th><th>What it means in practice</th></tr>
+<tr><td>Fully managed compute</td><td>Spark pools, SQL engines, the KQL engine and the Analysis Services engine are provisioned for you; you only pick sizes/settings.</td></tr>
+<tr><td>Storage included</td><td>OneLake is provisioned automatically – no storage account to create. Storage is billed separately per GB used.</td></tr>
+<tr><td>Shared capacity model</td><td>Every workload consumes CUs from the capacity the workspace is assigned to.</td></tr>
+<tr><td>Centralized governance</td><td>Tenant settings, domains, sensitivity labels, endorsement, lineage and audit apply across all workloads.</td></tr>
+<tr><td>Open format</td><td>Tabular data is stored as <strong>Delta Parquet</strong>, so every engine can read the same copy ("OneCopy").</td></tr>
+</table></div>
+
+<h3>Workloads (experiences)</h3>
+<div class="tw"><table>
+<tr><th>Workload</th><th>Main items</th><th>Typical DP-600 use</th></tr>
+<tr><td>Data Factory</td><td>Pipelines, Copy job, Dataflow Gen2, mirroring</td><td>Orchestration and low/no-code ingestion and transformation</td></tr>
+<tr><td>Data Engineering</td><td>Lakehouse, notebook, Spark job definition, environment</td><td>Spark-based ingestion and transformation, Delta tables</td></tr>
+<tr><td>Data Warehouse</td><td>Warehouse, SQL analytics endpoint</td><td>T-SQL modeling, stored procedures, star schemas</td></tr>
+<tr><td>Real-Time Intelligence</td><td>Eventstream, eventhouse/KQL database, KQL queryset, Real-Time dashboard, Activator, Real-Time hub</td><td>Streaming telemetry, logs, KQL analytics, alerts</td></tr>
+<tr><td>Databases</td><td>SQL database in Fabric (and other operational databases)</td><td>OLTP workloads automatically replicated to OneLake</td></tr>
+<tr><td>Data Science</td><td>ML model, experiment, notebook, Fabric data agent</td><td>ML and AI scenarios (light on DP-600)</td></tr>
+<tr><td>Power BI</td><td>Semantic model, report, dashboard, paginated report, app</td><td>Semantic models (Direct Lake, Import, DirectQuery), reporting</td></tr>
+</table></div>
+<p>Copilot and the <strong>Fabric data agent</strong> (formerly AI skill) sit across workloads. Microsoft keeps adding workloads
+(for example the Fabric IQ family and partner workloads from the Workload Hub); the exam focuses on the ones above.</p>
+
+<h2>OneLake</h2>
+<p><strong>OneLake</strong> is the single, unified, logical data lake for the whole organization – "OneDrive for data".</p>
+<ul>
+<li><strong>Exactly one OneLake per tenant</strong>, provisioned automatically when Fabric is enabled; nothing to create or license separately.</li>
+<li>Built on <strong>Azure Data Lake Storage (ADLS) Gen2</strong> and compatible with its <strong>APIs and SDKs</strong> (DFS/Blob endpoints), so tools such as Azure Storage Explorer, Azure Databricks, Synapse or AzCopy can read/write it with Entra ID authentication.</li>
+<li>Hierarchy: <strong>tenant (OneLake) → workspace (container) → item → folders/files/tables</strong>. Each workspace behaves like an ADLS container; each data item is a folder.</li>
+<li>Tabular data is stored in <strong>Delta Lake format (Parquet files + transaction log)</strong>, typically V-Order optimized. Warehouse, lakehouse, mirrored databases, SQL databases and (optionally) eventhouses all land Delta tables in OneLake.</li>
+<li><strong>OneCopy</strong>: Spark, T-SQL, KQL and Direct Lake read the <em>same</em> physical copy – no export between engines.</li>
+<li><strong>Shortcuts</strong> virtualize data from other OneLake locations, ADLS Gen2, Amazon S3 (and S3-compatible), Google Cloud Storage, Dataverse and more without copying (details on <a href="04-get-data.html">Get data</a>).</li>
+<li>Security in two planes: control plane (workspace roles, item permissions) and data plane (<strong>OneLake security</strong> roles) – see <a href="02-security-governance.html">Security &amp; governance</a>.</li>
+<li>Storage is billed per GB-month (pay as you go), independently of the capacity size; data stays when a capacity is paused.</li>
+</ul>
+
+<pre><code>https://onelake.dfs.fabric.microsoft.com/&lt;workspace&gt;/&lt;item&gt;.&lt;itemtype&gt;/Files/raw/sales.csv
+abfss://&lt;workspace&gt;@onelake.dfs.fabric.microsoft.com/&lt;item&gt;.Lakehouse/Tables/dim_customer
+# names or GUIDs can be used, e.g. .../SalesWS/Bronze.Lakehouse/Files/...</code></pre>
+
+<div class="tw"><table>
+<tr><th>OneLake tool</th><th>Purpose</th></tr>
+<tr><td><strong>OneLake catalog</strong> (formerly OneLake data hub)</td><td>Central place in the Fabric portal to <em>discover, explore and govern</em> items. <strong>Explore</strong> lists items you can access, filterable by workspace, domain, item type, endorsement, tags; shows details, lineage, permissions. <strong>Govern</strong> gives data owners insights and recommended actions (e.g. unlabeled items, items without description). A <strong>Secure</strong> view surfaces security roles.</td></tr>
+<tr><td>OneLake file explorer</td><td>Windows client that mounts OneLake in File Explorer like OneDrive; sync files up/down, respects permissions. Handy for business users dropping files into a lakehouse <code>Files</code> folder.</td></tr>
+<tr><td>Real-Time hub</td><td>Catalog of streaming data: eventstreams, Azure/Fabric events, connectors to external streams – the "OneLake catalog for data in motion".</td></tr>
+<tr><td>Tenant setting "Users can access data stored in OneLake with apps external to Fabric"</td><td>Controls whether external tools (ADLS APIs, OneLake file explorer, Databricks…) can access OneLake. Turning it off leaves internal Fabric engines working.</td></tr>
+</table></div>
+
+<div class="check" data-answer="3">
+<p>Your platform team asks whether they must create an Azure storage account before Fabric workspaces can store lakehouse and warehouse data. What do you tell them?</p>
+<ul><li>Yes, OneLake needs an existing ADLS Gen2 account in the same region</li><li>Yes, one storage account per workspace</li><li>No – every tenant has exactly one OneLake, provisioned automatically, which stores the data of all workspaces</li><li>No – but OneLake must be purchased as an add-on SKU</li></ul>
+<p class="why">OneLake is automatically provisioned once per tenant and is included with Fabric. It is built on ADLS Gen2 technology but doesn't require a customer storage account; workspaces are containers within it.</p>
+</div>
+
+<h2>Items and choosing a data store</h2>
+<p>A frequent exam task is "choose between a lakehouse, warehouse or eventhouse" (and, increasingly, SQL database or a semantic model). Decide by
+<strong>skills of the team</strong>, <strong>data shape</strong>, <strong>write pattern</strong> and <strong>query language</strong>.</p>
+
+<div class="tw"><table>
+<tr><th>Criterion</th><th>Lakehouse</th><th>Warehouse</th><th>Eventhouse (KQL DB)</th><th>SQL database</th><th>Semantic model</th></tr>
+<tr><td>Primary language</td><td>PySpark, Spark SQL, Scala, R; read-only T-SQL via SQL analytics endpoint</td><td>T-SQL (full DDL/DML)</td><td>KQL (plus T-SQL subset for reads)</td><td>T-SQL (Azure SQL engine)</td><td>DAX (and MDX clients)</td></tr>
+<tr><td>Data types</td><td>Structured, semi-structured and unstructured (<code>Files</code> + <code>Tables</code>)</td><td>Structured (tables)</td><td>Semi-structured events, logs, telemetry, time series, JSON</td><td>Structured, transactional</td><td>Modeled analytical tables</td></tr>
+<tr><td>Writes</td><td>Spark, Dataflow Gen2, pipelines, Copy job; SQL endpoint is <strong>read-only</strong></td><td>T-SQL INSERT/UPDATE/DELETE/MERGE, COPY INTO, CTAS, pipelines, Dataflow Gen2</td><td>Streaming and batch ingestion (eventstreams, queued/streaming ingestion)</td><td>OLTP application writes, high concurrency, row-level transactions</td><td>Refresh (Import), none (Direct Lake/DirectQuery)</td></tr>
+<tr><td>Transactions</td><td>Delta ACID per table</td><td><strong>Multi-table ACID transactions</strong></td><td>Append-oriented</td><td>Full OLTP transactions</td><td>n/a</td></tr>
+<tr><td>Storage</td><td>Delta in OneLake</td><td>Delta in OneLake</td><td>Proprietary columnar store; <strong>OneLake availability</strong> exposes Delta copies</td><td>Its own storage, <strong>automatically mirrored</strong> to OneLake as Delta</td><td>VertiPaq (Import) or OneLake Delta (Direct Lake)</td></tr>
+<tr><td>Best for</td><td>Data engineers, medallion bronze/silver, ML, files</td><td>SQL developers, gold star schema, stored-procedure ELT</td><td>Near-real-time analytics, high-volume ingestion, logs</td><td>Operational apps that also need analytics</td><td>BI layer, measures, RLS for reports</td></tr>
+</table></div>
+
+<div class="tip"><p>Lakehouse and warehouse are not mutually exclusive: a common pattern is bronze/silver in a lakehouse (Spark) and gold in a
+warehouse (T-SQL) – or gold in a lakehouse read by the SQL analytics endpoint. Because both store Delta in OneLake, a warehouse can
+query lakehouse tables in the same workspace with three-part names (<code>Lakehouse1.dbo.Table</code>) without copying.</p></div>
+
+<div class="sort" data-task="Which store fits each requirement best?">
+  <ul data-bucket="Lakehouse"><li>Team writes PySpark and stores raw JSON and images</li><li>Bronze landing zone for files from many sources</li><li>Data scientists need notebooks over Delta tables and files</li></ul>
+  <ul data-bucket="Warehouse"><li>SQL developers need multi-table transactions</li><li>ELT logic in T-SQL stored procedures that update tables</li><li>Gold star schema maintained with MERGE statements</li></ul>
+  <ul data-bucket="Eventhouse"><li>Millions of IoT events per minute analyzed within seconds</li><li>Log and telemetry analysis with KQL time-series functions</li></ul>
+  <ul data-bucket="SQL database"><li>An operational app needs row-level OLTP writes and analytics on a replica</li><li>Transactional app database whose data must appear in OneLake automatically</li></ul>
+</div>
+
+<div class="check" data-answer="2">
+<p>A team of SQL developers must load a star schema with stored procedures that update several tables in a single transaction. Which item should they use?</p>
+<ul><li>Lakehouse, writing through its SQL analytics endpoint</li><li>Warehouse</li><li>Eventhouse</li><li>Semantic model in Import mode</li></ul>
+<p class="why">The warehouse supports full T-SQL DML and multi-table transactions. The lakehouse SQL analytics endpoint is read-only for tables; an eventhouse is for streaming/KQL; a semantic model is not a write target.</p>
+</div>
+
+<h2>Capacities and F SKUs</h2>
+<p>A <strong>capacity</strong> is a dedicated pool of compute measured in <strong>capacity units (CUs)</strong>. All workloads in all
+workspaces assigned to the capacity share its CUs: Spark, SQL, KQL, dataflows, pipelines, semantic model queries and refreshes.
+Throttling happens per capacity – an overloaded capacity doesn't slow down other capacities.</p>
+
+<div class="tw"><table>
+<tr><th>F SKU</th><th>CUs</th><th>Power BI equivalent (compute only)</th><th>Notes</th></tr>
+<tr><td>F2</td><td>2</td><td>–</td><td>Smallest; dev/test, small workloads</td></tr>
+<tr><td>F4</td><td>4</td><td>–</td><td></td></tr>
+<tr><td>F8</td><td>8</td><td>EM1/A1</td><td></td></tr>
+<tr><td>F16</td><td>16</td><td>EM2/A2</td><td></td></tr>
+<tr><td>F32</td><td>32</td><td>EM3/A3</td><td>Largest SKU where Power BI viewers still need Pro/PPU</td></tr>
+<tr><td><strong>F64</strong></td><td>64</td><td>P1/A4</td><td><strong>Free-license users with Viewer access can view Power BI content</strong></td></tr>
+<tr><td>Trial</td><td>64</td><td>–</td><td>60-day Fabric trial capacity (F64-equivalent)</td></tr>
+<tr><td>F128 / F256 / F512 / F1024 / F2048</td><td>128–2048</td><td>P2 / P3 / P4 / P5 / –</td><td>Larger SKUs (F4096 and F8192 also exist)</td></tr>
+</table></div>
+
+<ul>
+<li><strong>Buying</strong>: F SKUs are Azure resources (resource type <em>Microsoft Fabric capacity</em>) created in the Azure portal in a subscription and region; you name one or more <strong>capacity admins</strong>. Billing is per second (1-minute minimum) pay-as-you-go, or cheaper with a one-year <strong>reservation</strong>.</li>
+<li><strong>Scale</strong> up or down at any time in the Azure portal (no data movement).</li>
+<li><strong>Pause/resume</strong>: an F capacity can be paused to stop compute billing; while paused, workspaces on it can't run anything and content is unavailable. OneLake storage keeps being billed. Pausing settles (bills) any accumulated smoothed future usage.</li>
+<li><strong>P SKUs</strong> (Power BI Premium per capacity) also run Fabric once Fabric is enabled, but Microsoft is retiring P SKU purchases – new customers buy F SKUs. EM and A SKUs do not support Fabric items.</li>
+<li><strong>Trial</strong>: a user starts a 60-day Fabric trial; it creates a trial capacity (64 CUs). Admins can disable trials in tenant settings ("Users can try Microsoft Fabric paid features").</li>
+</ul>
+
+<h3>Bursting, smoothing and throttling</h3>
+<p><strong>Bursting</strong>: an operation may temporarily use <em>more</em> compute than the SKU provides so it finishes fast.
+<strong>Smoothing</strong>: the CU-seconds consumed are then spread ("smoothed") over future <strong>30-second timepoints</strong>:</p>
+<ul>
+<li><strong>Interactive</strong> operations (report queries, DAX queries, most user-triggered requests): smoothed over a minimum of <strong>5 minutes</strong> and up to <strong>64 minutes</strong>.</li>
+<li><strong>Background</strong> operations (refreshes, pipelines, Spark jobs, almost all warehouse operations): smoothed over <strong>24 hours</strong> (2,880 timepoints).</li>
+</ul>
+<p>When smoothed usage exceeds 100 % you accumulate <strong>overage</strong>; unpaid overage becomes <strong>carryforward</strong> that is
+paid back (<strong>burndown</strong>) by idle capacity in later timepoints. Throttling is progressive, based on how much <em>future</em>
+capacity is already consumed:</p>
+
+<div class="tw"><table>
+<tr><th>Future capacity already used</th><th>Policy</th><th>Effect</th></tr>
+<tr><td>≤ 10 minutes</td><td>Overage protection</td><td>No throttling – you may borrow up to 10 minutes of future capacity.</td></tr>
+<tr><td>10 – 60 minutes</td><td>Interactive delay</td><td>New interactive operations are delayed by <strong>20 seconds</strong> at submission.</td></tr>
+<tr><td>60 minutes – 24 hours</td><td>Interactive rejection</td><td>New interactive operations are <strong>rejected</strong>; background jobs still start.</td></tr>
+<tr><td>&gt; 24 hours</td><td>Background rejection</td><td><strong>All</strong> new requests, interactive and background, are rejected until burndown.</td></tr>
+</table></div>
+<ul>
+<li>Operations already running when throttling starts are <strong>not</strong> stopped.</li>
+<li>Real-Time Intelligence skips the 20-second delay stage (it starts at rejection).</li>
+<li>Error text users see: <code>CapacityLimitExceeded</code> / "Your organization's Fabric compute capacity has exceeded its limits".</li>
+<li>Ways out: wait (self-healing), <strong>scale up</strong> temporarily (faster burndown), <strong>pause and resume</strong> (bills the carryforward, then starts at zero), enable <strong>capacity overage</strong> billing (pay extra instead of throttling), move workspaces to another capacity, reschedule/optimize heavy jobs.</li>
+<li><strong>Surge protection</strong> (capacity setting) can reject new background jobs above a configured threshold to protect interactive users.</li>
+<li><strong>Autoscale Billing for Spark</strong> moves Spark jobs to separate pay-as-you-go billing; bursting/smoothing don't apply to that Spark usage.</li>
+</ul>
+
+<div class="order" data-task="Order the throttling stages from least to most severe.">
+<ol>
+<li>Overage protection – borrow up to 10 minutes of future capacity</li>
+<li>Interactive delay – 20-second delay for new interactive requests</li>
+<li>Interactive rejection – new interactive requests rejected</li>
+<li>Background rejection – all new requests rejected</li>
+</ol>
+</div>
+
+<div class="match" data-task="Match each capacity concept to its description.">
+<dl>
+<dt>Capacity unit (CU)</dt><dd>The unit of compute power of a SKU, shared by all workloads on the capacity</dd>
+<dt>Bursting</dt><dd>An operation temporarily uses more compute than the SKU provides</dd>
+<dt>Smoothing</dt><dd>Consumed CU-seconds are spread across future timepoints</dd>
+<dt>Timepoint</dt><dd>A 30-second evaluation interval</dd>
+<dt>Carryforward</dt><dd>Overage that exceeds the protection window and must be paid back</dd>
+<dt>Burndown</dt><dd>Idle capacity in later timepoints pays back accumulated overage</dd>
+</dl>
+</div>
+
+<h3>Spark compute and CUs</h3>
+<ul>
+<li><strong>1 CU = 2 Spark VCores</strong> (an F64 gives 128 Spark VCores), with a burst factor that allows more concurrent Spark VCores for queued/concurrent jobs.</li>
+<li>The <strong>starter pool</strong> (pre-warmed, medium nodes) starts sessions in seconds; <strong>custom pools</strong> let you choose node size, autoscale range and dynamic executor allocation but start slower.</li>
+<li><strong>High concurrency mode</strong> lets several notebooks (and pipeline notebook activities) share one Spark session, reducing start time and CU usage.</li>
+</ul>
+
+<h3>Fabric Capacity Metrics app</h3>
+<p>The <strong>Microsoft Fabric Capacity Metrics app</strong> is a Power BI template app that <strong>capacity admins</strong> install to
+monitor consumption (about the last 14 days). It is the first tool to use when users report throttling or slow, rejected operations.</p>
+<div class="tw"><table>
+<tr><th>Page / visual</th><th>Shows</th></tr>
+<tr><td>Compute – Utilization chart</td><td>CU % over time split into interactive and background, plus overage; spikes over 100 % indicate overage (not automatically throttling).</td></tr>
+<tr><td>Compute – Throttling chart</td><td>Interactive delay, interactive rejection and background rejection percentages against the 100 % limits.</td></tr>
+<tr><td>Compute – Overages</td><td>Add, burndown and cumulative carryforward over time.</td></tr>
+<tr><td>Items matrix</td><td>CU consumption per workspace, item and operation – identifies the expensive notebook/model/refresh.</td></tr>
+<tr><td>Timepoint drill-through</td><td>Every interactive and background operation contributing to a chosen 30-second timepoint, including rejected operations.</td></tr>
+<tr><td>Storage page</td><td>OneLake storage per workspace over time.</td></tr>
+</table></div>
+<p>Related tools: the <strong>Monitoring hub</strong> (run history of pipelines, notebooks, refreshes – for item owners), <strong>capacity events in the Real-Time hub</strong> (alerts on thresholds), the <strong>admin monitoring workspace</strong> (tenant-level usage and adoption reports), and <strong>workspace monitoring</strong> (an eventhouse with detailed logs per workspace).</p>
+
+<div class="check" data-answer="4">
+<p>Report visuals return errors and scheduled refreshes are rejected on an F4 capacity. Which tool should a capacity admin use first to find the responsible items?</p>
+<ul><li>Performance Analyzer in Power BI Desktop</li><li>The workspace lineage view</li><li>DAX Studio server timings</li><li>The Microsoft Fabric Capacity Metrics app</li></ul>
+<p class="why">The Capacity Metrics app shows CU consumption, overages and throttling and attributes them to items and operations. The other tools analyze individual queries or dependencies, not capacity overload.</p>
+</div>
+
+<div class="check" data-answer="1">
+<p>An overnight Spark job on an F8 briefly uses far more compute than the capacity provides, and the cost is accounted over the next 24 hours. Which two behaviors are described?</p>
+<ul><li>Bursting and smoothing</li><li>Autoscale and throttling</li><li>Smoothing and interactive delay</li><li>Overage protection and pausing</li></ul>
+<p class="why">Using more compute than the SKU provides is bursting; spreading the consumption of a background operation over 24 hours is smoothing. No throttling stage is mentioned.</p>
+</div>
+
+<h2>Licensing: Free, Pro, PPU and F64</h2>
+<div class="tw"><table>
+<tr><th>Per-user license</th><th>Can do</th><th>Cannot do</th></tr>
+<tr><td><strong>Free</strong> (Fabric free, assigned at first sign-in)</td><td>Create and share <em>non-Power BI</em> Fabric items (lakehouse, warehouse, notebook, pipeline…) in workspaces on an F or trial capacity; view Power BI content in workspaces on <strong>F64+ / P</strong> capacities with a Viewer role or app access.</td><td>Create/publish Power BI items outside My workspace; view Power BI content on capacities smaller than F64 or in Pro workspaces.</td></tr>
+<tr><td><strong>Power BI Pro</strong></td><td>Create, publish and share Power BI content; collaborate in Pro and capacity workspaces; view Power BI content on any capacity.</td><td>Use PPU-only features in PPU workspaces.</td></tr>
+<tr><td><strong>Premium Per User (PPU)</strong></td><td>Pro rights plus Premium features (XMLA, larger models, 48 refreshes/day…) in PPU workspaces.</td><td>Create non-Power BI Fabric items – <strong>PPU is not a Fabric capacity</strong>.</td></tr>
+</table></div>
+<div class="exam"><p>"Free users must view reports" → the workspace must be on an <strong>F64 or larger</strong> F SKU (or a P SKU) and the
+users need a Viewer role or access through an app/item sharing. On F2–F32, every Power BI viewer needs Pro, PPU or an individual trial.
+Creators of Power BI content always need Pro or PPU, regardless of capacity size.</p></div>
+
+<h2>Tenant, capacity, workspace, item</h2>
+<div class="diagram">
+<svg viewBox="0 0 660 230" role="img" aria-label="Hierarchy: tenant with one OneLake, containing capacities in regions, containing workspaces grouped by domains, containing items">
+<rect x="10" y="10" width="640" height="210" rx="8" fill="none" stroke="currentColor"/>
+<text x="20" y="30" fill="currentColor" font-size="13" font-weight="bold">Tenant (Microsoft Entra ID) – one OneLake, tenant settings, home region</text>
+<rect x="25" y="45" width="300" height="160" rx="6" fill="var(--accent-soft)" stroke="var(--accent)"/>
+<text x="35" y="64" fill="currentColor" font-size="12">Capacity A – F64, West Europe</text>
+<rect x="35" y="75" width="135" height="120" rx="4" fill="var(--bg)" stroke="currentColor"/>
+<text x="42" y="92" fill="currentColor" font-size="11">Workspace Sales</text>
+<text x="42" y="112" fill="currentColor" font-size="10">• Lakehouse</text>
+<text x="42" y="128" fill="currentColor" font-size="10">• Warehouse</text>
+<text x="42" y="144" fill="currentColor" font-size="10">• Semantic model</text>
+<text x="42" y="160" fill="currentColor" font-size="10">• Report</text>
+<rect x="180" y="75" width="135" height="120" rx="4" fill="var(--bg)" stroke="currentColor"/>
+<text x="187" y="92" fill="currentColor" font-size="11">Workspace HR</text>
+<text x="187" y="112" fill="currentColor" font-size="10">• Notebook</text>
+<text x="187" y="128" fill="currentColor" font-size="10">• Pipeline</text>
+<text x="187" y="144" fill="currentColor" font-size="10">• Eventhouse</text>
+<rect x="340" y="45" width="300" height="160" rx="6" fill="var(--ok-soft)" stroke="var(--ok)"/>
+<text x="350" y="64" fill="currentColor" font-size="12">Capacity B – F8, Australia East</text>
+<rect x="350" y="75" width="135" height="120" rx="4" fill="var(--bg)" stroke="currentColor"/>
+<text x="357" y="92" fill="currentColor" font-size="11">Workspace AU-Ops</text>
+<text x="357" y="112" fill="currentColor" font-size="10">data at rest stays</text>
+<text x="357" y="128" fill="currentColor" font-size="10">in Australia East</text>
+<text x="495" y="100" fill="currentColor" font-size="10">Domains group</text>
+<text x="495" y="116" fill="currentColor" font-size="10">workspaces across</text>
+<text x="495" y="132" fill="currentColor" font-size="10">capacities (e.g.</text>
+<text x="495" y="148" fill="currentColor" font-size="10">"Finance", "Sales")</text>
+</svg>
+</div>
+<div class="tw"><table>
+<tr><th>Level</th><th>Administered by</th><th>Key facts</th></tr>
+<tr><td>Tenant</td><td>Fabric administrator (Entra role <em>Fabric Administrator</em>; also Power Platform admin and Global admin)</td><td>One OneLake; <strong>tenant settings</strong> in the admin portal; a <strong>home region</strong> where tenant metadata lives.</td></tr>
+<tr><td>Capacity</td><td>Capacity admins (set when creating the capacity); Azure owners for size/pause</td><td>Compute pool and <strong>region</strong>; capacity settings (workloads, Spark, surge protection, delegated tenant settings); who may assign workspaces (contributor permissions on the capacity).</td></tr>
+<tr><td>Domain</td><td>Fabric admin creates; domain admins and domain contributors manage</td><td>Logical grouping of workspaces by business area (data mesh); subdomains; delegated settings (e.g. certification reviewers, default sensitivity label); filter in the OneLake catalog.</td></tr>
+<tr><td>Workspace</td><td>Workspace Admin (and Members for many settings)</td><td>Collaboration and security boundary; assigned to exactly one capacity at a time; belongs to at most one domain; has a <strong>workspace type</strong> (formerly license mode).</td></tr>
+<tr><td>Item</td><td>Item owner / workspace roles / item permissions</td><td>Lakehouse, warehouse, notebook, semantic model, report… Item permissions and OneLake security refine access.</td></tr>
+</table></div>
+
+<h3>Regions and data residency</h3>
+<ul>
+<li>Data at rest lives in the region of the <strong>capacity</strong> the workspace is assigned to. To keep a business unit's data in a country, put its workspaces on a capacity created in a region in that country (<strong>multi-geo</strong>).</li>
+<li>Tenant metadata lives in the <strong>home region</strong> chosen when the tenant was created.</li>
+<li>Moving a workspace to a capacity in a <strong>different region</strong> is restricted when it contains non-Power BI Fabric items (lakehouse, warehouse, etc.) – those items must be removed or recreated; plan regions up front.</li>
+<li>To reassign a workspace to another capacity you need the workspace <strong>Admin</strong> role plus <strong>assignment (contributor) permission on the target capacity</strong> – or be a capacity/Fabric admin.</li>
+</ul>
+
+<div class="check" data-answer="2">
+<p>A regulator requires that a business unit's data never leaves Switzerland. How do you satisfy this in Fabric?</p>
+<ul><li>Create a separate OneLake for the business unit in Switzerland</li><li>Assign the business unit's workspaces to a capacity created in a Swiss region</li><li>Apply a "Swiss" sensitivity label to all items</li><li>Assign the workspaces to a domain named Switzerland</li></ul>
+<p class="why">Data residency follows the region of the capacity. There is only one OneLake per tenant; labels and domains are governance metadata and don't move data.</p>
+</div>
+
+<h2>Admin portal and tenant settings</h2>
+<p>The <strong>admin portal</strong> (Settings → Admin portal) is available to Fabric administrators; capacity admins see their capacity settings.
+Main sections: <strong>Tenant settings</strong>, Usage metrics, Users, Premium Per User, Audit logs (opens Microsoft Purview), Domains,
+Capacity settings, Refresh summary, Embed codes, Organizational visuals, Azure connections, Workspaces, Custom branding, Fabric identities,
+Featured content.</p>
+<ul>
+<li>Each tenant setting can be <strong>Enabled for the entire organization</strong>, enabled for <strong>specific security groups</strong>, and/or <strong>except specific security groups</strong>, or disabled.</li>
+<li>Some settings can be <strong>delegated</strong> so capacity admins, domain admins or workspace admins can override them for their scope.</li>
+<li>Changes apply going forward and can take several minutes to propagate; existing content keeps working (e.g. restricting workspace creation doesn't affect existing workspaces).</li>
+</ul>
+<div class="tw"><table>
+<tr><th>Tenant setting (examples)</th><th>Why it matters for DP-600</th></tr>
+<tr><td>Users can create Fabric items</td><td>Master switch for non-Power BI items (can be delegated to capacity level).</td></tr>
+<tr><td>Create workspaces</td><td>Restrict who can create workspaces to a security group.</td></tr>
+<tr><td>Users can try Microsoft Fabric paid features</td><td>Controls self-service trials.</td></tr>
+<tr><td>Service principals can call Fabric public APIs (developer settings)</td><td>Required for CI/CD and automation with service principals; often scoped to a group.</td></tr>
+<tr><td>Users can access data stored in OneLake with apps external to Fabric</td><td>ADLS API access, OneLake file explorer, external engines.</td></tr>
+<tr><td>External data sharing</td><td>Share OneLake data in place with another Fabric tenant.</td></tr>
+<tr><td>Users can synchronize workspace items with their Git repositories (and GitHub-specific settings)</td><td>Git integration.</td></tr>
+<tr><td>Allow XMLA endpoints and Analyze in Excel with on-premises semantic models</td><td>XMLA/external tools; read-write XMLA is additionally a capacity setting.</td></tr>
+<tr><td>Allow users to apply sensitivity labels for content</td><td>Microsoft Purview Information Protection in Fabric.</td></tr>
+<tr><td>Certification / Master data endorsement</td><td>Names who may certify or designate master data.</td></tr>
+<tr><td>Export to Excel / CSV / PDF settings</td><td>Data exfiltration controls.</td></tr>
+<tr><td>Copilot and Azure OpenAI Service / Fabric data agent settings</td><td>AI features (capacity-region processing options).</td></tr>
+</table></div>
+
+<h2>Workspace settings</h2>
+<div class="tw"><table>
+<tr><th>Setting area</th><th>What you configure</th><th>Who</th></tr>
+<tr><td>General / About</td><td>Name, description, image, contact list, domain assignment</td><td>Admin (domain assignment needs domain rights)</td></tr>
+<tr><td>Workspace type (license info)</td><td>Pro, PPU, Embedded, Fabric capacity, Fabric trial, Power BI Premium; choose the capacity</td><td>Admin with assignment permission on the capacity</td></tr>
+<tr><td>Azure connections</td><td>ADLS Gen2 storage for dataflows, Log Analytics for semantic model logs</td><td>Admin</td></tr>
+<tr><td>Git integration</td><td>Connect to Azure DevOps / GitHub repo, branch and folder</td><td>Admin</td></tr>
+<tr><td>Workspace identity</td><td>Create/delete the managed identity of the workspace</td><td>Admin</td></tr>
+<tr><td>OneLake</td><td>Shortcut caching, OneLake settings</td><td>Admin</td></tr>
+<tr><td>Data Engineering/Science (Spark settings)</td><td>Default pool (starter or custom), default <strong>environment</strong> and runtime version, high concurrency for notebooks and pipelines, automatic MLflow logging, job admission/session settings</td><td>Admin</td></tr>
+<tr><td>Network security</td><td>Inbound access protection (private links), outbound access protection, managed private endpoints</td><td>Admin</td></tr>
+<tr><td>Monitoring</td><td>Enable <strong>workspace monitoring</strong> (logs in an eventhouse)</td><td>Admin</td></tr>
+<tr><td>Power BI</td><td>Semantic model and report settings, app permissions (e.g. allow contributors to update the app)</td><td>Admin/Member</td></tr>
+</table></div>
+
+<div class="check" data-answer="3">
+<p>Data engineers complain that notebook sessions start slowly in their workspace and consume capacity because every notebook starts its own session. Which workspace-level configuration helps most?</p>
+<ul><li>Switch the workspace type to PPU</li><li>Create a custom pool with a larger node size</li><li>Use the starter pool and enable high concurrency mode in the Spark settings</li><li>Assign the workspace to a domain</li></ul>
+<p class="why">The pre-warmed starter pool starts in seconds, and high concurrency lets several notebooks share one session. Custom pools start slower; PPU doesn't provide Spark; domains are governance only.</p>
+</div>
+
+<h2>Scenario</h2>
+<div class="reveal">
+<p>Contoso runs all Fabric workloads on one F32 capacity. Every weekday at 09:00 a pipeline starts copying 200 tables in parallel, and
+report users then see slow visuals and occasional "capacity limits" errors. Executives (2,000 people with free licenses) will soon need to
+view the reports. The CFO wants the cheapest fix. What do you recommend?</p>
+<div class="answer">
+<ol>
+<li><strong>Diagnose</strong> with the Capacity Metrics app: confirm interactive delay/rejection on the Throttling chart and find the items (pipeline, refreshes) in the items matrix/timepoint drill-through.</li>
+<li><strong>Reduce the load</strong>: move heavy background ingestion outside business hours and bound its parallelism (ForEach batch count), use incremental loads.</li>
+<li><strong>Licensing forces sizing</strong>: 2,000 free-license viewers can only view Power BI content on <strong>F64 or larger</strong> (on F32 they'd each need Pro). Compare F64 against 2,000 Pro licenses – F64 is usually far cheaper and also adds CUs.</li>
+<li>Optionally <strong>separate workloads</strong>: a smaller capacity for data engineering and an F64 for reporting, so ETL bursts can't throttle report users (throttling is per capacity).</li>
+<li>Pause dev/test capacities when idle; keep production running.</li>
+</ol>
+</div>
+</div>
+
+<h2>Key takeaways &amp; exam tips</h2>
+<ul>
+<li>One <strong>OneLake</strong> per tenant, automatic, ADLS Gen2-compatible APIs, Delta Parquet, OneCopy; discover with the <strong>OneLake catalog</strong>, sync files with <strong>OneLake file explorer</strong>.</li>
+<li>Choose stores by language and pattern: Spark/files → <strong>lakehouse</strong>; T-SQL writes &amp; multi-table transactions → <strong>warehouse</strong>; streaming/logs/KQL → <strong>eventhouse</strong>; OLTP → <strong>SQL database</strong>; BI layer → <strong>semantic model</strong>.</li>
+<li>F SKU = CUs; F2…F2048; <strong>F64</strong> is the threshold for free-license viewers; trial = 64 CUs for 60 days; PPU is not a Fabric capacity.</li>
+<li>Smoothing: interactive 5–64 minutes, background 24 hours. Throttling: 10 min protection → 20 s interactive delay → interactive rejection (60 min) → background rejection (24 h).</li>
+<li>Fix throttling by optimizing/rescheduling, scaling up, pausing/resuming (bills carryforward) or splitting capacities; diagnose with the <strong>Capacity Metrics app</strong>.</li>
+<li>Hierarchy: tenant → capacity (region) → workspace (one capacity, one domain) → item. Data residency = capacity region.</li>
+<li>Tenant settings can be scoped to security groups and delegated; they don't break existing content when tightened.</li>
+<li>Workspace settings to remember: workspace type/capacity, Git, workspace identity, Spark pool/environment/high concurrency, network security, monitoring.</li>
+</ul>
+</main>
+<script src="assets/app.js"></script>
+</body>
+</html>

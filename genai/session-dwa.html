@@ -1,0 +1,1546 @@
+<!doctype html>
+<html lang="de-CH">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>GenAI im Test · Teil 2 – GenAI im Testprozess</title>
+<style>
+/* ==========================================================================
+   Course slides theme — calm slate-blue + warm orange accent
+   (style inspired by a Swiss health-insurer site: airy, rounded, friendly)
+   Paste this whole file inside <style> of the self-contained HTML page.
+   ========================================================================== */
+
+:root {
+  /* --- colour tokens --- */
+  --c-primary:      #4d6e82;   /* slate blue: headings, buttons, active states   */
+  --c-primary-dk:   #3c5869;   /* hover / pressed                                */
+  --c-text:         #5a7789;   /* body text (darkened from #849dab for contrast) */
+  --c-muted:        #849dab;   /* captions, labels, inactive nav                 */
+  --c-line:         #dae1e6;   /* hairlines, borders                             */
+  --c-surface:      #ffffff;   /* page / cards                                   */
+  --c-surface-alt:  #eef2f5;   /* tinted bands, soft buttons, inputs             */
+  --c-surface-2:    #f7f8fa;   /* very light panels                              */
+  --c-accent:       #ff8a00;   /* orange: icon discs, dots, highlights — NOT text */
+  --c-accent-text:  #c26700;   /* orange when it must be text (large only)       */
+  --c-ink-deep:     #0d2736;   /* overlays: rgba(13,39,54,.5)                     */
+  --c-ok:           #3f8f6b;
+  --c-warn:         #c26700;
+  --c-err:          #b8483e;
+
+  /* --- type --- */
+  --font: "Avenir Next", Avenir, "Nunito Sans", "Segoe UI", "Helvetica Neue", Arial, sans-serif;
+  --font-mono: "SF Mono", Menlo, Consolas, "Liberation Mono", monospace;
+  --fs-display: clamp(28px, 3.2vw, 40px);  /* section titles: weight 300 */
+  --fs-h2: clamp(22px, 2.2vw, 28px);       /* weight 700 */
+  --fs-h3: 20px;                           /* weight 700 */
+  --fs-body: 18px;                         /* weight 500, line-height 1.5 */
+  --fs-small: 15px;
+  --fs-eyebrow: 13px;                      /* weight 700, muted */
+
+  /* --- shape & depth --- */
+  --r-sm: 5px;          /* inputs, cards, panels */
+  --r-pill: 100px;      /* every button */
+  --shadow-1: 0 2px 4px rgba(77,110,130,.10);
+  --shadow-2: 0 2px 14px rgba(11,54,79,.22);
+  --ease: cubic-bezier(.4,0,.2,1);
+  --t-fast: .25s;
+  --t-slide: .55s;
+
+  --maxw: 1180px;
+  --gutter: clamp(16px, 4vw, 48px);
+}
+
+* { box-sizing: border-box; }
+html, body { height: 100%; }
+body {
+  margin: 0;
+  font: 500 var(--fs-body)/1.5 var(--font);
+  color: var(--c-text);
+  background: var(--c-surface);
+  -webkit-font-smoothing: antialiased;
+}
+
+/* ---------- typography ---------- */
+.display { font-size: var(--fs-display); font-weight: 300; color: var(--c-primary); line-height: 1.15; margin: 0 0 .4em; }
+h2 { font-size: var(--fs-h2); font-weight: 700; color: var(--c-primary); line-height: 1.25; margin: 0 0 .5em; }
+h3 { font-size: var(--fs-h3); font-weight: 700; color: var(--c-primary); line-height: 1.35; margin: 0 0 .4em; }
+p  { margin: 0 0 1em; max-width: 68ch; }
+.lead { font-size: 20px; color: var(--c-muted); }
+.eyebrow { display:block; font-size: var(--fs-eyebrow); font-weight: 700; color: var(--c-muted); margin-bottom: .25em; }
+a { color: var(--c-primary); font-weight: 700; text-decoration: underline; text-underline-offset: 2px; }
+a:hover { color: var(--c-primary-dk); }
+code, pre { font-family: var(--font-mono); font-size: .88em; }
+code { background: var(--c-surface-alt); color: var(--c-primary); padding: .1em .4em; border-radius: var(--r-sm); }
+pre { background: var(--c-surface-2); border: 1px solid var(--c-line); border-radius: var(--r-sm); padding: 1em 1.2em; overflow-x: auto; line-height: 1.55; }
+.divider { border: 0; border-top: 1px solid var(--c-line); margin: 1.5em 0; }
+
+/* ---------- buttons (always pills) ---------- */
+.btn {
+  display: inline-flex; align-items: center; gap: .5em;
+  font: 700 15px/1 var(--font); padding: 18px 26px; border: 0; border-radius: var(--r-pill);
+  background: var(--c-primary); color: #fff; cursor: pointer; text-decoration: none;
+  transition: background var(--t-fast) ease-in-out, transform var(--t-fast) ease-in-out;
+}
+.btn:hover { background: var(--c-primary-dk); color:#fff; }
+.btn:active { transform: translateY(1px); }
+.btn--soft { background: var(--c-surface-alt); color: var(--c-primary); }
+.btn--soft:hover { background: var(--c-line); color: var(--c-primary-dk); }
+.btn:focus-visible, .nav-arrow:focus-visible, .dot:focus-visible { outline: 3px solid var(--c-accent); outline-offset: 3px; }
+
+/* ---------- layout helpers ---------- */
+.band { background: var(--c-surface-alt); }
+.wrap { max-width: var(--maxw); margin: 0 auto; padding-inline: var(--gutter); }
+.center { text-align: center; } .center p { margin-inline: auto; }
+.grid-3 { display: grid; gap: 32px; grid-template-columns: repeat(auto-fit, minmax(240px, 1fr)); }
+.grid-2 { display: grid; gap: 32px; grid-template-columns: repeat(auto-fit, minmax(300px, 1fr)); align-items: center; }
+
+/* feature: orange icon disc + bold title + muted text, centred */
+.feature { text-align: center; }
+.icon-disc {
+  width: 80px; height: 80px; border-radius: 50%; background: var(--c-accent); color: #fff;
+  display: grid; place-items: center; margin: 0 auto 16px; font-size: 34px;
+}
+.icon-disc svg { width: 40px; height: 40px; fill: none; stroke: #fff; stroke-width: 2.2; stroke-linecap: round; stroke-linejoin: round; }
+
+/* split panel: visual left, tinted text panel right */
+.split { display: grid; grid-template-columns: 1fr 1fr; background: var(--c-surface-alt); border-radius: var(--r-sm); overflow: hidden; }
+.split > .panel { padding: clamp(24px, 5vw, 70px); align-self: center; }
+@media (max-width: 760px) { .split { grid-template-columns: 1fr; } }
+
+/* circle callout (the hero "bubble") */
+.bubble {
+  width: min(320px, 100%); aspect-ratio: 1; border-radius: 50%;
+  background: rgba(255,255,255,.92); box-shadow: var(--shadow-2);
+  display: grid; place-content: center; text-align: center; padding: clamp(24px, 8%, 48px);
+}
+
+/* cards */
+.card { background: var(--c-surface); border: 1px solid var(--c-line); border-radius: var(--r-sm); padding: 24px; box-shadow: var(--shadow-1); }
+.card--tint { background: var(--c-surface-alt); border-color: transparent; box-shadow: none; }
+
+/* tables */
+.table { width: 100%; border-collapse: collapse; font-size: 16px; }
+.table th { text-align: left; color: var(--c-primary); font-weight: 700; border-bottom: 2px solid var(--c-line); padding: 10px 12px; }
+.table td { border-bottom: 1px solid var(--c-line); padding: 10px 12px; }
+.table-scroll { overflow-x: auto; }
+
+/* callouts */
+.note { border-left: 4px solid var(--c-accent); background: var(--c-surface-2); padding: 14px 18px; border-radius: 0 var(--r-sm) var(--r-sm) 0; }
+
+/* ==========================================================================
+   SLIDE DECK SHELL
+   ========================================================================== */
+.topbar {
+  position: fixed; inset: 0 0 auto 0; z-index: 10; height: 64px;
+  padding-top: env(safe-area-inset-top, 0px);
+  display: flex; align-items: center; justify-content: space-between; gap: 16px;
+  padding-inline: var(--gutter); background: #fff; box-shadow: var(--shadow-1);
+}
+.brand { font-weight: 800; color: var(--c-primary); font-size: 20px; letter-spacing: .01em; display:flex; align-items:center; gap:2px; }
+.brand .dot-accent { width: 8px; height: 8px; border-radius: 50%; background: var(--c-accent); display:inline-block; transform: translateY(-9px); }
+.topbar .chapter { font-size: 15px; font-weight: 700; color: var(--c-muted); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.progress { position: absolute; left: 0; bottom: 0; height: 3px; background: var(--c-accent); width: 0; transition: width var(--t-slide) var(--ease); }
+
+.deck { position: fixed; inset: 64px 0 0 0; overflow: hidden; }
+.slide {
+  position: absolute; inset: 0; overflow-y: auto;
+  padding: 48px var(--gutter) 120px;
+  opacity: 0; visibility: hidden; transform: translateX(40px);
+  transition: opacity var(--t-slide) var(--ease), transform var(--t-slide) var(--ease), visibility 0s linear var(--t-slide);
+}
+.slide.is-active { opacity: 1; visibility: visible; transform: none; transition-delay: 0s; }
+.slide.is-before { transform: translateX(-40px); }
+.slide > .inner { max-width: var(--maxw); margin: 0 auto; }
+.slide.band { background: var(--c-surface-alt); }
+
+/* staged reveal inside the active slide: add class="reveal" (+ style="--i:2") */
+.reveal { opacity: 0; transform: translateY(14px); }
+.slide.is-active .reveal { animation: rise .6s var(--ease) forwards; animation-delay: calc(.15s + var(--i, 0) * .12s); }
+@keyframes rise { to { opacity: 1; transform: none; } }
+
+/* bottom navigation */
+.navbar {
+  position: fixed; left: 50%; bottom: calc(20px + env(safe-area-inset-bottom, 0px)); transform: translateX(-50%); z-index: 10;
+  display: flex; align-items: center; gap: 14px; padding: 8px; background: rgba(255,255,255,.95);
+  border-radius: var(--r-pill); box-shadow: var(--shadow-2);
+}
+.nav-arrow {
+  width: 52px; height: 52px; border-radius: 50%; border: 0; cursor: pointer;
+  background: var(--c-primary); color: #fff; display: grid; place-items: center;
+  transition: background var(--t-fast) ease-in-out, opacity var(--t-fast);
+}
+.nav-arrow:hover { background: var(--c-primary-dk); }
+.nav-arrow:disabled { background: var(--c-surface-alt); color: var(--c-muted); cursor: default; }
+.nav-arrow svg { width: 22px; height: 22px; stroke: currentColor; stroke-width: 2.5; fill: none; stroke-linecap: round; stroke-linejoin: round; }
+.dots { display: flex; gap: 8px; align-items: center; max-width: 50vw; overflow-x: auto; padding: 4px; }
+.dot { width: 12px; height: 12px; border-radius: 50%; border: 2px solid var(--c-muted); background: transparent; padding: 0; cursor: pointer; flex: none; transition: all var(--t-fast); }
+.dot.is-active { background: var(--c-accent); border-color: var(--c-accent); transform: scale(1.15); }
+.counter { font-size: 14px; font-weight: 700; color: var(--c-muted); min-width: 52px; text-align: center; }
+
+/* ==========================================================================
+   FLOW ANIMATION PRIMITIVES (SVG)
+   ========================================================================== */
+.flow { width: 100%; height: auto; display: block; }
+.flow .node rect, .flow .node circle { fill: var(--c-surface); stroke: var(--c-primary); stroke-width: 2; }
+.flow .node.alt rect { fill: var(--c-surface-alt); stroke: var(--c-line); }
+.flow .node text { fill: var(--c-primary); font: 700 15px var(--font); text-anchor: middle; dominant-baseline: middle; }
+.flow .node .sub { fill: var(--c-muted); font-weight: 500; font-size: 12px; }
+.flow .edge { fill: none; stroke: var(--c-muted); stroke-width: 2; }
+.flow .edge.live { stroke: var(--c-primary); stroke-dasharray: 6 6; animation: march 1s linear infinite; }
+@keyframes march { to { stroke-dashoffset: -12; } }
+.flow .packet { fill: var(--c-accent); }
+.flow .label { fill: var(--c-muted); font: 700 12px var(--font); text-anchor: middle; }
+/* highlight a node in the current step */
+.flow .node.hot rect, .flow .node.hot circle { stroke: var(--c-accent); stroke-width: 3; filter: drop-shadow(0 2px 6px rgba(255,138,0,.35)); }
+.flow .node rect, .flow .node circle { transition: stroke var(--t-fast), stroke-width var(--t-fast); }
+
+/* step list that pairs with a flow diagram */
+.steps { list-style: none; padding: 0; margin: 0; counter-reset: s; }
+.steps li { counter-increment: s; position: relative; padding: 10px 12px 10px 52px; border-radius: var(--r-sm); color: var(--c-muted); transition: background var(--t-fast), color var(--t-fast); }
+.steps li::before { content: counter(s); position: absolute; left: 10px; top: 9px; width: 30px; height: 30px; border-radius: 50%; display: grid; place-items: center; background: var(--c-surface-alt); color: var(--c-primary); font-weight: 700; font-size: 14px; }
+.steps li.is-on { background: var(--c-surface-alt); color: var(--c-primary); }
+.steps li.is-on::before { background: var(--c-accent); color: #fff; }
+.flow-controls { display: flex; gap: 10px; flex-wrap: wrap; margin-top: 16px; }
+
+@media (prefers-reduced-motion: reduce) {
+  *, *::before, *::after { animation-duration: .001s !important; animation-iteration-count: 1 !important; transition-duration: .001s !important; }
+}
+@media (max-width: 600px) {
+  :root { --fs-body: 16px; }
+  .topbar .chapter { display: none; }
+  .nav-arrow { width: 46px; height: 46px; }
+}
+
+</style>
+<style>
+/* ---------- page-specific (shared with Session 1) ---------- */
+.slide { padding-top: 28px; padding-bottom: 108px; }
+.deck { overflow: clip; }
+.slide > .inner { min-height: 100%; display: flex; flex-direction: column; }
+.slide > .inner::before, .slide > .inner::after { content: ""; flex: 1 1 0; }   /* safe vertical centering */
+@media (max-height: 820px) {
+  :root { --fs-body: 16px; --fs-display: 30px; --fs-h2: 22px; }
+  .slide { padding-top: 16px; padding-bottom: 96px; }
+  .hero .bubble { width: min(320px, 100%); }
+  .steps.tight li { padding-top: 4px; padding-bottom: 4px; font-size: 14px; }
+  .steps.tight li::before { top: 4px; }
+  .take li { padding: 3px 0; } .split.next > div:first-child { min-height: 96px !important; }
+  .code { font-size: 12px; }
+  .mock .body { padding: 10px 16px 12px; } .mock .inp { height: 24px; margin-bottom: 7px; } .mock .drop { padding: 8px; }
+  .flip { min-height: 104px; }
+  .ftype p { font-size: 13.5px; }
+  .mit .card { padding: 12px 14px; }
+}
+.topbar .right { display: flex; align-items: center; gap: 14px; min-width: 0; }
+.part-tag { font-size: 13px; font-weight: 700; color: var(--c-primary); background: var(--c-surface-alt); border-radius: var(--r-pill); padding: 6px 12px; white-space: nowrap; }
+.icon-btn { width: 36px; height: 36px; border-radius: 50%; border: 0; background: var(--c-surface-alt); color: var(--c-primary); display: grid; place-items: center; cursor: pointer; flex: none; }
+.icon-btn:hover { background: var(--c-line); }
+.icon-btn svg { width: 18px; height: 18px; stroke: currentColor; fill: none; stroke-width: 2.2; stroke-linecap: round; stroke-linejoin: round; }
+.muted { color: var(--c-muted); }
+.small { font-size: 15px; }
+.tag { display: inline-block; font-size: 12px; font-weight: 700; padding: 3px 10px; border-radius: var(--r-pill); background: var(--c-surface-alt); color: var(--c-primary); }
+.tag--acc { background: var(--c-accent); color: #fff; }
+.key { font-weight: 700; color: var(--c-primary); }
+.stack > * + * { margin-top: 14px; }
+.row { display: flex; gap: 10px; flex-wrap: wrap; align-items: center; }
+.btn--sm { padding: 11px 18px; font-size: 14px; }
+.btn.is-on { background: var(--c-primary); color: #fff; }
+.mt { margin-top: 20px; } .mt-s { margin-top: 10px; }
+.big-quote { font-size: clamp(20px, 2vw, 26px); font-weight: 300; color: var(--c-primary); line-height: 1.35; }
+.hint { font-size: 13px; color: var(--c-muted); }
+.hint::before { content: "ⓘ "; }
+.band .btn--soft { background: #fff; }
+.band .card .btn--soft { background: var(--c-surface-alt); }
+.split.next { grid-template-columns: 120px 1fr; }
+.grid-2.top { align-items: start; }
+.s3-row { display: grid; grid-template-columns: 1fr auto; gap: 18px; align-items: end; }
+@media (max-width: 700px) { .s3-row { grid-template-columns: 1fr; } .s3-row .flow-controls { flex-direction: row !important; } }
+.flow-controls.tight { margin-top: 10px; }
+.band .steps li::before { background: #fff; }
+.band .steps li.is-on { background: #fff; }
+.band .card .steps li::before, .band .card .steps li.is-on { background: var(--c-surface-alt); }
+.band .steps li.is-on::before { background: var(--c-accent); }
+
+/* footer */
+.foot { position: fixed; left: var(--gutter); bottom: calc(36px + env(safe-area-inset-bottom, 0px)); z-index: 9; font-size: 13px; font-weight: 700; color: var(--c-muted); white-space: nowrap; transition: opacity .3s; }
+.foot.off { opacity: 0; pointer-events: none; }
+@media (max-width: 1060px) { .foot { display: none; } }
+
+/* speaker notes (press N) */
+.notes { display: none; }
+.notes-panel { position: fixed; left: 16px; right: 16px; bottom: calc(96px + env(safe-area-inset-bottom, 0px)); z-index: 20; max-width: 760px; margin: 0 auto;
+  background: var(--c-ink-deep); color: #e8eef2; border-radius: 8px; padding: 14px 18px; font-size: 15px; line-height: 1.5; box-shadow: var(--shadow-2); }
+.notes-panel strong { color: #fff; }
+.notes-panel .hint { color: #9fb3bf; }
+
+/* title slide */
+.hero { background: var(--c-primary); overflow: hidden; }
+.hero::before, .hero::after { content: ""; position: absolute; border-radius: 50%; background: rgba(255,255,255,.06); }
+.hero::before { width: 520px; height: 520px; right: -120px; top: -160px; }
+.hero::after { width: 300px; height: 300px; left: 38%; bottom: -150px; background: rgba(255,138,0,.18); }
+.hero .grid-2 { position: relative; z-index: 1; }
+.hero .bubble { width: min(400px, 100%); }
+.hero-side { color: #fff; }
+.hero-side .eyebrow { color: rgba(255,255,255,.75); }
+.hero-side h1 { color: #fff; font-weight: 300; font-size: clamp(28px, 3vw, 40px); line-height: 1.15; margin: 0 0 14px; }
+.hero-side p { color: rgba(255,255,255,.85); }
+.hero-keys { font-size: 14px; color: rgba(255,255,255,.75); }
+.hero-keys kbd { background: rgba(255,255,255,.15); border-radius: 4px; padding: 1px 7px; font-family: inherit; font-weight: 700; color: #fff; }
+
+/* staged step reveals (driven by the flow engine) */
+.step-show { opacity: 0; transform: translateY(8px); transition: opacity .45s var(--ease), transform .45s var(--ease); }
+.step-show.shown { opacity: 1; transform: none; }
+.swap { display: grid; }
+.swap > * { grid-area: 1 / 1; }
+.swap > .step-show:not(.shown) { pointer-events: none; }
+.steps.tight li { padding: 7px 10px 7px 46px; font-size: 15px; line-height: 1.4; }
+.steps.tight li::before { width: 26px; height: 26px; top: 6px; left: 10px; font-size: 13px; }
+.fade-swap { animation: fadeSwap .4s var(--ease); }
+@keyframes fadeSwap { from { opacity: 0; transform: translateY(6px); } to { opacity: 1; transform: none; } }
+@keyframes shake { 25% { transform: translateX(-4px); } 75% { transform: translateX(4px); } }
+
+/* recap flip cards */
+.flips { display: grid; grid-template-columns: repeat(4, 1fr); gap: 14px; }
+.flip { position: relative; min-height: 132px; border: 0; padding: 0; background: none; cursor: pointer; perspective: 900px; font: inherit; text-align: left; }
+.flip .face { position: absolute; inset: 0; border-radius: var(--r-sm); padding: 14px 16px; backface-visibility: hidden; transition: transform .6s var(--ease); display: flex; flex-direction: column; justify-content: center; }
+.flip .front { background: #fff; border: 1px solid var(--c-line); box-shadow: var(--shadow-1); color: var(--c-primary); font-weight: 700; font-size: 16px; }
+.flip .front small { display: block; font-size: 12px; color: var(--c-muted); margin-bottom: 4px; }
+.flip .back { background: var(--c-primary); color: #fff; transform: rotateY(180deg); font-size: 15px; line-height: 1.4; }
+.flip.on .front { transform: rotateY(-180deg); }
+.flip.on .back { transform: rotateY(0); }
+@media (max-width: 900px) { .flips { grid-template-columns: repeat(2, 1fr); } }
+@media (max-width: 480px) { .flips { grid-template-columns: 1fr; } }
+.agenda { display: grid; grid-template-columns: repeat(auto-fit, minmax(190px, 1fr)); gap: 12px; }
+.agenda .card { padding: 14px 16px; }
+.agenda .t { font-size: 13px; font-weight: 700; color: var(--c-accent-text); }
+.agenda .card.done { opacity: .6; }
+
+/* user story + wireframe mock */
+.story { background: var(--c-surface-2); border-left: 4px solid var(--c-primary); border-radius: 0 var(--r-sm) var(--r-sm) 0; padding: 12px 16px; font-size: 15px; }
+.story .ak { display: block; margin-top: 4px; font-size: 14px; color: var(--c-primary); }
+.mock { border: 1px solid var(--c-line); border-radius: 8px; overflow: hidden; background: #fff; box-shadow: var(--shadow-1); }
+.mock .bar { background: var(--c-surface-alt); padding: 7px 10px; display: flex; gap: 5px; align-items: center; }
+.mock .bar i { width: 9px; height: 9px; border-radius: 50%; background: var(--c-line); }
+.mock .bar span { font-size: 11px; color: var(--c-muted); margin-left: 8px; }
+.mock .body { padding: 14px 20px 16px; }
+.mock .ttl { font-weight: 800; color: var(--c-primary); font-size: 15px; margin-bottom: 8px; }
+.mock .fld { font-size: 12px; font-weight: 700; color: var(--c-muted); margin-bottom: 3px; }
+.mock .inp { height: 28px; border: 1.5px solid var(--c-line); border-radius: 5px; margin-bottom: 9px; background: var(--c-surface-2); }
+.mock .drop { border: 2px dashed var(--c-line); border-radius: 6px; padding: 12px; text-align: center; font-size: 12px; color: var(--c-muted); margin-bottom: 9px; }
+.mock .mbtn { display: inline-block; background: var(--c-primary); color: #fff; font-size: 13px; font-weight: 700; padding: 8px 18px; border-radius: var(--r-pill); }
+.mk { position: relative; outline: 2.5px dashed transparent; outline-offset: 3px; transition: outline-color .4s; }
+.mk.flag { outline-color: var(--c-accent); }
+.mk::after { content: attr(data-q); position: absolute; right: -10px; top: -12px; width: 22px; height: 22px; border-radius: 50%; background: var(--c-accent); color: #fff; font: 800 12px/22px var(--font); text-align: center; opacity: 0; transform: scale(.5); transition: all .35s var(--ease); }
+.mk.flag::after { opacity: 1; transform: none; }
+.finding { border: 2px solid var(--c-accent); border-radius: var(--r-sm); padding: 10px 14px; background: #fff7ee; font-size: 14.5px; }
+.finding b { color: var(--c-accent-text); }
+.finding ul { margin: 4px 0 0; padding-left: 18px; }
+
+/* code / gherkin */
+.code { font: 500 13px/1.5 var(--font-mono); color: var(--c-ink-deep); background: var(--c-surface-2); border: 1px solid var(--c-line); border-radius: var(--r-sm); padding: 10px 12px; white-space: pre; overflow-x: auto; margin: 0; }
+.code .ln { display: block; min-height: 1.5em; }
+.code .ln.gen { opacity: 0; }
+.code .ln.gen.in { animation: rise .35s var(--ease) forwards; }
+.code .kw { color: var(--c-primary); font-weight: 800; }
+.code .str { color: var(--c-ok); }
+.code .ph { color: #7a5ea8; }
+.code .cm { color: var(--c-muted); }
+.ex { border: 1px dashed var(--c-muted); border-radius: var(--r-sm); padding: 7px 10px; font: 500 12.5px/1.45 var(--font-mono); color: var(--c-ink-deep); background: var(--c-surface-2); margin-top: 8px; white-space: pre-wrap; }
+.ex .tag { margin-bottom: 3px; font-family: var(--font); }
+.ex.new { border-style: solid; border-color: var(--c-accent); background: #fff7ee; }
+.cov { width: 100%; border-collapse: collapse; font-size: 14px; }
+.cov th, .cov td { border-bottom: 1px solid var(--c-line); padding: 6px 8px; text-align: center; }
+.cov th { color: var(--c-primary); font-size: 13px; }
+.cov td:first-child, .cov th:first-child { text-align: left; }
+.cov .y { color: var(--c-ok); font-weight: 800; }
+.cov .n { color: var(--c-err); font-weight: 800; }
+.cov .newc { background: #fff7ee; animation: fadeSwap .4s var(--ease); }
+.pill-st { display: inline-block; font-size: 12px; font-weight: 800; padding: 2px 9px; border-radius: var(--r-pill); }
+.pill-st.ok { background: #e6f2ec; color: var(--c-ok); }
+.pill-st.err { background: #fbeceb; color: var(--c-err); }
+
+/* keyword-driven */
+.kwlib { list-style: none; padding: 0; margin: 6px 0 0; font: 600 13px/1.4 var(--font-mono); color: var(--c-primary); }
+.kwlib li { padding: 4px 8px; border-radius: 4px; background: var(--c-surface-2); margin-bottom: 4px; }
+.kwlib li span { color: #7a5ea8; font-weight: 500; }
+.kwt { width: 100%; border-collapse: collapse; font: 500 13.5px/1.4 var(--font-mono); }
+.kwt th { font: 700 12px var(--font); color: var(--c-muted); text-align: left; padding: 4px 8px; border-bottom: 2px solid var(--c-line); }
+.kwt td { padding: 6px 8px; border-bottom: 1px solid var(--c-line); color: var(--c-ink-deep); vertical-align: top; }
+.kwt td:first-child { color: var(--c-primary); font-weight: 700; white-space: nowrap; }
+.kwt tr { animation: fadeSwap .35s var(--ease); }
+.kwt tr.bad td { background: #fbeceb; }
+.kwt tr.bad td:first-child { color: var(--c-err); text-decoration: underline wavy var(--c-err); text-underline-offset: 3px; }
+.kwt tr.fixed td { background: #e6f2ec; }
+.kwt .why { display: block; font: 700 12px var(--font); color: var(--c-err); margin-top: 2px; }
+.kwt tr.fixed .why { color: var(--c-ok); }
+
+/* regression */
+.reg .lbl { font-size: 12px; font-weight: 700; color: var(--c-muted); display: block; margin-bottom: 4px; }
+.runline { display: flex; justify-content: space-between; align-items: center; gap: 10px; font: 600 13.5px var(--font-mono); color: var(--c-ink-deep); background: var(--c-surface-2); border: 1px solid var(--c-line); border-radius: var(--r-sm); padding: 8px 10px; flex-wrap: wrap; }
+.assist { border-radius: var(--r-sm); padding: 10px 14px; font-size: 14.5px; background: #fff; border: 1px solid var(--c-line); box-shadow: var(--shadow-1); }
+.assist .who { display: block; font-size: 11px; font-weight: 800; letter-spacing: .04em; text-transform: uppercase; color: var(--c-muted); margin-bottom: 2px; }
+.assist.ai { border-left: 4px solid var(--c-accent); }
+.assist.human { border-left: 4px solid var(--c-primary); }
+.assist code { font-size: 12.5px; }
+
+/* dashboard */
+.stats { display: flex; gap: 18px; flex-wrap: wrap; }
+.stat b { display: block; font-size: 28px; font-weight: 300; color: var(--c-primary); line-height: 1.1; }
+.stat span { font-size: 12px; font-weight: 700; color: var(--c-muted); }
+.chart { width: 100%; height: auto; display: block; }
+.chart .ax { stroke: var(--c-line); }
+.chart text { font: 700 11px var(--font); fill: var(--c-muted); }
+.chart .val { fill: var(--c-primary); font-size: 11px; }
+.chart .plan { stroke: var(--c-muted); stroke-dasharray: 4 4; }
+.chart rect { transition: height .7s var(--ease), y .7s var(--ease); }
+.legend { display: flex; gap: 16px; flex-wrap: wrap; font-size: 13px; font-weight: 700; color: var(--c-muted); }
+.legend i { display: inline-block; width: 12px; height: 12px; border-radius: 3px; margin-right: 6px; vertical-align: -1px; }
+.summary p { font-size: 15.5px; margin: 0 0 8px; }
+.summary .claim { border-radius: 3px; transition: background .4s, box-shadow .4s; }
+.summary.checked .claim.bad { background: #fbeceb; box-shadow: 0 0 0 2px var(--c-err); }
+.summary.checked .claim.good { background: #e6f2ec; }
+.typing { opacity: 0; }
+.typing.in { animation: rise .45s var(--ease) forwards; }
+
+/* technique table + quiz */
+.ttab { width: 100%; border-collapse: collapse; font-size: 14.5px; }
+.ttab th { text-align: left; color: var(--c-primary); border-bottom: 2px solid var(--c-line); padding: 6px 8px; font-size: 13px; }
+.ttab td { border-bottom: 1px solid var(--c-line); padding: 8px; vertical-align: top; }
+.ttab td:first-child { font-weight: 800; color: var(--c-primary); white-space: nowrap; }
+.mquiz .q { display: grid; grid-template-columns: 1fr auto; gap: 10px; align-items: center; padding: 8px 0; border-bottom: 1px solid var(--c-line); font-size: 15px; }
+.mquiz .q:last-child { border-bottom: 0; }
+.mquiz .opts { display: flex; gap: 6px; flex-wrap: wrap; justify-content: flex-end; }
+.opt { font: 700 13px var(--font); padding: 8px 12px; border-radius: var(--r-pill); border: 2px solid var(--c-line); background: #fff; color: var(--c-primary); cursor: pointer; }
+.opt:hover { border-color: var(--c-primary); }
+.opt.ok { background: var(--c-ok); border-color: var(--c-ok); color: #fff; }
+.opt.no { background: #fbeceb; border-color: var(--c-err); color: var(--c-err); animation: shake .35s; }
+.fb { display: block; font-size: 13.5px; color: var(--c-ok); }
+@media (max-width: 700px) { .mquiz .q { grid-template-columns: 1fr; } .mquiz .opts { justify-content: flex-start; } }
+.score { font-size: 15px; font-weight: 700; color: var(--c-primary); }
+
+/* metrics */
+.mx { display: grid; grid-template-columns: minmax(220px, 300px) 1fr; gap: 24px; align-items: start; }
+.mx-list { display: flex; flex-direction: column; gap: 6px; }
+.mx-btn { display: flex; justify-content: space-between; align-items: center; gap: 8px; border: 0; background: #fff; border-radius: var(--r-pill); padding: 9px 16px; font: 700 15px var(--font); color: var(--c-primary); cursor: pointer; text-align: left; box-shadow: var(--shadow-1); transition: background .25s, color .25s; }
+.mx-btn small { font-weight: 500; font-size: 12px; color: var(--c-muted); }
+.mx-btn.on { background: var(--c-primary); color: #fff; }
+.mx-btn.on small { color: rgba(255,255,255,.75); }
+.mx-card dl { margin: 0; display: grid; grid-template-columns: 150px 1fr; gap: 6px 14px; font-size: 15.5px; }
+.mx-card dt { font-size: 12px; font-weight: 700; color: var(--c-muted); padding-top: 3px; }
+.mx-card dd { margin: 0; }
+.mx-val { display: flex; align-items: baseline; gap: 12px; margin-bottom: 10px; }
+.mx-val b { font-size: 46px; font-weight: 300; color: var(--c-primary); line-height: 1; }
+.mx-val span { font-size: 14px; font-weight: 700; color: var(--c-muted); }
+.meter { height: 12px; border-radius: 6px; background: var(--c-surface-alt); overflow: hidden; margin-bottom: 14px; }
+.meter i { display: block; height: 100%; background: var(--c-primary); border-radius: 6px; transition: width .6s var(--ease); }
+.meter.low i { background: var(--c-accent); }
+@media (max-width: 760px) { .mx { grid-template-columns: 1fr; } .mx-list { flex-direction: row; flex-wrap: wrap; } .mx-card dl { grid-template-columns: 1fr; } }
+
+/* refinement iterations */
+.iter { display: grid; grid-template-columns: 34px 1fr 64px; gap: 10px; align-items: center; padding: 6px 0; border-bottom: 1px solid var(--c-line); font-size: 14.5px; }
+.iter .v { font-weight: 800; color: var(--c-primary); }
+.iter .bar { height: 12px; background: var(--c-surface-alt); border-radius: 6px; overflow: hidden; grid-column: 2; }
+.iter .bar i { display: block; height: 100%; background: var(--c-primary); border-radius: 6px; width: 0; transition: width .8s var(--ease) .2s; }
+.iter.shown .bar i { width: var(--w); }
+.iter.best .bar i { background: var(--c-accent); }
+.iter .pct { text-align: right; font-weight: 800; color: var(--c-primary); }
+.iter .what { grid-column: 2 / 4; font-size: 13.5px; color: var(--c-text); margin-top: -4px; }
+
+/* error types */
+.ftypes { display: grid; grid-template-columns: repeat(3, 1fr); gap: 18px; }
+.ftype .icon-disc { width: 52px; height: 52px; margin: 0 0 10px; }
+.ftype .icon-disc svg { width: 26px; height: 26px; }
+.ftype h3 { margin-bottom: 2px; }
+.ftype .en { font-size: 12px; font-weight: 700; color: var(--c-muted); display: block; margin-bottom: 8px; }
+.ftype p { font-size: 14.5px; margin: 0 0 8px; }
+.ftype .exq { font-size: 14px; background: var(--c-surface-2); border-left: 3px solid var(--c-line); padding: 6px 10px; border-radius: 0 4px 4px 0; }
+@media (max-width: 860px) { .ftypes { grid-template-columns: 1fr; } }
+
+/* mitigation */
+.mit { display: grid; grid-template-columns: repeat(3, 1fr); gap: 14px; }
+.mit .card { padding: 16px 18px; opacity: .35; transform: translateY(6px); transition: opacity .5s var(--ease), transform .5s var(--ease), box-shadow .5s; }
+.mit .card.on { opacity: 1; transform: none; }
+.mit .card.hot { box-shadow: 0 0 0 3px var(--c-accent), var(--shadow-1); }
+.mit .n { display: inline-grid; place-items: center; width: 30px; height: 30px; border-radius: 50%; background: var(--c-accent); color: #fff; font-weight: 800; font-size: 14px; margin-right: 8px; }
+.mit h3 { font-size: 17px; display: flex; align-items: center; margin-bottom: 6px; }
+.mit p { font-size: 14px; margin: 0 0 8px; }
+.chips-hdb { display: flex; gap: 4px; flex-wrap: wrap; }
+.chips-hdb span { font-size: 11px; font-weight: 800; padding: 2px 8px; border-radius: var(--r-pill); background: var(--c-surface-alt); color: var(--c-primary); }
+@media (max-width: 860px) { .mit { grid-template-columns: 1fr 1fr; } }
+@media (max-width: 520px) { .mit { grid-template-columns: 1fr; } }
+
+/* non-determinism */
+.runs { display: grid; gap: 8px; }
+.run { display: grid; grid-template-columns: 64px 1fr; gap: 10px; align-items: center; background: #fff; border: 1px solid var(--c-line); border-radius: var(--r-sm); padding: 8px 12px; font-size: 15px; min-height: 48px; }
+.run b { font-size: 12px; color: var(--c-muted); }
+.run .txt.in { animation: fadeSwap .4s var(--ease); }
+.run.same { border-color: var(--c-ok); }
+.slider { display: flex; align-items: center; gap: 12px; font-size: 15px; font-weight: 700; color: var(--c-primary); }
+.slider input { flex: 1; accent-color: var(--c-accent); }
+.toggle { display: inline-flex; align-items: center; gap: 10px; font-size: 15px; font-weight: 700; color: var(--c-primary); cursor: pointer; user-select: none; }
+.toggle input { appearance: none; width: 44px; height: 24px; border-radius: 12px; background: var(--c-line); position: relative; cursor: pointer; transition: background .25s; margin: 0; }
+.toggle input::after { content: ""; position: absolute; top: 3px; left: 3px; width: 18px; height: 18px; border-radius: 50%; background: #fff; transition: left .25s var(--ease); box-shadow: var(--shadow-1); }
+.toggle input:checked { background: var(--c-accent); }
+.toggle input:checked::after { left: 23px; }
+.verdict { font-size: 14.5px; font-weight: 700; min-height: 1.5em; }
+
+/* takeaways */
+.take { list-style: none; padding: 0; margin: 0; counter-reset: t; }
+.take li { counter-increment: t; display: grid; grid-template-columns: 44px 1fr; gap: 14px; align-items: center; padding: 10px 0; border-bottom: 1px solid var(--c-line); }
+.take li::before { content: counter(t); width: 44px; height: 44px; border-radius: 50%; background: var(--c-accent); color: #fff; font-weight: 800; display: grid; place-items: center; font-size: 18px; }
+.take b { color: var(--c-primary); }
+
+/* glossary + templates */
+.gloss { display: grid; grid-template-columns: repeat(auto-fit, minmax(300px, 1fr)); gap: 4px 28px; font-size: 15px; }
+.gloss div { padding: 7px 0; border-bottom: 1px solid var(--c-line); }
+.gloss b { color: var(--c-primary); }
+.tpl { position: relative; }
+.tpl pre { white-space: pre-wrap; font-size: 12.5px; margin: 6px 0 0; max-height: 46vh; overflow-y: auto; }
+.tpl .btn { position: absolute; right: 10px; top: 0; }
+</style>
+</head>
+<body>
+
+<header class="topbar">
+  <div class="brand">GenAI im Test<span class="dot-accent" aria-hidden="true"></span></div>
+  <div class="right">
+    <div class="chapter" id="chapter"></div>
+    <span class="part-tag">Teil 2 / 3</span>
+    <button class="icon-btn" id="btnNotes" title="Sprechernotizen (N)" aria-label="Sprechernotizen ein/aus"><svg viewBox="0 0 24 24"><path d="M5 4h14v12H9l-4 4z"/><path d="M9 9h6M9 12h4"/></svg></button>
+    <button class="icon-btn" id="btnFull" title="Vollbild (F)" aria-label="Vollbild"><svg viewBox="0 0 24 24"><path d="M4 9V4h5M20 9V4h-5M4 15v5h5M20 15v5h-5"/></svg></button>
+  </div>
+  <div class="progress" id="progress"></div>
+</header>
+
+<main class="deck" id="deck">
+
+<!-- ============ 1 · Titel ============ -->
+<section class="slide hero" data-title="Start">
+  <div class="inner">
+    <div class="grid-2">
+      <div style="display:grid;place-items:center">
+        <div class="bubble reveal" style="--i:0">
+          <span class="eyebrow">Teil 2 von 3</span>
+          <h2 style="font-size:clamp(24px,2.6vw,32px);margin:.2em 0 .3em">GenAI im Testprozess</h2>
+          <span class="muted small">Von der User Story bis zum Bericht, und wie man Fehler der KI erkennt</span>
+        </div>
+      </div>
+      <div class="hero-side">
+        <span class="eyebrow reveal" style="--i:1">Interne Weiterbildung · Concordia · Präsentiert von Joanna</span>
+        <h1 class="reveal" style="--i:2">Testen mit generativer KI</h1>
+        <p class="reveal" style="--i:3">Heute begleiten wir <strong>eine User Story durch den ganzen Testprozess</strong> und üben den kritischen Blick auf KI-Ergebnisse.</p>
+        <p class="hero-keys reveal" style="--i:4">Navigation: <kbd>←</kbd> <kbd>→</kbd> · Notizen <kbd>N</kbd> · Vollbild <kbd>F</kbd></p>
+        <div class="reveal" style="--i:5"><button class="btn" data-go="next" style="background:var(--c-accent)">Los geht’s</button></div>
+      </div>
+    </div>
+  </div>
+  <aside class="notes"><strong>Begrüssung (30 Sek.)</strong> Willkommen zurück. Letzte Woche: wie ein LLM funktioniert und wie man strukturiert promptet. Heute: Anwenden im Testprozess und Fehler der KI erkennen.</aside>
+</section>
+
+<!-- ============ 2 · Rückblick ============ -->
+<section class="slide" data-title="Rückblick">
+  <div class="inner">
+    <span class="eyebrow">Rückblick Session 1</span>
+    <h2>Was wissen wir schon?</h2>
+    <p class="small muted" style="margin-bottom:12px">Erst raten lassen, dann eine Karte anklicken.</p>
+    <div class="flips" id="flips">
+      <button class="flip"><span class="face front"><small>Frage 1</small>Was erzeugt ein LLM eigentlich?</span><span class="face back">Statistisch plausiblen Text, Token für Token. Plausibel ist nicht automatisch korrekt.</span></button>
+      <button class="flip"><span class="face front"><small>Frage 2</small>Warum gibt derselbe Prompt verschiedene Antworten?</span><span class="face back">Das nächste Token wird «gewürfelt»: nicht-deterministisch. Die Temperatur steuert, wie stark.</span></button>
+      <button class="flip"><span class="face front"><small>Frage 3</small>Welche sechs Bausteine hat ein guter Prompt?</span><span class="face back">Rolle, Kontext, Anweisung, Eingabedaten, Einschränkungen, Ausgabeformat.</span></button>
+      <button class="flip"><span class="face front"><small>Frage 4</small>Welche drei Prompt-Techniken kennen wir?</span><span class="face back">Prompt Chaining, Few-Shot Prompting und Meta-Prompting.</span></button>
+    </div>
+    <div class="row mt-s"><button class="btn btn--soft btn--sm" id="flipAll">Alle aufdecken</button></div>
+    <span class="eyebrow mt">Heute</span>
+    <div class="agenda">
+      <div class="card card--tint"><span class="t">ca. 8 Min.</span><br><b class="key">Eine Story durch den Testprozess</b></div>
+      <div class="card card--tint"><span class="t">ca. 3 Min.</span><br><b class="key">Ergebnisse messen & Prompts verbessern</b></div>
+      <div class="card card--tint"><span class="t">ca. 6 Min.</span><br><b class="key">Wenn die KI danebenliegt</b></div>
+    </div>
+  </div>
+  <aside class="notes"><strong>Rückblick (1 Min.)</strong> Publikum raten lassen, dann aufdecken. Frage 1 ist der rote Faden für heute: Plausibel ist nicht korrekt. Darum geht es im letzten Drittel.</aside>
+</section>
+
+<!-- ============ 3 · Eine Story, fünf Stationen ============ -->
+<section class="slide band" data-title="Eine Story, fünf Stationen">
+  <div class="inner">
+    <span class="eyebrow">Kapitel 2.2 · Prompt Engineering im Testprozess</span>
+    <h2>Eine User Story, fünf Stationen</h2>
+    <div class="story"><span class="eyebrow">Unser Beispiel (fiktiv)</span>«Als versicherte Person möchte ich eine <b>Arztrechnung im Kundenportal hochladen</b>, damit ich die Rückerstattung ohne Briefpost beantragen kann.»
+      <span class="ak">AK1: Erlaubt sind PDF, JPG und PNG. · AK2: Nach dem Einreichen erscheint eine Bestätigung.</span></div>
+    <div class="card mt-s" data-flow data-interval="2200" style="padding:14px 20px">
+      <svg class="flow" viewBox="0 0 810 120" role="img" aria-label="Die User Story wandert durch Testanalyse, Testentwurf, Testrealisierung, Regression und Überwachung">
+        <path class="edge" id="s3-e1" d="M150 50 H172"/><path class="edge" id="s3-e2" d="M312 50 H334"/>
+        <path class="edge" id="s3-e3" d="M474 50 H496"/><path class="edge" id="s3-e4" d="M636 50 H658"/>
+        <g class="node" id="s3-n1"><rect x="10" y="12" width="140" height="76" rx="5"/><text x="80" y="40">Testanalyse</text><text class="sub" x="80" y="62">Lücken & AK</text></g>
+        <g class="node" id="s3-n2"><rect x="172" y="12" width="140" height="76" rx="5"/><text x="242" y="40">Testentwurf</text><text class="sub" x="242" y="62">Gherkin-Szenarien</text></g>
+        <g class="node" id="s3-n3"><rect x="334" y="12" width="140" height="76" rx="5"/><text x="404" y="40" style="font-size:14px">Testrealisierung</text><text class="sub" x="404" y="62">Keyword-Skripte</text></g>
+        <g class="node" id="s3-n4"><rect x="496" y="12" width="140" height="76" rx="5"/><text x="566" y="40">Regression</text><text class="sub" x="566" y="62">Skripte warten</text></g>
+        <g class="node" id="s3-n5"><rect x="658" y="12" width="142" height="76" rx="5"/><text x="729" y="40">Überwachung</text><text class="sub" x="729" y="62">Dashboard & Bericht</text></g>
+        <text class="label" x="80" y="108">multimodal + Chaining</text><text class="label" x="242" y="108">Few-Shot</text><text class="label" x="404" y="108">Few-Shot</text><text class="label" x="566" y="108">Analyse + Review</text><text class="label" x="729" y="108">strukturierter Prompt</text>
+      </svg>
+      <div class="s3-row"><ol class="steps tight">
+        <li data-hot="s3-n1">Story und Wireframe analysieren: Lücken finden, Akzeptanzkriterien schärfen</li>
+        <li data-hot="s3-n1 s3-n2" data-edge="s3-e1">Aus den Kriterien Gherkin-Szenarien im Team-Format ableiten</li>
+        <li data-hot="s3-n2 s3-n3" data-edge="s3-e2">Szenarien in schlüsselwortgetriebene Testskripte übersetzen</li>
+        <li data-hot="s3-n3 s3-n4" data-edge="s3-e3">Skripte bei UI- und API-Änderungen anpassen</li>
+        <li data-hot="s3-n4 s3-n5" data-edge="s3-e4">Testergebnisse zu Kennzahlen und einer verständlichen Zusammenfassung verdichten</li>
+      </ol>
+      <div class="flow-controls tight" style="flex-direction:column;align-items:stretch"><button class="btn btn--soft btn--sm" data-flow-play>▶ Abspielen</button><button class="btn btn--soft btn--sm" data-flow-step>Schritt</button><button class="btn btn--soft btn--sm" data-flow-reset>Zurück</button></div></div>
+    </div>
+  </div>
+  <aside class="notes"><strong>Überblick (1 Min.)</strong> Eine fiktive Story begleitet uns durch alle Stationen. Unter jeder Station steht die Prompt-Technik, die dort am besten passt. Die AK sind bewusst unvollständig.</aside>
+</section>
+
+<!-- ============ 4 · Testanalyse ============ -->
+<section class="slide" data-title="1 · Testanalyse">
+  <div class="inner">
+    <span class="eyebrow">Station 1 von 5 · Kapitel 2.2.1 Testanalyse</span>
+    <h2>Die KI als kritische Leserin der Testbasis</h2>
+    <div class="grid-2 top" data-flow data-interval="3200">
+      <div class="stack">
+        <p class="small" style="margin:0"><b class="key">Eingabe:</b> Story mit AK1–AK2 <em>und</em> Wireframe als Bild, also ein strukturierter, multimodaler Prompt. <b class="key">Technik:</b> Prompt Chaining, nach jedem Schritt prüft ein Mensch.</p>
+        <div class="mock">
+          <div class="bar"><i></i><i></i><i></i><span>kundenportal / rückerstattung</span></div>
+          <div class="body">
+            <div class="ttl">Arztrechnung einreichen</div>
+            <div class="fld">Rechnung (PDF, JPG, PNG)</div>
+            <div class="drop mk" id="s4-size" data-q="1">Datei hierher ziehen · max. 10 MB</div>
+            <div class="fld">Behandlungsdatum</div><div class="inp mk" id="s4-date" data-q="1"></div>
+            <div class="fld">Rechnungsbetrag (CHF)</div><div class="inp mk" id="s4-amt" data-q="3"></div>
+            <span class="mbtn mk" id="s4-btn" data-q="2">Einreichen</span>
+          </div>
+        </div>
+      </div>
+      <div class="stack">
+        <ol class="steps tight">
+          <li data-hot="" data-mark="s4-size s4-date"><b>Prompt 1 · Mehrdeutigkeiten:</b> «max. 10 MB» steht nur im Wireframe: pro Datei oder total? Darf das Behandlungsdatum in der Zukunft liegen? <span class="muted">✓ Mensch klärt mit dem Product Owner.</span></li>
+          <li data-mark="s4-btn"><b>Prompt 2 · Testbarkeit:</b> AK2 «Bestätigung erscheint» ist nicht prüfbar. Wo erscheint sie, mit welchem Inhalt? <span class="muted">✓ Mensch präzisiert: mit Referenznummer.</span></li>
+          <li data-mark="s4-amt"><b>Prompt 3 · Vollständigkeit:</b> Es fehlen Fehlerfälle: falscher Dateityp, Betrag 0, dieselbe Rechnung zweimal. <span class="muted">✓ Mensch streicht, was nicht passt.</span></li>
+          <li><b>Ergebnis:</b> geschärfte Akzeptanzkriterien, vom Team bestätigt.</li>
+        </ol>
+        <div class="finding step-show" data-step-show="3"><b>Neu bzw. präzisiert</b>
+          <ul><li>AK2: Bestätigung mit Referenznummer auf der Folgeseite</li><li>AK3: max. 10 MB pro Datei</li><li>AK4: Behandlungsdatum nicht in der Zukunft</li><li>AK5: Dieselbe Rechnung kann nicht doppelt eingereicht werden</li></ul></div>
+        <div class="flow-controls tight"><button class="btn btn--soft btn--sm" data-flow-play>▶ Abspielen</button><button class="btn btn--soft btn--sm" data-flow-step>Schritt</button><button class="btn btn--soft btn--sm" data-flow-reset>Zurück</button></div>
+      </div>
+    </div>
+  </div>
+  <aside class="notes"><strong>Testanalyse (1,5 Min.)</strong> Die KI findet Mehrdeutigkeiten, prüft Testbarkeit und Vollständigkeit. Die Nummern im Wireframe zeigen, worauf sich jeder Befund bezieht. Wichtig: Nach jedem Schritt prüft ein Mensch, und der nächste Prompt arbeitet mit dem bereinigten Ergebnis. Die KI kann auch Testtechniken vorschlagen (z.&nbsp;B. Grenzwertanalyse für die 10 MB) und Testbedingungen nach Risiko priorisieren.</aside>
+</section>
+
+<!-- ============ 5 · Testentwurf ============ -->
+<section class="slide band" data-title="2 · Testentwurf">
+  <div class="inner">
+    <span class="eyebrow">Station 2 von 5 · Kapitel 2.2.2 Testentwurf</span>
+    <h2>Few-Shot: Gherkin-Szenarien im Format des Teams</h2>
+    <div class="grid-2 top">
+      <div class="card" style="padding:16px 18px">
+        <span class="eyebrow">Prompt (gekürzt)</span>
+        <div class="small" style="color:var(--c-ink-deep)">Du bist Test Analyst. Schreibe Gherkin-Szenarien <b>genau im Stil der Beispiele</b>. Verwende nur synthetische Testdaten.</div>
+        <div class="ex"><span class="tag">Beispiel 1 · Story «Adresse ändern»</span>
+<b>Scenario:</b> Ungültige PLZ wird abgelehnt
+  <b>When</b> ich die PLZ "12" speichere
+  <b>Then</b> sehe ich "PLZ muss 4 Ziffern haben"</div>
+        <div class="ex"><span class="tag">Beispiel 2 · Story «Police herunterladen»</span>
+<b>Scenario:</b> Gültige Police als PDF
+  <b>When</b> ich die Police 2026 herunterlade
+  <b>Then</b> wird ein PDF geöffnet</div>
+        <div class="ex new"><span class="tag tag--acc">Neue Story</span>
+Arztrechnung hochladen · AK1–AK5</div>
+      </div>
+      <div class="card" style="padding:16px 18px">
+        <div class="row" style="justify-content:space-between;margin-bottom:8px"><span class="eyebrow" style="margin:0" id="gkTitle">Antwort des LLM</span><span id="gkBadge"></span></div>
+        <div class="swap">
+          <pre class="code" id="gkCode" aria-live="polite"></pre>
+          <div id="gkCov" hidden></div>
+        </div>
+        <div class="row mt-s">
+          <button class="btn btn--soft btn--sm" id="gkGen">▶ Generieren</button>
+          <button class="btn btn--soft btn--sm" id="gkCheck">Abdeckung prüfen</button>
+          <button class="btn btn--soft btn--sm" id="gkFix">Lücken schliessen</button>
+        </div>
+      </div>
+    </div>
+  </div>
+  <aside class="notes"><strong>Testentwurf (1,5 Min.)</strong> Zwei Beispiele geben Format und Stil vor, das Modell überträgt das Muster auf die neue Story. Dann «Abdeckung prüfen»: Die KI erstellt eine Tabelle AK × Szenario. AK4 und AK5 fehlen. «Lücken schliessen» = nächster Prompt in der Kette. Testdaten: synthetisch, nie echte Kundendaten.</aside>
+</section>
+
+<!-- ============ 6 · Testrealisierung ============ -->
+<section class="slide" data-title="3 · Testrealisierung">
+  <div class="inner">
+    <span class="eyebrow">Station 3 von 5 · Kapitel 2.2.2 / 2.2.3 Testrealisierung</span>
+    <h2>Vom Szenario zum schlüsselwortgetriebenen Testskript</h2>
+    <div class="grid-2 top" style="grid-template-columns:minmax(260px,.8fr) 1.2fr">
+      <div class="stack">
+        <div class="card" style="padding:14px 16px">
+          <span class="eyebrow">Keyword-Bibliothek des Teams</span>
+          <ul class="kwlib">
+            <li>Öffne Portal <span>&lt;pfad&gt;</span></li>
+            <li>Melde an als <span>&lt;testkonto&gt;</span></li>
+            <li>Lade Datei hoch <span>&lt;datei&gt;</span></li>
+            <li>Erfasse Feld <span>&lt;feld&gt; &lt;wert&gt;</span></li>
+            <li>Klicke <span>&lt;element&gt;</span></li>
+            <li>Prüfe Meldung <span>&lt;text&gt;</span></li>
+          </ul>
+        </div>
+        <p class="small" style="margin:0"><b class="key">Few-Shot:</b> Bibliothek plus zwei fertige Skripte als Beispiele in den Prompt. <b class="key">Prüf-Assistent:</b> ein System-Prompt, der jedes Skript nur gegen diese Bibliothek prüft.</p>
+      </div>
+      <div class="card" style="padding:14px 16px">
+        <div class="row" style="justify-content:space-between"><span class="eyebrow" style="margin:0">Skript · Gültige PDF-Rechnung einreichen</span><span id="kwBadge"></span></div>
+        <div class="table-scroll"><table class="kwt"><thead><tr><th>Keyword</th><th>Argumente</th></tr></thead><tbody id="kwBody"></tbody></table></div>
+        <div class="row mt-s">
+          <button class="btn btn--soft btn--sm" id="kwGen">▶ Skript generieren</button>
+          <button class="btn btn--soft btn--sm" id="kwVal">KI-Prüfung</button>
+          <button class="btn btn--soft btn--sm" id="kwFix">Korrigieren</button>
+        </div>
+      </div>
+    </div>
+  </div>
+  <aside class="notes"><strong>Testrealisierung (1 Min.)</strong> Das Modell übersetzt das Szenario in Keywords. Ein Keyword wurde erfunden («Warte auf Upload»), das gibt es in der Bibliothek nicht. Der Prüf-Assistent findet es, der Mensch entscheidet über die Korrektur. Das ist eine erste Halluzination, mehr dazu später.</aside>
+</section>
+
+<!-- ============ 7 · Regression ============ -->
+<section class="slide band" data-title="4 · Regression">
+  <div class="inner">
+    <span class="eyebrow">Station 4 von 5 · Kapitel 2.2.3 Automatisierte Regressionstests</span>
+    <h2>Wenn sich die Oberfläche ändert: Skripte mit KI warten</h2>
+    <div class="grid-2 top reg" data-flow data-interval="3000">
+      <div class="stack">
+        <div class="card" style="padding:12px 14px">
+          <div class="swap">
+            <div data-step-hide="1"><span class="lbl">Oberfläche · Release 2.3</span><pre class="code">&lt;button <span class="str">id="btn-submit"</span>&gt;Einreichen&lt;/button&gt;</pre></div>
+            <div data-step-show="1"><span class="lbl">Oberfläche · Release 2.4</span><pre class="code">&lt;button <span class="str">data-test="claim-send"</span>&gt;Rechnung senden&lt;/button&gt;</pre></div>
+          </div>
+        </div>
+        <div class="card" style="padding:12px 14px">
+          <span class="lbl">Regressionstest · Schritt 6</span>
+          <div class="swap">
+            <div class="runline" data-step-hide="1"><span>Klicke  id=btn-submit</span><span class="pill-st ok">✓ bestanden</span></div>
+            <div class="runline" data-step-show="1" data-step-hide="4"><span>Klicke  id=btn-submit</span><span class="pill-st err">✗ Element nicht gefunden</span></div>
+            <div class="runline" data-step-show="4"><span>Klicke  data-test=claim-send</span><span class="pill-st ok">✓ bestanden</span></div>
+          </div>
+        </div>
+        <div class="swap">
+          <div class="assist ai" data-step-show="2" data-step-hide="3"><span class="who">KI-Vorschlag</span>Locator ersetzen: <code>id=btn-submit</code> → <code>data-test=claim-send</code>. Gleiche Position, gleiche Aktion, nur der Text ist neu.</div>
+          <div class="assist human" data-step-show="3" data-step-hide="4"><span class="who">Mensch prüft</span>Fachlich dieselbe Aktion? Ja → übernehmen. Wäre der Button <b>verschwunden</b>, wäre das ein Fehler im Produkt und kein Fall für Self-Healing.</div>
+          <div class="assist human" data-step-show="4" data-step-hide="5"><span class="who">Ergebnis</span>Skript angepasst, Änderung im Testprotokoll dokumentiert. Der Test läuft wieder.</div>
+          <div class="assist ai" data-step-show="5"><span class="who">Gleiches Prinzip bei APIs</span>Spezifikation 2.4: Feld <code>betrag</code> heisst neu <code>amount_chf</code>. Die KI passt Request und Testdaten an, ein Mensch prüft.</div>
+        </div>
+      </div>
+      <div class="stack">
+        <ol class="steps tight">
+          <li>Release 2.3: Der Regressionstest läuft grün.</li>
+          <li>Release 2.4: Button umbenannt, neuer Locator. Der Test schlägt fehl, obwohl die Funktion geht.</li>
+          <li>Die KI vergleicht alte und neue Oberfläche und schlägt einen neuen Locator vor.</li>
+          <li>Ein Mensch prüft: Ist es wirklich dieselbe Funktion?</li>
+          <li>Skript angepasst, Test wieder grün.</li>
+          <li>Dasselbe bei API-Tests: geänderte Felder, Endpunkte, Authentifizierung.</li>
+        </ol>
+        <div class="note small"><strong>Impact-Analyse:</strong> Die KI liest den Commit und sieht, dass nur das Upload-Modul betroffen ist. Diese Tests laufen zuerst, das spart Zeit in der CI/CD-Pipeline.</div>
+        <div class="flow-controls tight"><button class="btn btn--soft btn--sm" data-flow-play>▶ Abspielen</button><button class="btn btn--soft btn--sm" data-flow-step>Schritt</button><button class="btn btn--soft btn--sm" data-flow-reset>Zurück</button></div>
+      </div>
+    </div>
+  </div>
+  <aside class="notes"><strong>Regression (75 Sek.)</strong> Self-Healing: Die KI passt Locators bei kleinen UI-Änderungen an. Kernpunkt ist Schritt 4: Ohne menschliche Prüfung kann Self-Healing echte Fehler verdecken. Dazu kommen Impact-Analyse, automatische Testberichte und Fehlerberichte mit Logs und Screenshots.</aside>
+</section>
+
+<!-- ============ 8 · Überwachung ============ -->
+<section class="slide" data-title="5 · Überwachung & Steuerung">
+  <div class="inner">
+    <span class="eyebrow">Station 5 von 5 · Kapitel 2.2.4 Testüberwachung und Teststeuerung</span>
+    <h2>Aus Testdaten wird eine Zusammenfassung für alle</h2>
+    <div class="grid-2 top">
+      <div class="card" style="padding:16px 18px">
+        <span class="eyebrow">Dashboard · Regressionslauf Release 2.4</span>
+        <div class="stats">
+          <div class="stat"><b>186 / 220</b><span>ausgeführt</span></div>
+          <div class="stat"><b>164</b><span>bestanden</span></div>
+          <div class="stat"><b>7</b><span>offene Fehler, davon 2 kritisch</span></div>
+        </div>
+        <svg class="chart mt-s" id="dash" viewBox="0 0 420 170" role="img" aria-label="Gestapelte Balken: ausgeführte Tests pro Tag, bestanden und fehlgeschlagen, Tag 1 bis 5"></svg>
+        <div class="legend"><span><i style="background:var(--c-primary)"></i>bestanden</span><span><i style="background:var(--c-err)"></i>fehlgeschlagen</span><span><i style="border:2px dashed var(--c-muted);background:none;width:14px;height:0;border-radius:0;vertical-align:3px"></i>geplant (220)</span></div>
+      </div>
+      <div class="card summary" id="sum" style="padding:16px 18px">
+        <span class="eyebrow">KI-Zusammenfassung für Team und Product Owner</span>
+        <p class="hint" id="sumIdle" style="margin:0 0 6px">«Zusammenfassung erzeugen» lässt die KI den Text schreiben.</p>
+        <p class="typing">Stand Tag 5: <span class="claim good">186 von 220 Regressionstests</span> sind ausgeführt.</p>
+        <p class="typing">Die Bestehensquote liegt bei <span class="claim bad">92&nbsp;%</span>. Die <span class="claim good">zwei kritischen Fehler</span> betreffen den Upload von PNG-Dateien.</p>
+        <p class="typing"><b class="key">Empfehlung:</b> Upload-Tests vor dem Release-Entscheid wiederholen und Kapazität von den Profil-Tests dorthin verschieben.</p>
+        <div class="row mt-s"><button class="btn btn--soft btn--sm" id="sumGen">▶ Zusammenfassung erzeugen</button><button class="btn btn--soft btn--sm" id="sumCheck">Gegenprüfen</button></div>
+        <div class="finding mt-s step-show" id="sumNote"><b>Prüfung:</b> 164 von 186 sind <b>88&nbsp;%</b>, nicht 92&nbsp;%. Klingt plausibel, ist aber falsch. Zahlen immer gegen die Quelle prüfen.</div>
+      </div>
+    </div>
+  </div>
+  <aside class="notes"><strong>Überwachung (1 Min.)</strong> Die KI verdichtet Daten aus dem Testmanagement zu Kennzahlen und einer Zusammenfassung in Alltagssprache, inkl. Empfehlung zur Teststeuerung. Dann «Gegenprüfen»: Die Quote stimmt nicht. Das ist die Überleitung zum Thema Bewerten.</aside>
+</section>
+
+<!-- ============ 9 · Technik wählen ============ -->
+<section class="slide band" data-title="Welche Technik wofür?">
+  <div class="inner">
+    <span class="eyebrow">Kapitel 2.2.5 · Prompt-Techniken auswählen</span>
+    <h2>Welche Technik passt zu welcher Aufgabe?</h2>
+    <div class="grid-2 top">
+      <div class="card" style="padding:14px 16px">
+        <div class="table-scroll"><table class="ttab">
+          <thead><tr><th>Technik</th><th>Passt, wenn …</th><th>Heute gesehen</th></tr></thead>
+          <tbody>
+            <tr><td>Prompt Chaining</td><td>die Aufgabe komplex ist und jeder Schritt geprüft werden muss</td><td>Testanalyse, Lücken schliessen</td></tr>
+            <tr><td>Few-Shot</td><td>sich ein festes Format oft wiederholt</td><td>Gherkin, Keyword-Skripte, Berichte</td></tr>
+            <tr><td>Meta-Prompting</td><td>die Aufgabe neu ist und es noch keinen guten Prompt gibt</td><td>z.&nbsp;B. Prompt für Testbericht-Analyse</td></tr>
+          </tbody>
+        </table></div>
+        <p class="small mt-s" style="margin-bottom:0"><b class="key">Kombinieren ist erlaubt:</b> Meta-Prompt liefert den Startprompt → Beispiele ergänzen (Few-Shot) → in geprüfte Schritte teilen (Chaining).</p>
+      </div>
+      <div class="card mquiz" style="padding:14px 16px" id="tq"><b class="key">Was würdet ihr nehmen?</b></div>
+    </div>
+  </div>
+  <aside class="notes"><strong>Technikwahl (1 Min.)</strong> Tabelle kurz erklären, dann das Publikum die vier Aufgaben zuordnen lassen. Es gibt nicht immer nur eine richtige Antwort; die Kombination ist oft am besten.</aside>
+</section>
+
+<!-- ============ 10 · Metriken ============ -->
+<section class="slide" data-title="Ergebnisse messen">
+  <div class="inner">
+    <span class="eyebrow">Kapitel 2.3.1 · Metriken</span>
+    <h2>Wie gut ist das, was die KI liefert? Messen statt schätzen</h2>
+    <p class="small muted" style="margin-bottom:12px">Beispiel: 12 generierte Testfälle zur Upload-Story. Klicke auf eine Metrik.</p>
+    <div class="mx">
+      <div><div class="mx-list" id="mxList"></div><div class="flow-controls tight"><button class="btn btn--soft btn--sm" id="mxPlay">▶ Abspielen</button></div></div>
+      <div class="card mx-card" id="mxCard">
+        <div class="mx-val"><b id="mxVal"></b><span id="mxUnit"></span></div>
+        <div class="meter" id="mxMeter"><i></i></div>
+        <dl>
+          <dt>Was sie misst</dt><dd id="mxWhat"></dd>
+          <dt>In unserem Beispiel</dt><dd id="mxEx"></dd>
+        </dl>
+      </div>
+    </div>
+    <div class="note small mt"><strong>Wegen des Nicht-Determinismus</strong> über mehrere Läufe messen, nicht nach einem einzigen Versuch urteilen. Gemessen wird per Review oder automatisch gegen eine Referenz. Aufgabenspezifische Metriken sind ausdrücklich erwünscht.</div>
+  </div>
+  <aside class="notes"><strong>Metriken (75 Sek.)</strong> «Abspielen» läuft alle Metriken einmal durch, man kann auch einzeln klicken. Hervorheben: Recall (fehlende Äquivalenzklasse), Relevanz (erfundene SMS) und Diversität (fast nur Happy Paths). Zeitersparnis immer inklusive Review rechnen.</aside>
+</section>
+
+<!-- ============ 11 · Verfeinern ============ -->
+<section class="slide band" data-title="Prompts verbessern">
+  <div class="inner">
+    <span class="eyebrow">Kapitel 2.3.2 · Prompts bewerten und iterativ verbessern</span>
+    <h2>Prompts sind Testmittel: messen, anpassen, teilen</h2>
+    <div class="grid-2 top" data-flow data-interval="2600">
+      <div class="stack">
+        <div class="card" style="padding:10px 14px">
+          <svg class="flow" viewBox="0 0 440 166" role="img" aria-label="Kreislauf: Prompt, Ergebnis, Bewerten, Anpassen">
+            <path class="edge" id="s11-e1" d="M150 32 H290"/>
+            <path class="edge" id="s11-e2" d="M360 54 V112"/>
+            <path class="edge" id="s11-e3" d="M290 134 H150"/>
+            <path class="edge" id="s11-e4" d="M80 112 V54"/>
+            <g class="node" id="s11-p"><rect x="10" y="10" width="140" height="44" rx="5"/><text x="80" y="32">Prompt</text></g>
+            <g class="node" id="s11-r"><rect x="290" y="10" width="140" height="44" rx="5"/><text x="360" y="32">Ergebnis</text></g>
+            <g class="node" id="s11-m"><rect x="290" y="112" width="140" height="44" rx="5"/><text x="360" y="134">Bewerten</text></g>
+            <g class="node" id="s11-a"><rect x="10" y="112" width="140" height="44" rx="5"/><text x="80" y="134">Anpassen</text></g>
+            <text class="label" x="220" y="24">ausführen</text><text class="label" x="350" y="87" style="text-anchor:end">Metrik</text><text class="label" x="220" y="126">Befund</text><text class="label" x="90" y="87" style="text-anchor:start">neue Version</text>
+          </svg>
+        </div>
+        <div class="card" style="padding:10px 14px">
+          <span class="eyebrow">Recall: abgedeckte Äquivalenzklassen (6)</span>
+          <div class="iter step-show" data-step-show="2" style="--w:50%"><span class="v">v1</span><span class="bar"><i></i></span><span class="pct">50 %</span><span class="what">Basis-Prompt</span></div>
+          <div class="iter step-show" data-step-show="4" style="--w:83%"><span class="v">v2</span><span class="bar"><i></i></span><span class="pct">83 %</span><span class="what">+ Grenzwerte und ungültige Klassen verlangt</span></div>
+          <div class="iter best step-show" data-step-show="5" style="--w:100%"><span class="v">v3</span><span class="bar"><i></i></span><span class="pct">100 %</span><span class="what">+ ein Beispiel mit Fehlerfall (Few-Shot)</span></div>
+        </div>
+      </div>
+      <div class="stack">
+        <ol class="steps tight">
+          <li data-hot="s11-p">v1, Basis-Prompt: «Erstelle Testfälle für den Upload.»</li>
+          <li data-hot="s11-p s11-r" data-edge="s11-e1">Ergebnis: 8 Testfälle, fast nur Happy Paths.</li>
+          <li data-hot="s11-r s11-m" data-edge="s11-e2">Bewerten: nur 3 von 6 Klassen abgedeckt.</li>
+          <li data-hot="s11-m s11-a" data-edge="s11-e3">Anpassen: Grenzwerte und ungültige Klassen ausdrücklich verlangen.</li>
+          <li data-hot="s11-a s11-p" data-edge="s11-e4">v2 ausführen und bewerten: 5 von 6, leere Datei fehlt.</li>
+          <li data-hot="s11-m s11-a" data-edge="s11-e3">Anpassen: ein Beispiel mit Fehlerfall ergänzen. v3 deckt alle 6 ab.</li>
+          <li data-hot="s11-p">v3 kommt in die Prompt-Bibliothek des Teams.</li>
+        </ol>
+        <p class="small" style="margin-bottom:0"><b class="key">Weitere Techniken:</b> A/B-Test zweier Prompt-Varianten mit derselben Metrik · Output-Analyse: welche Fehlerart tritt auf? · Feedback der Tester einholen · Länge und Detailgrad variieren.</p>
+        <div class="flow-controls tight"><button class="btn btn--soft btn--sm" data-flow-play>▶ Abspielen</button><button class="btn btn--soft btn--sm" data-flow-step>Schritt</button><button class="btn btn--soft btn--sm" data-flow-reset>Zurück</button></div>
+      </div>
+    </div>
+  </div>
+  <aside class="notes"><strong>Verbessern (1 Min.)</strong> Der Kreislauf ist wie ein Testzyklus für Prompts. Jede Version wird mit derselben Metrik bewertet. Gute Prompts im Team teilen (Prompt-Bibliothek), dann lernt nicht jeder dieselben Fehler neu.</aside>
+</section>
+
+<!-- ============ 12 · Drei Fehlerarten ============ -->
+<section class="slide" data-title="Drei Fehlerarten">
+  <div class="inner">
+    <span class="eyebrow">Kapitel 3.1.1 · Halluzinationen, Denkfehler und Bias</span>
+    <h2>Wenn die KI danebenliegt: drei Fehlerarten</h2>
+    <div class="ftypes">
+      <div class="card ftype reveal" style="--i:1">
+        <div class="icon-disc"><svg viewBox="0 0 24 24"><path d="M12 3c-4 0-7 3-7 7v10l2.3-1.6L9.7 20 12 18.4 14.3 20l2.4-1.6L19 20V10c0-4-3-7-7-7z"/><circle cx="9.5" cy="10" r="1"/><circle cx="14.5" cy="10" r="1"/></svg></div>
+        <h3>Halluzination</h3><span class="en">Hallucination</span>
+        <p>Das Modell <b class="key">erfindet</b> etwas: Fakten, Anforderungen, Keywords, Funktionen.</p>
+        <div class="exq">Testfall prüft eine SMS-Bestätigung, die nirgends gefordert ist.</div>
+      </div>
+      <div class="card ftype reveal" style="--i:2">
+        <div class="icon-disc"><svg viewBox="0 0 24 24"><path d="M4 6h6l4 12h6"/><path d="M14 6h6"/><path d="M17 3l3 3-3 3"/></svg></div>
+        <h3>Denkfehler</h3><span class="en">Reasoning error</span>
+        <p>Die <b class="key">Logik</b> stimmt nicht: Ursache und Wirkung, Bedingungen, Reihenfolgen, Rechnen. LLMs erkennen Muster, sie denken nicht wirklich logisch.</p>
+        <div class="exq">Priorisierung: «Rechnung einreichen» vor «Login».</div>
+      </div>
+      <div class="card ftype reveal" style="--i:3">
+        <div class="icon-disc"><svg viewBox="0 0 24 24"><path d="M12 4v16M5 20h14"/><path d="M4 8l4-1 4-1 4 1 4 1"/><path d="M4 8l-2 5h4zM20 8l-2 5h4z"/></svg></div>
+        <h3>Bias</h3><span class="en">Verzerrung</span>
+        <p>Eine <b class="key">Schlagseite</b> aus den Trainingsdaten: Manche Gruppen, Sprachen oder Testarten kommen zu kurz.</p>
+        <div class="exq">Testdaten nur aus der Deutschschweiz, keine nicht-funktionalen Tests.</div>
+      </div>
+    </div>
+    <div class="note small mt reveal" style="--i:4"><strong>Tückisch:</strong> Wegen des Nicht-Determinismus scheint ein Fehler behoben und taucht im nächsten Chat wieder auf. Ursache sind die Trainingsdaten und die Grenzen der Transformer-Architektur, nicht ein «schlechter Tag» des Modells.</div>
+  </div>
+  <aside class="notes"><strong>Fehlerarten (75 Sek.)</strong> Halluzination = erfunden. Denkfehler = falsch gefolgert, typisch bei Planung, Priorisierung, Rechnen. Bias = einseitig, stammt aus den Trainingsdaten (z.&nbsp;B. überwiegend englischsprachig). Die Beispiele kennt ihr schon aus den Stationen.</aside>
+</section>
+
+<!-- ============ 13 · Schnelldiagnose ============ -->
+<section class="slide band" data-title="Schnelldiagnose">
+  <div class="inner">
+    <span class="eyebrow">Kapitel 3.1.2 · Fehler im Output erkennen</span>
+    <h2>Drei Fragen an jeden KI-Output</h2>
+    <div class="grid-2 top" data-flow data-interval="2400">
+      <div class="card" style="padding:12px 16px">
+        <svg class="flow" viewBox="0 0 440 330" style="max-height:52vh" role="img" aria-label="Entscheidungsbaum: Belegt? Folgerichtig? Einseitig?">
+          <path class="edge" id="s13-e0" d="M110 45 V75"/>
+          <path class="edge" id="s13-e1" d="M200 95 H250"/>
+          <path class="edge" id="s13-e2" d="M110 115 V145"/>
+          <path class="edge" id="s13-e3" d="M200 165 H250"/>
+          <path class="edge" id="s13-e4" d="M110 185 V215"/>
+          <path class="edge" id="s13-e5" d="M200 235 H250"/>
+          <path class="edge" id="s13-e6" d="M110 255 V285"/>
+          <g class="node alt" id="s13-o"><rect x="20" y="5" width="180" height="40" rx="5"/><text x="110" y="26">KI-Output</text></g>
+          <g class="node" id="s13-q1"><rect x="20" y="75" width="180" height="40" rx="20"/><text x="110" y="96">Belegt?</text></g>
+          <g class="node" id="s13-q2"><rect x="20" y="145" width="180" height="40" rx="20"/><text x="110" y="166">Folgerichtig?</text></g>
+          <g class="node" id="s13-q3"><rect x="20" y="215" width="180" height="40" rx="20"/><text x="110" y="236">Einseitig?</text></g>
+          <g class="node alt" id="s13-ok"><rect x="20" y="285" width="180" height="40" rx="5"/><text x="110" y="306">Verwenden</text></g>
+          <g class="node" id="s13-h"><rect x="250" y="75" width="170" height="40" rx="5"/><text x="335" y="96">Halluzination</text></g>
+          <g class="node" id="s13-d"><rect x="250" y="145" width="170" height="40" rx="5"/><text x="335" y="166">Denkfehler</text></g>
+          <g class="node" id="s13-b"><rect x="250" y="215" width="170" height="40" rx="5"/><text x="335" y="236">Bias</text></g>
+          <text class="label" x="225" y="88">nein</text><text class="label" x="225" y="158">nein</text><text class="label" x="225" y="228">ja</text>
+          <text class="label" x="126" y="134" style="text-anchor:start">ja</text><text class="label" x="126" y="204" style="text-anchor:start">ja</text><text class="label" x="126" y="274" style="text-anchor:start">nein</text>
+        </svg>
+      </div>
+      <div class="stack">
+        <ol class="steps tight">
+          <li data-hot="s13-o s13-q1" data-edge="s13-e0"><b>Belegt?</b> Steht das so in Story, AK, Doku oder im System?</li>
+          <li data-hot="s13-q1 s13-h" data-edge="s13-e1">Nein → <b>Halluzination.</b> Gegen die Testbasis prüfen, Fachleute fragen, Outputs untereinander vergleichen.</li>
+          <li data-hot="s13-q1 s13-q2" data-edge="s13-e2"><b>Folgerichtig?</b> Stimmen Reihenfolge, Bedingungen, Rechnung?</li>
+          <li data-hot="s13-q2 s13-d" data-edge="s13-e3">Nein → <b>Denkfehler.</b> Logik im Review nachvollziehen, generierte Tests und Skripte ausführen.</li>
+          <li data-hot="s13-q2 s13-q3" data-edge="s13-e4"><b>Einseitig?</b> Fehlen Gruppen, Sprachen, Testarten?</li>
+          <li data-hot="s13-q3 s13-b" data-edge="s13-e5">Ja → <b>Bias.</b> Gegen Teststrategie und Abdeckungsziele prüfen, z.&nbsp;B. nicht-funktionale Tests.</li>
+          <li data-hot="s13-q3 s13-ok" data-edge="s13-e6">Nein → verwenden. Wie tief man prüft, hängt vom Risiko ab.</li>
+        </ol>
+        <div class="flow-controls tight"><button class="btn btn--soft btn--sm" data-flow-play>▶ Abspielen</button><button class="btn btn--soft btn--sm" data-flow-step>Schritt</button><button class="btn btn--soft btn--sm" data-flow-reset>Zurück</button></div>
+      </div>
+    </div>
+  </div>
+  <aside class="notes"><strong>Schnelldiagnose (1 Min.)</strong> Belegt? Folgerichtig? Einseitig? Drei Fragen, die man sich merken kann. Zu jeder Fehlerart gibt es passende Erkennungsmethoden, per Review oder teilweise automatisiert. Prüftiefe nach Risiko.</aside>
+</section>
+
+<!-- ============ 14 · Quiz ============ -->
+<section class="slide" data-title="Quiz: Was ist schiefgelaufen?">
+  <div class="inner">
+    <span class="eyebrow">Mitmachen</span>
+    <h2>Was ist hier schiefgelaufen?</h2>
+    <p class="small muted" style="margin-bottom:8px;max-width:none">Vier typische Fehlerbilder zur Upload-Story. Die Akzeptanzkriterien kennen wir (AK1–AK5).</p>
+    <div class="card mquiz" style="padding:10px 18px" id="eq"></div>
+    <div class="row mt-s" style="justify-content:space-between"><span class="score" id="eqScore"></span><button class="btn btn--soft btn--sm" id="eqReset">Zurücksetzen</button></div>
+  </div>
+  <aside class="notes"><strong>Quiz (1,5 Min.)</strong> Publikum entscheiden lassen, dann klicken. 1 = Halluzination (SMS nirgends gefordert). 2 = Denkfehler (Abhängigkeit Login ignoriert). 3 = Bias (nur Deutschschweiz, Altersband eng). 4 = Denkfehler (6 × 20 Min. sind 2 Std.).</aside>
+</section>
+
+<!-- ============ 15 · Gegenmassnahmen ============ -->
+<section class="slide band" data-title="Gegenmassnahmen">
+  <div class="inner">
+    <span class="eyebrow">Kapitel 3.1.3 · Gegenmassnahmen</span>
+    <h2>Sechs Hebel gegen Halluzinationen, Denkfehler und Bias</h2>
+    <div class="mit" id="mit">
+      <div class="card"><h3><span class="n">1</span>Vollständiger Kontext</h3><p>Alle sechs Bausteine, Story, AK, Wireframe. Was fehlt, wird geraten.</p><div class="chips-hdb"><span>Halluzination</span><span>Bias</span></div></div>
+      <div class="card"><h3><span class="n">2</span>In Schritte teilen</h3><p>Prompt Chaining: jeden Zwischenschritt prüfen, Denkfehler früh finden.</p><div class="chips-hdb"><span>Denkfehler</span></div></div>
+      <div class="card"><h3><span class="n">3</span>Klare Datenformate</h3><p>Tabellen, JSON, Markdown statt eingescannter PDFs oder langer Fliesstexte.</p><div class="chips-hdb"><span>Halluzination</span><span>Denkfehler</span></div></div>
+      <div class="card"><h3><span class="n">4</span>Passendes Modell</h3><p>Für die Aufgabe trainiert, z.&nbsp;B. ein Reasoning-Modell für Priorisierung.</p><div class="chips-hdb"><span>Denkfehler</span></div></div>
+      <div class="card"><h3><span class="n">5</span>Modelle vergleichen</h3><p>Gleicher Prompt, zwei Modelle. Wo sie sich widersprechen, genauer hinschauen.</p><div class="chips-hdb"><span>Halluzination</span><span>Denkfehler</span><span>Bias</span></div></div>
+      <div class="card"><h3><span class="n">6</span>Prüfen nach Risiko</h3><p>Review und automatisierte Checks. Je höher das Risiko, desto gründlicher.</p><div class="chips-hdb"><span>alle</span></div></div>
+    </div>
+    <div class="flow-controls tight"><button class="btn btn--soft btn--sm" id="mitPlay">▶ Abspielen</button><button class="btn btn--soft btn--sm" id="mitAll">Alle zeigen</button></div>
+    <p class="small mt-s" style="margin-bottom:0"><b class="key">Ausblick Session 3:</b> Retrieval-Augmented Generation (RAG) und Fine-Tuning als zwei weitere Hebel.</p>
+  </div>
+  <aside class="notes"><strong>Gegenmassnahmen (1 Min.)</strong> «Abspielen» lässt die Hebel nacheinander aufleuchten. Viele Fehler entstehen durch schlechte Prompts oder fehlenden Kontext, also wirken die Techniken aus Session 1 direkt dagegen.</aside>
+</section>
+
+<!-- ============ 16 · Nicht-Determinismus ============ -->
+<section class="slide" data-title="Nicht-Determinismus zähmen">
+  <div class="inner">
+    <span class="eyebrow">Kapitel 3.1.4 · Nicht-deterministisches Verhalten</span>
+    <h2>Gleicher Prompt, dreimal ausgeführt</h2>
+    <div class="grid-2 top">
+      <div class="stack">
+        <div class="story" style="font-family:var(--font-mono);font-size:13.5px">Nenne den wichtigsten Grenzwert-Testfall für den Upload (max. 10 MB pro Datei). Ein Satz.</div>
+        <div class="slider"><span>Temperatur</span><input type="range" id="ndTemp" min="0" max="1.2" step="0.1" value="1" aria-label="Temperatur"><span id="ndTempV">1.0</span></div>
+        <label class="toggle"><input type="checkbox" id="ndSeed"> Seed festlegen (42)</label>
+        <div class="row"><button class="btn btn--sm" id="ndRun">▶ 3× ausführen</button></div>
+        <div class="runs" id="ndRuns"></div>
+        <div class="verdict" id="ndVerdict"></div>
+      </div>
+      <div class="stack">
+        <p>LLMs wählen jedes Token mit einer Wahrscheinlichkeit aus. Darum schwankt das Ergebnis, bei langen Antworten besonders stark.</p>
+        <ul style="margin:0;padding-left:20px">
+          <li><b class="key">Temperatur senken:</b> konsistentere Antworten, aber weniger Vielfalt (siehe Metrik Diversität).</li>
+          <li><b class="key">Seed festlegen</b>, wo das Tool es erlaubt: gleiche Zufallsfolge, besser reproduzierbar.</li>
+          <li><b class="key">Prüfungen automatisieren</b>, damit jeder Lauf gleich streng bewertet wird.</li>
+        </ul>
+        <div class="note small"><strong>Ehrlich bleiben:</strong> Ganz reproduzierbar wird ein LLM nie. Für Tests heisst das: mehrere Läufe, klare Prüfkriterien.</div>
+      </div>
+    </div>
+  </div>
+  <aside class="notes"><strong>Nicht-Determinismus (75 Sek.)</strong> Mit Temperatur 1 «3× ausführen»: unterschiedliche Antworten. Temperatur auf 0: dreimal dieselbe. Dann Temperatur wieder hoch, aber Seed an: ebenfalls gleich. Merksatz: weniger Zufall = weniger Vielfalt.</aside>
+</section>
+
+<!-- ============ 17 · Kernaussagen ============ -->
+<section class="slide" data-title="Kernaussagen">
+  <div class="inner">
+    <span class="eyebrow">Zusammenfassung</span>
+    <h2 class="display">Das nehmen wir mit</h2>
+    <ol class="take">
+      <li class="reveal" style="--i:1"><span><b>GenAI hilft in jeder Testphase,</b> von der Analyse bis zum Bericht. Ein Mensch prüft jeden Zwischenschritt.</span></li>
+      <li class="reveal" style="--i:2"><span><b>Technik passend zur Aufgabe:</b> Chaining für Präzision, Few-Shot für feste Formate, Meta-Prompting für Neues.</span></li>
+      <li class="reveal" style="--i:3"><span><b>Messen statt schätzen:</b> Recall, Relevanz, Ausführungserfolg, Zeitersparnis, immer über mehrere Läufe.</span></li>
+      <li class="reveal" style="--i:4"><span><b>Prompts sind Testmittel:</b> iterativ verbessern, A/B testen, in der Bibliothek teilen.</span></li>
+      <li class="reveal" style="--i:5"><span><b>Belegt? Folgerichtig? Einseitig?</b> Drei Fragen gegen Halluzinationen, Denkfehler und Bias.</span></li>
+    </ol>
+    <div class="split next mt reveal" style="--i:6">
+      <div style="background:var(--c-primary);display:grid;place-items:center;padding:20px;min-height:110px"><span style="color:#fff;font-size:44px;font-weight:300">3</span></div>
+      <div class="panel" style="padding:12px 24px"><span class="eyebrow">Nächste Session</span><h3 style="margin:0">GenAI sicher im Team einsetzen</h3><p class="small" style="margin:4px 0 0">Datenschutz und Prompt Injection, RAG und Agenten, und wie man GenAI in einer Organisation einführt.</p></div>
+    </div>
+  </div>
+  <aside class="notes"><strong>Abschluss (1 Min.)</strong> Fünf Punkte zusammenfassen, Fragen sammeln. Aufgabe: den eigenen Prompt von letzter Woche dreimal laufen lassen, mit zwei Metriken bewerten, einmal verbessern.</aside>
+</section>
+
+<!-- ============ 18 · Glossar ============ -->
+<section class="slide band" data-title="Reserve: Glossar">
+  <div class="inner">
+    <span class="eyebrow">Reserve</span>
+    <h2>Glossar</h2>
+    <div class="gloss">
+      <div><b>Multimodaler Prompt</b>: Prompt mit Text und Bild, z.&nbsp;B. Story plus Wireframe</div>
+      <div><b>Gherkin</b>: Given–When–Then-Format für Szenarien</div>
+      <div><b>Keyword-driven Testing</b>: Testskripte aus vordefinierten Schlüsselwörtern</div>
+      <div><b>Self-Healing</b>: automatisches Anpassen von Skripten an kleine UI- oder API-Änderungen</div>
+      <div><b>Impact-Analyse</b>: welche Teile sind von einer Änderung betroffen?</div>
+      <div><b>Accuracy</b>: Gesamt-Korrektheit gegenüber einer Referenz</div>
+      <div><b>Precision</b>: Anteil korrekter Treffer bezogen auf ein konkretes Ziel</div>
+      <div><b>Recall</b>: Anteil der relevanten Fälle, die gefunden bzw. abgedeckt wurden</div>
+      <div><b>Diversität</b>: Vielfalt der Szenarien und Randfälle</div>
+      <div><b>Execution Success Rate</b>: Anteil der Skripte, die ohne Anpassung laufen</div>
+      <div><b>A/B-Test von Prompts</b>: zwei Varianten mit derselben Metrik vergleichen</div>
+      <div><b>Halluzination</b>: erfundener oder irrelevanter Inhalt</div>
+      <div><b>Denkfehler</b> (Reasoning Error): fehlerhafte Logik oder Rechnung</div>
+      <div><b>Bias</b>: systematische Verzerrung aus den Trainingsdaten</div>
+      <div><b>Temperatur / Seed</b>: Stellschrauben für Zufall und Reproduzierbarkeit</div>
+    </div>
+  </div>
+  <aside class="notes">Reservefolie für Rückfragen zu Begriffen.</aside>
+</section>
+
+<!-- ============ 19 · Prompt-Vorlagen ============ -->
+<section class="slide" data-title="Reserve: Prompt-Vorlagen">
+  <div class="inner">
+    <span class="eyebrow">Reserve · zum Mitnehmen</span>
+    <h2>Zwei Prompt-Vorlagen von heute</h2>
+    <div class="grid-2 top">
+      <div class="tpl"><span class="eyebrow">Testanalyse (Kette, Schritt 1)</span><button class="btn btn--soft btn--sm" data-copy="tpl1">Kopieren</button>
+<pre id="tpl1">Rolle: Du bist Test Analyst in einem agilen Team.
+Kontext: Kundenportal einer Krankenversicherung, Funktion «Arztrechnung hochladen».
+Anweisung: Finde Mehrdeutigkeiten in Story, Akzeptanzkriterien und Wireframe. Formuliere zu jeder eine Rückfrage an den Product Owner.
+Eingabedaten: [User Story] [AK1–AK2] [Wireframe als Bild]
+Einschränkungen: Erfinde keine Anforderungen. Wenn etwas nur im Wireframe steht, kennzeichne es.
+Ausgabeformat: Tabelle mit Spalten Fundstelle | Mehrdeutigkeit | Rückfrage.</pre></div>
+      <div class="tpl"><span class="eyebrow">Testentwurf (Few-Shot)</span><button class="btn btn--soft btn--sm" data-copy="tpl2">Kopieren</button>
+<pre id="tpl2">Rolle: Du bist Test Analyst.
+Anweisung: Schreibe Gherkin-Szenarien zur neuen Story, genau im Stil der Beispiele.
+Beispiel 1: [Story] → [Scenario …]
+Beispiel 2: [Story] → [Scenario …]
+Eingabedaten: [neue Story] [AK1–AK5]
+Einschränkungen: Mindestens ein Szenario pro AK, Grenzwerte als Scenario Outline. Nur synthetische Testdaten.
+Ausgabeformat: Gherkin im Codeblock, danach eine Tabelle AK × Szenario.</pre></div>
+    </div>
+    <p class="hint mt-s">Nur in intern freigegebenen KI-Tools verwenden und ohne echte Kundendaten.</p>
+  </div>
+  <aside class="notes">Reservefolie, falls jemand die Prompts sehen oder kopieren möchte.</aside>
+</section>
+
+<!-- ============ 20 · Quellen ============ -->
+<section class="slide band" data-title="Reserve: Quellen">
+  <div class="inner">
+    <span class="eyebrow">Reserve</span>
+    <h2>Quellen & Weiterlesen</h2>
+    <ul>
+      <li><b class="key">ISTQB® Certified Tester Testing with Generative AI (CT-GenAI), Syllabus v1.1</b>, Kapitel 2.2, 2.3 und 3.1. Frei verfügbar auf istqb.org.</li>
+      <li>Die Inhalte dieser Präsentation sind eigenständig formuliert. Die User Story, das Wireframe, alle Zahlen und KI-Antworten sind fiktive Beispiele.</li>
+      <li>Die Demos (Abdeckung, Metriken, Temperatur und Seed) sind vereinfachte Veranschaulichungen.</li>
+    </ul>
+  </div>
+  <aside class="notes">Reservefolie.</aside>
+</section>
+
+</main>
+
+<footer class="foot" id="foot">Joanna · Interne Weiterbildung Concordia</footer>
+<div class="notes-panel" id="notesPanel" hidden></div>
+
+<nav class="navbar" aria-label="Folien-Navigation">
+  <button class="nav-arrow" id="prev" aria-label="Vorherige Folie"><svg viewBox="0 0 24 24"><path d="M15 5l-7 7 7 7"/></svg></button>
+  <div class="dots" id="dots" role="tablist"></div>
+  <span class="counter" id="counter"></span>
+  <button class="nav-arrow" id="next" aria-label="Nächste Folie"><svg viewBox="0 0 24 24"><path d="M9 5l7 7-7 7"/></svg></button>
+</nav>
+
+<script>
+(() => {
+  const $ = id => document.getElementById(id);
+  const reduce = matchMedia('(prefers-reduced-motion: reduce)').matches;
+  const esc = s => s.replace(/[&<>]/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;' }[c]));
+
+  /* =================== slide navigation =================== */
+  const slides = [...document.querySelectorAll('.slide')];
+  const dotsEl = $('dots');
+  let cur = 0;
+  slides.forEach((s, i) => {
+    const d = document.createElement('button');
+    d.className = 'dot'; d.setAttribute('role', 'tab');
+    d.setAttribute('aria-label', `Folie ${i + 1}: ${s.dataset.title || ''}`);
+    d.title = s.dataset.title || '';
+    d.onclick = () => go(i);
+    dotsEl.appendChild(d);
+  });
+  const dots = [...dotsEl.children];
+
+  function go(n) {
+    n = Math.max(0, Math.min(slides.length - 1, n));
+    slides.forEach((s, i) => {
+      s.classList.toggle('is-active', i === n);
+      s.classList.toggle('is-before', i < n);
+      s.setAttribute('aria-hidden', i !== n);
+      if (i === n) s.removeAttribute('inert'); else s.setAttribute('inert', '');
+    });
+    dots.forEach((d, i) => { d.classList.toggle('is-active', i === n); d.setAttribute('aria-selected', i === n); });
+    cur = n;
+    $('prev').disabled = n === 0;
+    $('next').disabled = n === slides.length - 1;
+    $('counter').textContent = `${n + 1} / ${slides.length}`;
+    $('chapter').textContent = slides[n].dataset.title || '';
+    $('progress').style.width = `${(n / Math.max(1, slides.length - 1)) * 100}%`;
+    slides[n].scrollTop = 0; $('deck').scrollLeft = 0;
+    dots[n].scrollIntoView({ block: 'nearest', inline: 'center' });
+    history.replaceState(null, '', '#' + (n + 1));
+    updateNotes();
+    $('foot').classList.toggle('off', n === 0);
+    document.dispatchEvent(new CustomEvent('slidechange', { detail: { index: n, slide: slides[n] } }));
+  }
+  window.goToSlide = go;
+  $('prev').onclick = () => go(cur - 1);
+  $('next').onclick = () => go(cur + 1);
+  document.addEventListener('click', e => {
+    const t = e.target.closest('[data-go]'); if (!t) return;
+    const v = t.dataset.go; go(v === 'next' ? cur + 1 : v === 'prev' ? cur - 1 : +v);
+  });
+
+  /* speaker notes + fullscreen */
+  let notesOn = false;
+  function updateNotes() {
+    const n = slides[cur].querySelector('.notes');
+    $('notesPanel').innerHTML = (n ? n.innerHTML : '<span class="hint">Keine Notizen</span>') + `<div class="hint" style="margin-top:6px">Folie ${cur + 1} · N = Notizen ausblenden</div>`;
+    $('notesPanel').hidden = !notesOn;
+  }
+  const toggleNotes = () => { notesOn = !notesOn; updateNotes(); };
+  const toggleFull = () => { if (!document.fullscreenElement) document.documentElement.requestFullscreen?.().catch(() => {}); else document.exitFullscreen?.(); };
+  $('btnNotes').onclick = toggleNotes;
+  $('btnFull').onclick = toggleFull;
+
+  document.addEventListener('keydown', e => {
+    if (e.target.closest('input, textarea, select')) return;
+    if (['ArrowRight', 'PageDown'].includes(e.key) || (e.key === ' ' && !e.target.closest('button'))) { e.preventDefault(); go(cur + 1); }
+    else if (['ArrowLeft', 'PageUp'].includes(e.key)) { e.preventDefault(); go(cur - 1); }
+    else if (e.key === 'Home') go(0);
+    else if (e.key === 'End') go(slides.length - 1);
+    else if (e.key === 'n' || e.key === 'N') toggleNotes();
+    else if (e.key === 'f' || e.key === 'F') toggleFull();
+  });
+  let sx = null, sy = null;
+  $('deck').addEventListener('touchstart', e => { sx = e.touches[0].clientX; sy = e.touches[0].clientY; }, { passive: true });
+  $('deck').addEventListener('touchend', e => {
+    if (sx === null) return;
+    const dx = e.changedTouches[0].clientX - sx, dy = e.changedTouches[0].clientY - sy;
+    if (Math.abs(dx) > 60 && Math.abs(dx) > Math.abs(dy) * 1.5 && !e.target.closest('input')) go(cur + (dx < 0 ? 1 : -1));
+    sx = null;
+  });
+
+  /* helper: run fn when a given slide becomes active / inactive */
+  const onSlide = (slideEl, enter, leave) => document.addEventListener('slidechange', e => {
+    if (e.detail.slide === slideEl) enter && enter(); else leave && leave();
+  });
+  const slideOf = el => el.closest('.slide');
+  const later = (fn, ms) => setTimeout(fn, reduce ? 0 : ms);
+
+  /* =================== flow / stepper engine =================== */
+  const NS = 'http://www.w3.org/2000/svg';
+  function makeFlow(root) {
+    const svg = root.querySelector('svg.flow');
+    const steps = [...root.querySelectorAll('.steps > li')];
+    const staged = [...root.querySelectorAll('[data-step-show], [data-step-hide]')];
+    staged.forEach(el => el.classList.add('step-show'));
+    const interval = +root.dataset.interval || 2000;
+    let i = -1, timer = null, raf = null, packet = null;
+    if (svg) {
+      packet = document.createElementNS(NS, 'circle');
+      packet.setAttribute('r', 8); packet.setAttribute('class', 'packet'); packet.style.opacity = 0;
+      svg.appendChild(packet);
+    }
+    function travel(pathId, ms = 1100) {
+      cancelAnimationFrame(raf);
+      const path = svg && svg.querySelector('#' + pathId);
+      if (!path) return;
+      svg.querySelectorAll('.edge').forEach(e => e.classList.toggle('live', e === path));
+      const len = path.getTotalLength(); const t0 = performance.now();
+      packet.style.opacity = 1;
+      const tick = now => {
+        let t = Math.min(1, (now - t0) / (reduce ? 1 : ms));
+        t = t < .5 ? 2 * t * t : 1 - Math.pow(-2 * t + 2, 2) / 2;
+        const p = path.getPointAtLength(len * t);
+        packet.setAttribute('cx', p.x); packet.setAttribute('cy', p.y);
+        if (t < 1) raf = requestAnimationFrame(tick);
+      };
+      raf = requestAnimationFrame(tick);
+    }
+    function show(n) {
+      i = n;
+      steps.forEach((li, k) => li.classList.toggle('is-on', k === n));
+      if (svg) {
+        const hot = (steps[n]?.dataset.hot || '').split(/\s+/);
+        svg.querySelectorAll('.node').forEach(g => g.classList.toggle('hot', hot.includes(g.id)));
+      }
+      staged.forEach(el => {
+        const s = el.dataset.stepShow !== undefined ? +el.dataset.stepShow : -Infinity;
+        const h = el.dataset.stepHide !== undefined ? +el.dataset.stepHide : Infinity;
+        el.classList.toggle('shown', n >= s && n < h);
+      });
+      steps.forEach((li, k) => (li.dataset.mark || '').split(/\s+/).filter(Boolean).forEach(id => $(id)?.classList.toggle('flag', n >= k)));
+      const edge = steps[n]?.dataset.edge;
+      if (edge && svg) travel(edge);
+      else if (svg) { packet.style.opacity = 0; svg.querySelectorAll('.edge').forEach(e => e.classList.remove('live')); }
+    }
+    const step = () => show((i + 1) % steps.length);
+    const stop = () => { clearInterval(timer); timer = null; };
+    const play = () => { stop(); show(0); timer = setInterval(() => { if (i >= steps.length - 1) return stop(); step(); }, interval); };
+    const reset = () => { stop(); cancelAnimationFrame(raf); show(-1); };
+    root.querySelector('[data-flow-play]')?.addEventListener('click', play);
+    root.querySelector('[data-flow-step]')?.addEventListener('click', () => { stop(); step(); });
+    root.querySelector('[data-flow-reset]')?.addEventListener('click', reset);
+    steps.forEach((li, k) => { li.style.cursor = 'pointer'; li.onclick = () => { stop(); show(k); }; });
+    onSlide(slideOf(root), reset, reset);   /* the presenter starts it with «Abspielen» */
+    reset();
+  }
+  document.querySelectorAll('[data-flow]').forEach(makeFlow);
+
+  /* =================== Recap flip cards =================== */
+  (() => {
+    const cards = [...document.querySelectorAll('#flips .flip')];
+    cards.forEach(c => c.onclick = () => c.classList.toggle('on'));
+    $('flipAll').onclick = () => { const all = cards.every(c => c.classList.contains('on')); cards.forEach(c => c.classList.toggle('on', !all)); };
+    onSlide(slideOf($('flips')), () => cards.forEach(c => c.classList.remove('on')));
+  })();
+
+  /* =================== Gherkin few-shot + coverage =================== */
+  (() => {
+    const K = s => `<span class="kw">${s}</span>`, S = s => `<span class="str">${esc(s)}</span>`, P = s => `<span class="ph">${esc(s)}</span>`;
+    const BASE = [
+      `${K('Feature:')} Arztrechnung hochladen`,
+      `  ${K('Scenario:')} Gültige PDF-Rechnung einreichen`,
+      `    ${K('Given')} ich bin im Kundenportal angemeldet`,
+      `    ${K('When')} ich ${S('"rechnung.pdf"')} (2 MB) hochlade`,
+      `    ${K('And')} ich Datum und Betrag erfasse und einreiche`,
+      `    ${K('Then')} sehe ich eine Bestätigung mit Referenznummer`,
+      `  ${K('Scenario:')} Nicht erlaubter Dateityp`,
+      `    ${K('When')} ich ${S('"rechnung.docx"')} hochlade`,
+      `    ${K('Then')} sehe ich ${S('"Erlaubt sind PDF, JPG oder PNG"')}`,
+      `  ${K('Scenario Outline:')} Dateigrösse an der Grenze`,
+      `    ${K('When')} ich ein PDF mit ${P('<grösse>')} hochlade`,
+      `    ${K('Then')} wird die Datei ${P('<ergebnis>')}`,
+      `    ${K('Examples:')}`,
+      `      | grösse  | ergebnis   |`,
+      `      | 10 MB   | akzeptiert |`,
+      `      | 10.1 MB | abgelehnt  |`,
+    ];
+    const EXTRA = [
+      `  ${K('Scenario:')} Behandlungsdatum in der Zukunft`,
+      `  ${K('Scenario:')} Dieselbe Rechnung zweimal einreichen`,
+    ];
+    const AK = ['AK1 Dateitypen', 'AK2 Bestätigung', 'AK3 max. 10 MB', 'AK4 Datum ≤ heute', 'AK5 keine Doppelten'];
+    const MAP = [[1, 1, 0], [1, 0, 0], [0, 0, 1], [0, 0, 0], [0, 0, 0]];
+    const MAPX = [[0, 0], [0, 0], [0, 0], [1, 0], [0, 1]];
+    const code = $('gkCode'), cov = $('gkCov');
+    let fixed = false, t = [];
+    const clear = () => { t.forEach(clearTimeout); t = []; };
+    function renderCode(animate) {
+      const lines = fixed ? [...BASE, ...EXTRA] : BASE;
+      code.innerHTML = lines.map((l, k) => `<span class="ln${animate ? ' gen' : ''}">${l}</span>`).join('');
+      if (animate) [...code.children].forEach((el, k) => t.push(later(() => el.classList.add('in'), 120 + k * 160)));
+    }
+    function renderCov() {
+      const n = fixed ? 5 : 3;
+      let h = '<table class="cov"><thead><tr><th>Kriterium</th>';
+      for (let s = 1; s <= n; s++) h += `<th${s > 3 ? ' class="newc"' : ''}>S${s}</th>`;
+      h += '<th>Status</th></tr></thead><tbody>';
+      AK.forEach((a, r) => {
+        const row = [...MAP[r], ...(fixed ? MAPX[r] : [])];
+        const okRow = row.some(Boolean);
+        h += `<tr><td>${a}</td>` + row.map((v, c) => `<td class="${v ? 'y' : 'muted'}${c > 2 ? ' newc' : ''}">${v ? '✓' : '·'}</td>`).join('') +
+          `<td>${okRow ? '<span class="pill-st ok">abgedeckt</span>' : '<span class="pill-st err">Lücke</span>'}</td></tr>`;
+      });
+      cov.innerHTML = h + '</tbody></table><p class="small mt-s" style="margin-bottom:0">' + (fixed
+        ? '<b class="key">Nächster Prompt der Kette:</b> «Ergänze Szenarien für AK4 und AK5.» Jetzt ist jedes Kriterium abgedeckt. Inhaltlich prüfen muss trotzdem ein Mensch.'
+        : '<b class="key">Befund:</b> AK4 und AK5 hat das Modell nicht abgedeckt. Plausibel aussehende Szenarien sind nicht automatisch vollständig.') + '</p>';
+    }
+    function view(which) {
+      code.hidden = which !== 'code'; cov.hidden = which !== 'cov';
+      $('gkTitle').textContent = which === 'code' ? 'Antwort des LLM' : 'Abdeckung: Kriterium × Szenario';
+      $('gkBadge').innerHTML = which === 'cov' ? (fixed ? '<span class="pill-st ok">5 / 5</span>' : '<span class="pill-st err">3 / 5</span>') : '';
+    }
+    $('gkGen').onclick = () => { clear(); view('code'); renderCode(true); };
+    $('gkCheck').onclick = () => { clear(); renderCov(); view('cov'); };
+    $('gkFix').onclick = () => { clear(); fixed = true; renderCov(); view('cov'); };
+    const idle = () => { code.innerHTML = '<span class="cm">Noch keine Antwort. «Generieren» startet das Modell.</span>'; };
+    onSlide(slideOf(code), () => { clear(); fixed = false; view('code'); idle(); }, clear);
+    idle();
+  })();
+
+  /* =================== Keyword-driven script =================== */
+  (() => {
+    const ROWS = [
+      ['Öffne Portal', '/rueckerstattung'],
+      ['Melde an als', 'testkonto_versichert_07'],
+      ['Lade Datei hoch', 'testdaten/rechnung_2mb.pdf'],
+      ['Erfasse Feld', 'Betrag · 180.50'],
+      ['Warte auf Upload', '5 s'],
+      ['Klicke', 'Einreichen'],
+      ['Prüfe Meldung', '«Ihre Rechnung ist eingegangen»'],
+    ];
+    const body = $('kwBody'); let state = 0, t = [];
+    const clear = () => { t.forEach(clearTimeout); t = []; };
+    function row(k) {
+      const [kw, arg] = ROWS[k];
+      if (k === 4 && state === 2) return `<tr class="bad"><td>${kw}</td><td>${esc(arg)}<span class="why">⚠ Keyword gibt es nicht in der Bibliothek</span></td></tr>`;
+      if (k === 4 && state === 3) return `<tr class="fixed"><td>Prüfe Meldung</td><td>«Upload abgeschlossen»<span class="why">✓ ersetzt durch ein vorhandenes Keyword</span></td></tr>`;
+      return `<tr><td>${kw}</td><td>${esc(arg)}</td></tr>`;
+    }
+    function badge() {
+      $('kwBadge').innerHTML = state === 2 ? '<span class="pill-st err">1 Befund</span>' : state === 3 ? '<span class="pill-st ok">lauffähig</span>' : '';
+    }
+    function gen() {
+      clear(); state = 1; body.innerHTML = ''; badge();
+      ROWS.forEach((r, k) => t.push(later(() => body.insertAdjacentHTML('beforeend', row(k)), 200 + k * 280)));
+    }
+    const redraw = () => { body.innerHTML = ROWS.map((r, k) => row(k)).join(''); badge(); };
+    $('kwGen').onclick = gen;
+    $('kwVal').onclick = () => { clear(); state = 2; redraw(); };
+    $('kwFix').onclick = () => { clear(); state = 3; redraw(); };
+    const idle = () => { body.innerHTML = '<tr><td colspan="2" class="muted" style="font-weight:500">Noch leer. «Skript generieren» startet das Modell.</td></tr>'; };
+    onSlide(slideOf(body), () => { clear(); state = 0; badge(); idle(); }, clear);
+    idle();
+  })();
+
+  /* =================== Dashboard + summary =================== */
+  (() => {
+    const svg = $('dash');
+    const exec = [40, 85, 120, 160, 186], pass = [36, 77, 106, 142, 164], PLAN = 220;
+    const W = 420, H = 170, L = 34, B = 146, T = 14, bw = 46, gap = (W - L - 10 - bw * 5) / 4;
+    const y = v => B - (v / PLAN) * (B - T);
+    let h = `<line class="ax" x1="${L}" y1="${B}" x2="${W - 6}" y2="${B}"/>`;
+    [0, 110, 220].forEach(v => h += `<text x="${L - 6}" y="${y(v) + 4}" style="text-anchor:end">${v}</text>`);
+    h += `<line class="plan" x1="${L}" y1="${y(PLAN)}" x2="${W - 6}" y2="${y(PLAN)}"/>`;
+    exec.forEach((e, k) => {
+      const x = L + 8 + k * (bw + gap);
+      h += `<rect class="bp" data-v="${pass[k]}" x="${x}" width="${bw}" y="${B}" height="0" rx="3" fill="var(--c-primary)"/>`;
+      h += `<rect class="bf" data-v="${e - pass[k]}" data-base="${pass[k]}" x="${x}" width="${bw}" y="${B}" height="0" rx="3" fill="var(--c-err)"/>`;
+      h += `<text class="val" x="${x + bw / 2}" y="${y(e) - 5}" style="text-anchor:middle;opacity:0">${e}</text>`;
+      h += `<text x="${x + bw / 2}" y="${B + 16}" style="text-anchor:middle">Tag ${k + 1}</text>`;
+    });
+    svg.innerHTML = h;
+    const sc = v => (v / PLAN) * (B - T);
+    function grow(on) {
+      svg.querySelectorAll('rect.bp').forEach(r => { const v = on ? +r.dataset.v : 0; r.setAttribute('height', sc(v)); r.setAttribute('y', B - sc(v)); });
+      svg.querySelectorAll('rect.bf').forEach(r => { const v = on ? +r.dataset.v : 0, b = on ? +r.dataset.base : 0; r.setAttribute('height', Math.max(0, sc(v) - 1)); r.setAttribute('y', B - sc(b) - sc(v)); });
+      svg.querySelectorAll('text.val').forEach(tx => tx.style.opacity = on ? 1 : 0);
+    }
+    const sum = $('sum'), paras = [...sum.querySelectorAll('.typing')];
+    let t = [];
+    const clear = () => { t.forEach(clearTimeout); t = []; };
+    $('sumCheck').onclick = () => { sum.classList.add('checked'); $('sumNote').classList.add('shown'); };
+    $('sumGen').onclick = () => {
+      clear(); sum.classList.remove('checked'); $('sumNote').classList.remove('shown'); $('sumIdle').hidden = true;
+      paras.forEach(p => p.classList.remove('in'));
+      paras.forEach((p, k) => t.push(later(() => p.classList.add('in'), 200 + k * 900)));
+    };
+    onSlide(slideOf(svg), () => {
+      clear(); grow(false); sum.classList.remove('checked'); $('sumNote').classList.remove('shown'); $('sumIdle').hidden = false;
+      paras.forEach(p => p.classList.remove('in'));
+      t.push(later(() => grow(true), 300));
+    }, clear);
+  })();
+
+  /* =================== Technique quiz =================== */
+  (() => {
+    const qs = [
+      ['50 Gherkin-Szenarien, alle im gleichen Team-Format', 1, 'Wiederkehrendes, festes Format: Few-Shot.'],
+      ['Testbericht-Analyse: neue Aufgabe, noch kein Prompt vorhanden', 2, 'Neu und offen: Meta-Prompting liefert den Startprompt.'],
+      ['Story analysieren und AK verfeinern, mit Prüfung nach jedem Schritt', 0, 'Komplex, mit Prüfung je Schritt: Prompt Chaining.'],
+      ['Keyword-Skripte nach dem Muster der Bibliothek', 1, 'Festes Muster mit Beispielen: Few-Shot.'],
+    ];
+    const names = ['Chaining', 'Few-Shot', 'Meta'];
+    const box = $('tq');
+    qs.forEach(([q, a, why]) => {
+      const row = document.createElement('div'); row.className = 'q';
+      row.innerHTML = `<span>${q}<span class="fb"></span></span><span class="opts">${names.map((n, i) => `<button class="opt" data-i="${i}">${n}</button>`).join('')}</span>`;
+      row.querySelectorAll('.opt').forEach(b => b.onclick = () => {
+        const ok = +b.dataset.i === a;
+        b.classList.remove('no'); void b.offsetWidth; b.classList.add(ok ? 'ok' : 'no');
+        if (ok) row.querySelector('.fb').textContent = '✓ ' + why;
+      });
+      box.appendChild(row);
+    });
+  })();
+
+  /* =================== Metrics =================== */
+  (() => {
+    const M = [
+      ['Accuracy', 'Korrektheit', 80, '%', 'Gesamt-Korrektheit gegenüber einer Referenz: Anforderungen, von Fachleuten geschriebene Testfälle.', '4 von 5 Akzeptanzkriterien sind korrekt abgedeckt.'],
+      ['Precision', 'Treffergenauigkeit', 75, '%', 'Korrektheit bezogen auf ein konkretes Ziel, z. B. echte Abweichungen finden.', 'Von 8 Testfällen, die eine Abweichung melden, zeigen 6 einen echten Fehler.'],
+      ['Recall', 'Vollständigkeit', 83, '%', 'Wie viele der relevanten Fälle wurden gefunden bzw. abgedeckt?', '5 von 6 Äquivalenzklassen (Dateityp und -grösse) abgedeckt. Es fehlt: leere Datei.'],
+      ['Relevanz', 'Kontextbezug', 92, '%', 'Passt der Output zur Testbasis und zur Fachlichkeit?', '11 von 12 Testfällen passen. Einer prüft eine SMS-Bestätigung, die es nicht gibt.'],
+      ['Diversität', 'Vielfalt', 25, '% Randfälle', 'Deckt der Output verschiedene Nutzerverhalten und Randfälle ab, ohne Wiederholungen?', '9 von 12 Testfällen sind Happy Paths. Nur 3 sind Randfälle.', true],
+      ['Ausführungserfolg', 'Execution Success Rate', 83, '%', 'Anteil der generierten Skripte, die ohne Anpassung in der Testumgebung laufen.', '10 von 12 Skripten laufen sofort. 2 haben Syntax- oder Formatfehler.'],
+      ['Zeitersparnis', 'Time Efficiency', 83, '% schneller', 'Zeit mit KI (inklusive Review) im Vergleich zur manuellen Erstellung.', '20 Minuten inklusive Review statt rund 2 Stunden manuell.'],
+    ];
+    const list = $('mxList');
+    list.innerHTML = M.map((m, i) => `<button class="mx-btn" data-i="${i}">${m[0]} <small>${m[1]}</small></button>`).join('');
+    const btns = [...list.children];
+    function pick(i) {
+      const m = M[i];
+      btns.forEach((b, k) => b.classList.toggle('on', k === i));
+      $('mxVal').textContent = m[2]; $('mxUnit').textContent = m[3];
+      $('mxMeter').classList.toggle('low', !!m[6]);
+      $('mxMeter').firstElementChild.style.width = m[2] + '%';
+      $('mxWhat').textContent = m[4]; $('mxEx').textContent = m[5];
+      const c = $('mxCard'); c.classList.remove('fade-swap'); void c.offsetWidth; c.classList.add('fade-swap');
+    }
+    let t = [];
+    const clear = () => { t.forEach(clearTimeout); t = []; };
+    btns.forEach((b, i) => b.onclick = () => { clear(); pick(i); });
+    $('mxPlay').onclick = () => { clear(); pick(0); M.forEach((m, i) => i && t.push(later(() => pick(i), i * 2200))); };
+    onSlide(slideOf(list), () => { clear(); pick(0); }, clear);
+    pick(0);
+  })();
+
+  /* =================== Error-type quiz =================== */
+  (() => {
+    const qs = [
+      ['«TC-07: Nach dem Einreichen erhält die versicherte Person eine SMS mit der Referenznummer.»', 0, 'Halluzination: Eine SMS steht in keinem Kriterium und in keiner Doku.'],
+      ['«Reihenfolge: 1. TC-04 Rechnung einreichen, 2. TC-02 Bestätigung prüfen, 3. TC-01 Login. Begründung: höchstes Risiko zuerst.»', 1, 'Denkfehler: TC-04 braucht einen Login, die Abhängigkeit wurde ignoriert.'],
+      ['«20 Testpersonen: alle mit Korrespondenzsprache Deutsch, Wohnkanton Zürich oder Bern, Alter 30–50.»', 2, 'Bias: keine französisch- oder italienischsprachigen Personen, keine Jungen oder Älteren.'],
+      ['«Aufwand: 6 Testfälle à 20 Minuten ergeben 1,5 Stunden.»', 1, 'Denkfehler: 6 × 20 Minuten sind 2 Stunden. Rechnen ist eine Schwäche von LLMs.'],
+    ];
+    const names = ['Halluzination', 'Denkfehler', 'Bias'];
+    const box = $('eq'); let solved = 0;
+    function build() {
+      box.innerHTML = ''; solved = 0; score();
+      qs.forEach(([q, a, why], idx) => {
+        const row = document.createElement('div'); row.className = 'q';
+        row.innerHTML = `<span><b class="key">${idx + 1}.</b> ${esc(q)}<span class="fb"></span></span><span class="opts">${names.map((n, i) => `<button class="opt" data-i="${i}">${n}</button>`).join('')}</span>`;
+        let done = false;
+        row.querySelectorAll('.opt').forEach(b => b.onclick = () => {
+          if (done) return;
+          const ok = +b.dataset.i === a;
+          b.classList.remove('no'); void b.offsetWidth; b.classList.add(ok ? 'ok' : 'no');
+          if (ok) { done = true; row.querySelector('.fb').textContent = '✓ ' + why; solved++; score(); }
+        });
+        box.appendChild(row);
+      });
+    }
+    function score() { $('eqScore').textContent = solved === qs.length ? '🎉 4 / 4. Alle Fehlerbilder erkannt!' : `${solved} / ${qs.length} erkannt`; }
+    $('eqReset').onclick = build;
+    build();
+  })();
+
+  /* =================== Mitigation strip =================== */
+  (() => {
+    const cards = [...document.querySelectorAll('#mit .card')]; let t = [];
+    const clear = () => { t.forEach(clearTimeout); t = []; };
+    cards.forEach(c => c.onclick = () => { clear(); cards.forEach(x => { x.classList.add('on'); x.classList.toggle('hot', x === c); }); });
+    $('mitAll').onclick = () => { clear(); cards.forEach(c => { c.classList.add('on'); c.classList.remove('hot'); }); };
+    onSlide(slideOf(cards[0]), () => { clear(); cards.forEach(c => c.classList.remove('on', 'hot')); }, clear);
+    $('mitPlay').onclick = () => {
+      clear(); cards.forEach(c => c.classList.remove('on', 'hot'));
+      cards.forEach((c, i) => t.push(later(() => { cards.forEach(x => x.classList.remove('hot')); c.classList.add('on', 'hot'); }, 400 + i * 900)));
+      t.push(later(() => cards.forEach(x => x.classList.remove('hot')), 400 + cards.length * 900 + 600));
+    };
+  })();
+
+  /* =================== Non-determinism demo =================== */
+  (() => {
+    const POOL = [
+      ['Eine PDF-Datei mit genau 10 MB hochladen: Sie wird akzeptiert.', .45],
+      ['Eine Datei mit 10.1 MB hochladen: Sie wird abgelehnt.', .30],
+      ['Eine leere Datei (0 KB) hochladen: Es erscheint eine Fehlermeldung.', .15],
+      ['Ein JPG mit 9.9 MB hochladen: Es wird akzeptiert.', .10],
+    ];
+    const rng = seed => () => { seed |= 0; seed = seed + 0x6D2B79F5 | 0; let t = Math.imul(seed ^ seed >>> 15, 1 | seed); t = t + Math.imul(t ^ t >>> 7, 61 | t) ^ t; return ((t ^ t >>> 14) >>> 0) / 4294967296; };
+    const temp = () => +$('ndTemp').value;
+    function sample(r) {
+      const tt = temp();
+      if (tt < 0.05) return 0;
+      const w = POOL.map(p => Math.pow(p[1], 1 / tt)); const s = w.reduce((a, b) => a + b, 0);
+      let x = r() * s, k = 0;
+      for (; k < w.length - 1; k++) { x -= w[k]; if (x <= 0) break; }
+      return k;
+    }
+    const box = $('ndRuns');
+    function empty() { box.innerHTML = [1, 2, 3].map(n => `<div class="run"><b>Lauf ${n}</b><span class="txt muted">–</span></div>`).join(''); $('ndVerdict').textContent = ''; }
+    let t = [];
+    const clear = () => { t.forEach(clearTimeout); t = []; };
+    function run() {
+      clear(); empty();
+      const seeded = $('ndSeed').checked;
+      const res = [0, 1, 2].map(() => sample(seeded ? rng(42) : Math.random));
+      const rows = [...box.children];
+      res.forEach((k, n) => t.push(later(() => {
+        const s = rows[n].querySelector('.txt'); s.className = 'txt in'; s.textContent = POOL[k][0];
+      }, 300 + n * 500)));
+      t.push(later(() => {
+        const same = res.every(k => k === res[0]);
+        rows.forEach(r => r.classList.toggle('same', same));
+        const why = temp() < 0.05 ? 'Temperatur 0: immer das wahrscheinlichste Token.' : seeded ? 'Gleicher Seed: gleiche Zufallsfolge.' : 'Zufall beim Auswählen der Tokens.';
+        $('ndVerdict').innerHTML = same ? `<span style="color:var(--c-ok)">✓ Dreimal dasselbe Ergebnis.</span> <span class="muted">${why}</span>` : `<span style="color:var(--c-err)">≠ Unterschiedliche Ergebnisse.</span> <span class="muted">${why}</span>`;
+      }, 300 + 3 * 500));
+    }
+    $('ndTemp').oninput = () => { $('ndTempV').textContent = temp().toFixed(1); };
+    $('ndRun').onclick = run;
+    onSlide(slideOf(box), () => { $('ndTemp').value = 1; $('ndTempV').textContent = '1.0'; $('ndSeed').checked = false; clear(); empty(); }, clear);
+    empty();
+  })();
+
+  /* =================== Copy buttons =================== */
+  document.querySelectorAll('[data-copy]').forEach(b => b.onclick = async () => {
+    const txt = $(b.dataset.copy).textContent;
+    try { await navigator.clipboard.writeText(txt); b.textContent = 'Kopiert ✓'; }
+    catch (e) { const r = document.createRange(); r.selectNodeContents($(b.dataset.copy)); const s = getSelection(); s.removeAllRanges(); s.addRange(r); b.textContent = 'Markiert: Ctrl+C'; }
+    setTimeout(() => b.textContent = 'Kopieren', 1800);
+  });
+
+  /* start */
+  const h = parseInt(location.hash.slice(1), 10);
+  go(Number.isFinite(h) ? h - 1 : 0);
+})();
+</script>
+</body>
+</html>
